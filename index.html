@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>禱告卡片</title>
+<style>
+  :root {
+    --purple: #674ea7;
+    --purple-light: #d9d2e9;
+    --green: #6aa84f;
+    --yellow: #fff2cc;
+    --blue: #cfe2f3;
+    --gray-bg: #f5f5f7;
+    --text-main: #1a1a1a;
+    --text-sub: #666666;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .header {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    padding: 12px 0;
+  }
+  .header h1 {
+    font-size: 20px;
+    color: var(--purple);
+    margin: 0;
+  }
+  .progress {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 4px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px 20px;
+    margin-top: 12px;
+  }
+  .prayer-text {
+    font-size: 22px;
+    line-height: 1.6;
+    min-height: 140px;
+    white-space: pre-wrap;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    resize: none;
+    color: var(--text-main);
+  }
+  .prayer-text:focus {
+    background: #fafafa;
+    border-radius: 8px;
+  }
+  .meta-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .meta-field {
+    flex: 1;
+    min-width: 130px;
+  }
+  .meta-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 4px;
+  }
+  .meta-field select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+    background: white;
+  }
+  .meta-field.cycle select { background: var(--yellow); }
+  .meta-field.tag select { background: var(--blue); }
+  .note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-sub);
+    white-space: pre-wrap;
+  }
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--purple);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn.secondary { background: var(--green); }
+  .jump-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+  .jump-row input {
+    width: 70px;
+    padding: 8px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .status {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    height: 16px;
+    text-align: center;
+  }
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: var(--purple);
+    display: none;
+  }
+  .loading-overlay.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🙏 禱告卡片</h1>
+  <div class="progress" id="progress">載入中...</div>
+</div>
+
+<div class="card">
+  <textarea class="prayer-text" id="prayerText" placeholder="禱告事項內容..."></textarea>
+
+  <div class="meta-row">
+    <div class="meta-field cycle">
+      <label>DG 週期</label>
+      <select id="cycleSelect"></select>
+    </div>
+    <div class="meta-field tag">
+      <label>標籤</label>
+      <select id="tagSelect"></select>
+    </div>
+  </div>
+
+  <div class="note" id="noteText"></div>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="prevBtn">◀ 上一項</button>
+  <button class="btn" id="nextBtn">下一項 ▶</button>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn" id="speakBtn" style="background: var(--purple);">🔊 朗讀</button>
+</div>
+
+<div class="jump-row">
+  <input type="number" id="jumpInput" placeholder="第幾項" min="1">
+  <button id="jumpBtn">跳到</button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<script>
+// ⚠️ 部署 Apps Script 網頁應用程式後，把網址貼在這裡
+const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
+
+const CYCLE_MAP = {
+  'D': 'D每天', '2': '2每兩天', '3': '3每三天', 'W': 'W每週', 'DW': 'DW每兩週',
+  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
+};
+const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議' };
+
+let currentIndex = parseInt(localStorage.getItem('prayerCardIndex') || '1', 10);
+let currentTotal = 0;
+let saveTimer = null;
+
+const el = {
+  progress: document.getElementById('progress'),
+  prayerText: document.getElementById('prayerText'),
+  cycleSelect: document.getElementById('cycleSelect'),
+  tagSelect: document.getElementById('tagSelect'),
+  noteText: document.getElementById('noteText'),
+  prevBtn: document.getElementById('prevBtn'),
+  nextBtn: document.getElementById('nextBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  speakBtn: document.getElementById('speakBtn'),
+  jumpInput: document.getElementById('jumpInput'),
+  jumpBtn: document.getElementById('jumpBtn'),
+  status: document.getElementById('status'),
+  loadingOverlay: document.getElementById('loadingOverlay')
+};
+
+function populateSelect(selectEl, map, placeholder) {
+  selectEl.innerHTML = '<option value="">' + placeholder + '</option>';
+  Object.values(map).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+}
+
+function setLoading(show) {
+  el.loadingOverlay.classList.toggle('show', show);
+}
+
+function showStatus(msg) {
+  el.status.textContent = msg;
+  setTimeout(() => { el.status.textContent = ''; }, 1800);
+}
+
+async function apiCall(params) {
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function renderItem(data) {
+  currentIndex = data.index;
+  currentTotal = data.total;
+  localStorage.setItem('prayerCardIndex', currentIndex);
+
+  el.progress.textContent = `第 ${data.index} 項 / 共 ${data.total} 項`;
+  el.prayerText.value = data.text || '';
+  el.cycleSelect.value = data.cycle || '';
+  el.tagSelect.value = data.tag || '';
+  el.noteText.textContent = data.note ? ('備註：' + data.note) : '';
+}
+
+async function loadItem(index) {
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'getItem', index });
+    renderItem(data);
+  } catch (err) {
+    showStatus('載入失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+async function init() {
+  setLoading(true);
+  populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
+  populateSelect(el.tagSelect, TAG_MAP, '選擇標籤');
+  try {
+    await loadItem(currentIndex);
+  } finally {
+    setLoading(false);
+  }
+}
+
+el.prevBtn.addEventListener('click', async () => {
+  const newIdx = currentIndex - 1 < 1 ? currentTotal : currentIndex - 1;
+  await loadItem(newIdx);
+});
+
+el.nextBtn.addEventListener('click', async () => {
+  const newIdx = (currentIndex % currentTotal) + 1;
+  await loadItem(newIdx);
+});
+
+el.randomBtn.addEventListener('click', async () => {
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'random' });
+    renderItem(data);
+  } catch (err) {
+    showStatus('讀取失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+// ===== 朗讀功能 =====
+let isSpeaking = false;
+let zhVoice = null;
+
+function loadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  // 優先找繁體中文語音，找不到就退而求其次找任何中文語音
+  zhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakText(text) {
+  if (!window.speechSynthesis) {
+    showStatus('此瀏覽器不支援朗讀功能');
+    return;
+  }
+  if (!text || !text.trim()) {
+    showStatus('沒有內容可以朗讀');
+    return;
+  }
+  window.speechSynthesis.cancel(); // 清掉排隊中的內容
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.lang = 'zh-TW';
+  if (zhVoice) utter.voice = zhVoice;
+  utter.rate = 0.95;
+  utter.pitch = 1;
+
+  utter.onstart = () => {
+    isSpeaking = true;
+    el.speakBtn.textContent = '⏹ 停止';
+  };
+  utter.onend = () => {
+    isSpeaking = false;
+    el.speakBtn.textContent = '🔊 朗讀';
+  };
+  utter.onerror = () => {
+    isSpeaking = false;
+    el.speakBtn.textContent = '🔊 朗讀';
+  };
+
+  window.speechSynthesis.speak(utter);
+}
+
+el.speakBtn.addEventListener('click', () => {
+  if (isSpeaking) {
+    window.speechSynthesis.cancel();
+    isSpeaking = false;
+    el.speakBtn.textContent = '🔊 朗讀';
+    return;
+  }
+  speakText(el.prayerText.value);
+});
+
+// 翻頁/隨機/跳項時，若正在朗讀就先停止，避免唸到一半內容被換掉
+function stopSpeakingIfNeeded() {
+  if (window.speechSynthesis && isSpeaking) {
+    window.speechSynthesis.cancel();
+    isSpeaking = false;
+    el.speakBtn.textContent = '🔊 朗讀';
+  }
+}
+
+el.jumpBtn.addEventListener('click', async () => {
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  await loadItem(val);
+  el.jumpInput.value = '';
+});
+
+// 事項文字編輯 → 自動同步（打字後停頓 1 秒才送出，避免每個字都打 API）
+el.prayerText.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async () => {
+    try {
+      await apiCall({ action: 'updateText', index: currentIndex, value: el.prayerText.value });
+      showStatus('已同步');
+    } catch (err) {
+      showStatus('同步失敗：' + err.message);
+    }
+  }, 1000);
+});
+
+el.cycleSelect.addEventListener('change', async () => {
+  if (!el.cycleSelect.value) return;
+  setLoading(true);
+  try {
+    await apiCall({ action: 'updateCycle', index: currentIndex, value: el.cycleSelect.value });
+    showStatus('週期已更新');
+  } catch (err) {
+    showStatus('更新失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.tagSelect.addEventListener('change', async () => {
+  if (!el.tagSelect.value) return;
+  setLoading(true);
+  try {
+    await apiCall({ action: 'updateTag', index: currentIndex, value: el.tagSelect.value });
+    showStatus('標籤已更新');
+  } catch (err) {
+    showStatus('更新失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+init();
+</script>
+
+</body>
+</html>
