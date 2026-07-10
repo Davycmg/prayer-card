@@ -311,7 +311,14 @@ el.prevBtn.addEventListener('click', async () => {
 });
 
 el.nextBtn.addEventListener('click', async () => {
+  const doneIndex = currentIndex;
   const newIdx = (currentIndex % currentTotal) + 1;
+  setLoading(true);
+  try {
+    await apiCall({ action: 'complete', index: doneIndex });
+  } catch (err) {
+    showStatus('標記完成失敗：' + err.message);
+  }
   await loadItem(newIdx);
 });
 
@@ -374,6 +381,13 @@ async function runAutoPray() {
       await speakOnePass(el.prayerText.value);
     }
     if (!autoPrayActive) return;
+
+    // 這一項已經唸完 3 次，標記完成（同步更新表單回覆1的F、E欄）
+    try {
+      await apiCall({ action: 'complete', index: currentIndex });
+    } catch (err) {
+      showStatus('標記完成失敗：' + err.message);
+    }
 
     if (currentIndex >= currentTotal) {
       autoPrayActive = false;
