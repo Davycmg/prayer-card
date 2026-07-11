@@ -312,15 +312,17 @@ el.prevBtn.addEventListener('click', async () => {
 
 el.nextBtn.addEventListener('click', async () => {
   const doneIndex = currentIndex;
+  stopSpeakingIfNeeded();
   setLoading(true);
   try {
-    await apiCall({ action: 'complete', index: doneIndex });
+    // 合併「標記完成」+「抓下一項」成一次 API 呼叫，比原本兩次來回快
+    const data = await apiCall({ action: 'completeAndNext', index: doneIndex });
+    renderItem(data);
   } catch (err) {
-    showStatus('標記完成失敗：' + err.message);
+    showStatus('操作失敗：' + err.message);
+  } finally {
+    setLoading(false);
   }
-  // 完成後今日清單可能變短（這項被推到未來日期），用同一個 index 讀取
-  // 剛好會自動對應到原本排在它後面的下一項（伺服器端已處理位移／繞回開頭）
-  await loadItem(doneIndex);
 });
 
 el.randomBtn.addEventListener('click', async () => {
@@ -373,8 +375,8 @@ function speakOnePass(text) {
   });
 }
 
-// 連禱主流程：目前這項唸 REPEATS_PER_ITEM 次 → 標記完成 → 讀取同一個 index
-// （伺服器端今日待辦清單會因為這項被完成而縮短，同一個 index 自動對應到下一項）→ 重複，直到今日清單空了或被停止
+// 連禱主流程：目前這項唸 REPEATS_PER_ITEM 次 → 標記完成並讀取下一項（合併成一次API呼叫）
+// → 重複，直到今日清單空了或被停止
 async function runAutoPray() {
   while (autoPrayActive) {
     for (let i = 0; i < REPEATS_PER_ITEM; i++) {
@@ -386,16 +388,14 @@ async function runAutoPray() {
 
     const doneIndex = currentIndex;
 
-    // 這一項已經唸完 3 次，標記完成（同步更新表單回覆1的F、E欄）
+    // 這一項已經唸完 3 次，標記完成並直接抓下一項（一次API呼叫，比分開呼叫快）
     try {
-      await apiCall({ action: 'complete', index: doneIndex });
+      const data = await apiCall({ action: 'completeAndNext', index: doneIndex });
+      if (!autoPrayActive) return;
+      renderItem(data);
     } catch (err) {
       showStatus('標記完成失敗：' + err.message);
     }
-
-    if (!autoPrayActive) return;
-
-    await loadItem(doneIndex, true); // true = 不中斷自動連禱
 
     if (currentTotal === 0) {
       autoPrayActive = false;
