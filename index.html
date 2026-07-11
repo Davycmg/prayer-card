@@ -155,6 +155,25 @@
     height: 16px;
     text-align: center;
   }
+  .danger-zone {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 48px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: center;
+  }
+  .danger-zone button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    color: #b0413e;
+    font-size: 13px;
+    opacity: 0.6;
+  }
+  .danger-zone button:active { opacity: 1; }
   .loading-overlay {
     position: fixed;
     inset: 0;
@@ -210,6 +229,10 @@
 
 <div class="status" id="status"></div>
 
+<div class="danger-zone">
+  <button id="deleteBtn">🗑 刪除此項</button>
+</div>
+
 <div class="loading-overlay" id="loadingOverlay">處理中...</div>
 
 <script>
@@ -238,6 +261,7 @@ const el = {
   speakBtn: document.getElementById('speakBtn'),
   jumpInput: document.getElementById('jumpInput'),
   jumpBtn: document.getElementById('jumpBtn'),
+  deleteBtn: document.getElementById('deleteBtn'),
   status: document.getElementById('status'),
   loadingOverlay: document.getElementById('loadingOverlay')
 };
@@ -431,6 +455,27 @@ el.jumpBtn.addEventListener('click', async () => {
   if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
   await loadItem(val);
   el.jumpInput.value = '';
+});
+
+el.deleteBtn.addEventListener('click', async () => {
+  const preview = (el.prayerText.value || '').slice(0, 20);
+  const confirmed = window.confirm(
+    '確定要刪除這一項嗎？\n\n「' + preview + (preview.length >= 20 ? '...' : '') + '」\n\n這個動作無法復原。'
+  );
+  if (!confirmed) return;
+
+  stopSpeakingIfNeeded();
+  const doneIndex = currentIndex;
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'delete', index: doneIndex });
+    renderItem(data);
+    showStatus('已刪除');
+  } catch (err) {
+    showStatus('刪除失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
 });
 
 // 事項文字編輯 → 自動同步（打字後停頓 1 秒才送出，避免每個字都打 API）
