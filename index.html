@@ -148,6 +148,44 @@
     color: var(--purple);
     font-size: 14px;
   }
+  .toggle-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+    border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px; width: 18px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--purple); }
+  input:checked + .slider:before { transform: translateX(20px); }
   .status {
     margin-top: 10px;
     font-size: 12px;
@@ -222,6 +260,14 @@
   <button class="btn" id="speakBtn" style="background: var(--purple);">🔊 開始連禱</button>
 </div>
 
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="pureReadToggle">
+    <span class="slider"></span>
+  </label>
+  <span>純朗讀模式（不標記完成）</span>
+</div>
+
 <div class="jump-row">
   <input type="number" id="jumpInput" placeholder="第幾項" min="1">
   <button id="jumpBtn">跳到</button>
@@ -263,6 +309,7 @@ const el = {
   jumpInput: document.getElementById('jumpInput'),
   jumpBtn: document.getElementById('jumpBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
+  pureReadToggle: document.getElementById('pureReadToggle'),
   status: document.getElementById('status'),
   loadingOverlay: document.getElementById('loadingOverlay')
 };
@@ -446,7 +493,12 @@ el.tagSelect.addEventListener('change', () => {
 // ===== 朗讀（連禱）功能：翻頁改成純本地操作，只有標記完成在背景打API，速度不受網路影響 =====
 const REPEATS_PER_ITEM = 3;
 let autoPrayActive = false;
+let pureReadMode = false; // 純朗讀模式：開啟時連禱不會標記完成、不寫入F欄、不從清單移除
 let zhVoice = null;
+
+el.pureReadToggle.addEventListener('change', (e) => {
+  pureReadMode = e.target.checked;
+});
 
 function loadVoices() {
   const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
@@ -477,6 +529,10 @@ function speakOnePass(text) {
 }
 
 async function runAutoPray() {
+  const isPureMode = pureReadMode; // 記錄本次連禱開始時的模式，開始後中途切換不影響這次執行
+  const totalAtStart = itemsCache.length;
+  let loopCount = 0;
+
   while (autoPrayActive) {
     if (itemsCache.length === 0) {
       autoPrayActive = false;
@@ -491,6 +547,19 @@ async function runAutoPray() {
       await speakOnePass(el.prayerText.value);
     }
     if (!autoPrayActive) return;
+
+    if (isPureMode) {
+      // 純朗讀模式：不打API、不標記完成、不從清單移除，單純往下一項移動
+      loopCount++;
+      if (loopCount >= totalAtStart) {
+        autoPrayActive = false;
+        el.speakBtn.textContent = '🔊 開始連禱';
+        showStatus('本輪已唸完一遍（未標記完成）🙏');
+        return;
+      }
+      renderFromCache(cachePos + 1);
+      continue;
+    }
 
     const item = itemsCache[cachePos];
     itemsCache.splice(cachePos, 1);
