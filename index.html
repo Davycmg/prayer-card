@@ -101,6 +101,39 @@
     color: var(--text-sub);
     white-space: pre-wrap;
   }
+  .add-tag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .add-tag-row input[type="text"] {
+    flex: 1;
+    min-width: 100px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+  }
+  .add-tag-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-sub);
+    white-space: nowrap;
+  }
+  .add-tag-checkbox input { width: 16px; height: 16px; }
+  .add-tag-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 13px;
+    white-space: nowrap;
+  }
   .controls {
     width: 100%;
     max-width: 480px;
@@ -247,6 +280,15 @@
     </div>
   </div>
 
+  <div class="add-tag-row">
+    <input type="text" id="newTagInput" placeholder="新增標籤...">
+    <label class="add-tag-checkbox">
+      <input type="checkbox" id="saveTagCheckbox" checked>
+      <span>加入清單</span>
+    </label>
+    <button id="addTagBtn">套用</button>
+  </div>
+
   <div class="note" id="noteText"></div>
 </div>
 
@@ -301,6 +343,9 @@ const el = {
   prayerText: document.getElementById('prayerText'),
   cycleSelect: document.getElementById('cycleSelect'),
   tagSelect: document.getElementById('tagSelect'),
+  newTagInput: document.getElementById('newTagInput'),
+  saveTagCheckbox: document.getElementById('saveTagCheckbox'),
+  addTagBtn: document.getElementById('addTagBtn'),
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -321,6 +366,46 @@ function populateSelect(selectEl, map, placeholder) {
     opt.value = v;
     opt.textContent = v;
     selectEl.appendChild(opt);
+  });
+}
+
+// ===== 自訂標籤（存在手機瀏覽器本機，不影響 Google Sheet 後端） =====
+const CUSTOM_TAGS_KEY = 'prayerCard_customTags';
+
+function loadCustomTags() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_TAGS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function saveCustomTags(tags) {
+  try {
+    localStorage.setItem(CUSTOM_TAGS_KEY, JSON.stringify(tags));
+  } catch (err) {
+    showStatus('儲存標籤清單失敗：' + err.message);
+  }
+}
+
+// 把內建標籤（TAG_MAP）跟自訂標籤合併，一起顯示在下拉選單
+function populateTagSelect() {
+  const customTags = loadCustomTags();
+  el.tagSelect.innerHTML = '<option value="">選擇標籤</option>';
+
+  Object.values(TAG_MAP).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.tagSelect.appendChild(opt);
+  });
+
+  customTags.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v + '（自訂）';
+    el.tagSelect.appendChild(opt);
   });
 }
 
@@ -382,9 +467,38 @@ async function loadAllItems() {
 
 async function init() {
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
-  populateSelect(el.tagSelect, TAG_MAP, '選擇標籤');
+  populateTagSelect();
   await loadAllItems();
 }
+
+el.addTagBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+
+  const newTag = el.newTagInput.value.trim();
+  if (!newTag) { showStatus('請輸入標籤內容'); return; }
+
+  const item = itemsCache[cachePos];
+  item.tag = newTag;
+  el.tagSelect.value = ''; // 自訂值不一定在下拉選單裡，先清空避免顯示錯亂
+
+  // 套用到目前這項，背景同步（不阻塞畫面）
+  apiCall({ action: 'updateTagByRow', row: item.row, value: newTag })
+    .then(() => showStatus('標籤已套用'))
+    .catch(err => showStatus('套用失敗：' + err.message));
+
+  // 打勾才收錄進標籤清單，供未來下拉選單使用
+  if (el.saveTagCheckbox.checked) {
+    const customTags = loadCustomTags();
+    if (!customTags.includes(newTag) && !Object.values(TAG_MAP).includes(newTag)) {
+      customTags.push(newTag);
+      saveCustomTags(customTags);
+      populateTagSelect();
+      el.tagSelect.value = newTag;
+    }
+  }
+
+  el.newTagInput.value = '';
+});
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
 el.prevBtn.addEventListener('click', () => {
