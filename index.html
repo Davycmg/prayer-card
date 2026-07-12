@@ -245,8 +245,9 @@ const CYCLE_MAP = {
 };
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告' };
 
-let currentIndex = parseInt(localStorage.getItem('prayerCardIndex') || '1', 10);
-let currentTotal = 0;
+// ===== 本地暫存區：一次抓好今天的清單，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
+let itemsCache = [];   // [{row, text, cycle, note, tag}, ...]
+let cachePos = 0;      // 目前指到 itemsCache 的第幾個（0-based）
 let saveTimer = null;
 
 const el = {
@@ -293,24 +294,38 @@ async function apiCall(params) {
   return data;
 }
 
-function renderItem(data) {
-  currentIndex = data.index;
-  currentTotal = data.total;
-  localStorage.setItem('prayerCardIndex', currentIndex);
+// 從本地暫存區渲染畫面（不打API，瞬間完成）
+function renderFromCache(pos) {
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+    return;
+  }
+  cachePos = ((pos % itemsCache.length) + itemsCache.length) % itemsCache.length;
+  const item = itemsCache[cachePos];
 
-  el.progress.textContent = `第 ${data.index} 項 / 共 ${data.total} 項`;
-  el.prayerText.value = data.text || '';
-  el.cycleSelect.value = data.cycle || '';
-  el.tagSelect.value = data.tag || '';
-  el.noteText.textContent = data.note ? ('備註：' + data.note) : '';
+  el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
+  el.prayerText.value = item.text || '';
+  el.cycleSelect.value = item.cycle || '';
+  el.tagSelect.value = item.tag || '';
+  el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
 }
 
-async function loadItem(index, keepAutoPray) {
-  if (!keepAutoPray) stopSpeakingIfNeeded();
+function renderEmptyState() {
+  el.progress.textContent = '第 0 項 / 共 0 項';
+  el.prayerText.value = '🎉 今天沒有需要禱告的事項';
+  el.cycleSelect.value = '';
+  el.tagSelect.value = '';
+  el.noteText.textContent = '';
+}
+
+// 初始載入：一次抓好整份今日待辦清單
+async function loadAllItems() {
   setLoading(true);
   try {
-    const data = await apiCall({ action: 'getItem', index });
-    renderItem(data);
+    const data = await apiCall({ action: 'getAllItems' });
+    itemsCache = data.items || [];
+    cachePos = 0;
+    renderFromCache(0);
   } catch (err) {
     showStatus('載入失敗：' + err.message);
   } finally {
@@ -319,69 +334,131 @@ async function loadItem(index, keepAutoPray) {
 }
 
 async function init() {
-  setLoading(true);
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
   populateSelect(el.tagSelect, TAG_MAP, '選擇標籤');
-  try {
-    await loadItem(currentIndex);
-  } finally {
-    setLoading(false);
-  }
+  await loadAllItems();
 }
 
-el.prevBtn.addEventListener('click', async () => {
-  const newIdx = currentIndex - 1 < 1 ? currentTotal : currentIndex - 1;
-  await loadItem(newIdx);
+// ===== 翻頁：純本地操作，不打API，瞬間完成 =====
+el.prevBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos - 1);
 });
 
-el.nextBtn.addEventListener('click', async () => {
-  const doneIndex = currentIndex;
+el.randomBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(Math.floor(Math.random() * itemsCache.length));
+});
+
+el.jumpBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) { showStatus('目前沒有待禱告的項目'); return; }
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  renderFromCache(val - 1);
+  el.jumpInput.value = '';
+});
+
+// 「下一項」= 標記目前這項完成：本地立刻移除、畫面瞬間更新，API在背景默默同步，不卡畫面
+el.nextBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+
+  const item = itemsCache[cachePos];
+  itemsCache.splice(cachePos, 1);
+
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromCache(cachePos); // 移除後原位置自然遞補成下一項
+  }
+
+  apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message);
+  });
+});
+
+// 刪除：需要等API確認成功（避免列號校正錯誤），但只有這個動作會等待
+el.deleteBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const preview = (item.text || '').slice(0, 20);
+  const confirmed = window.confirm(
+    '確定要刪除這一項嗎？\n\n「' + preview + ((item.text || '').length > 20 ? '...' : '') + '」\n\n這個動作無法復原。'
+  );
+  if (!confirmed) return;
+
   stopSpeakingIfNeeded();
   setLoading(true);
   try {
-    // 合併「標記完成」+「抓下一項」成一次 API 呼叫，比原本兩次來回快
-    const data = await apiCall({ action: 'completeAndNext', index: doneIndex });
-    renderItem(data);
+    await apiCall({ action: 'deleteByRow', row: item.row });
+
+    const deletedRow = item.row;
+    itemsCache.splice(cachePos, 1);
+    // 刪除後，伺服器上這一列之後的列號都會往前移一位，本地暫存區同步校正，避免後續操作對錯列
+    itemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
+
+    if (itemsCache.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromCache(cachePos);
+    }
+    showStatus('已刪除');
   } catch (err) {
-    showStatus('操作失敗：' + err.message);
+    showStatus('刪除失敗：' + err.message);
   } finally {
     setLoading(false);
   }
 });
 
-el.randomBtn.addEventListener('click', async () => {
-  stopSpeakingIfNeeded();
-  setLoading(true);
-  try {
-    const data = await apiCall({ action: 'random' });
-    renderItem(data);
-  } catch (err) {
-    showStatus('讀取失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
+// 事項文字編輯 → 本地暫存同步更新 + 背景同步API（打字後停頓1秒才送出）
+el.prayerText.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (itemsCache.length === 0) return;
+    const item = itemsCache[cachePos];
+    item.text = el.prayerText.value;
+    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text })
+      .then(() => showStatus('已同步'))
+      .catch(err => showStatus('同步失敗：' + err.message));
+  }, 1000);
 });
 
-// ===== 自動連禱朗讀功能 =====
+el.cycleSelect.addEventListener('change', () => {
+  if (!el.cycleSelect.value || itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  item.cycle = el.cycleSelect.value;
+  apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
+    .then(() => showStatus('週期已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message));
+});
+
+el.tagSelect.addEventListener('change', () => {
+  if (!el.tagSelect.value || itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  item.tag = el.tagSelect.value;
+  apiCall({ action: 'updateTagByRow', row: item.row, value: item.tag })
+    .then(() => showStatus('標籤已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message));
+});
+
+// ===== 朗讀（連禱）功能：翻頁改成純本地操作，只有標記完成在背景打API，速度不受網路影響 =====
 const REPEATS_PER_ITEM = 3;
-
 let autoPrayActive = false;
 let zhVoice = null;
 
 function loadVoices() {
   const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-  // 優先找繁體中文語音，找不到就退而求其次找任何中文語音
   zhVoice = voices.find(v => v.lang === 'zh-TW')
         || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
         || null;
 }
-
 if (window.speechSynthesis) {
   loadVoices();
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-// 朗讀一次，回傳 Promise，唸完（或出錯）才 resolve
 function speakOnePass(text) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis || !text || !text.trim()) {
@@ -399,10 +476,15 @@ function speakOnePass(text) {
   });
 }
 
-// 連禱主流程：目前這項唸 REPEATS_PER_ITEM 次 → 標記完成並讀取下一項（合併成一次API呼叫）
-// → 重複，直到今日清單空了或被停止
 async function runAutoPray() {
   while (autoPrayActive) {
+    if (itemsCache.length === 0) {
+      autoPrayActive = false;
+      el.speakBtn.textContent = '🔊 開始連禱';
+      showStatus('今天的禱告事項都完成了 🙏');
+      return;
+    }
+
     for (let i = 0; i < REPEATS_PER_ITEM; i++) {
       if (!autoPrayActive) return;
       el.speakBtn.textContent = `⏹ 停止連禱（${i + 1}/${REPEATS_PER_ITEM}）`;
@@ -410,23 +492,22 @@ async function runAutoPray() {
     }
     if (!autoPrayActive) return;
 
-    const doneIndex = currentIndex;
+    const item = itemsCache[cachePos];
+    itemsCache.splice(cachePos, 1);
 
-    // 這一項已經唸完 3 次，標記完成並直接抓下一項（一次API呼叫，比分開呼叫快）
-    try {
-      const data = await apiCall({ action: 'completeAndNext', index: doneIndex });
-      if (!autoPrayActive) return;
-      renderItem(data);
-    } catch (err) {
-      showStatus('標記完成失敗：' + err.message);
-    }
+    apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+      showStatus('同步失敗：' + err.message);
+    });
 
-    if (currentTotal === 0) {
+    if (itemsCache.length === 0) {
       autoPrayActive = false;
       el.speakBtn.textContent = '🔊 開始連禱';
       showStatus('今天的禱告事項都完成了 🙏');
+      renderEmptyState();
       return;
     }
+
+    renderFromCache(cachePos);
   }
 }
 
@@ -441,7 +522,6 @@ el.speakBtn.addEventListener('click', () => {
   runAutoPray();
 });
 
-// 翻頁/隨機/跳項時，若正在連禱就先停止，避免內容被換掉還繼續唸舊的
 function stopSpeakingIfNeeded() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   if (autoPrayActive) {
@@ -449,73 +529,6 @@ function stopSpeakingIfNeeded() {
     el.speakBtn.textContent = '🔊 開始連禱';
   }
 }
-
-el.jumpBtn.addEventListener('click', async () => {
-  const val = parseInt(el.jumpInput.value, 10);
-  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
-  await loadItem(val);
-  el.jumpInput.value = '';
-});
-
-el.deleteBtn.addEventListener('click', async () => {
-  const preview = (el.prayerText.value || '').slice(0, 20);
-  const confirmed = window.confirm(
-    '確定要刪除這一項嗎？\n\n「' + preview + (preview.length >= 20 ? '...' : '') + '」\n\n這個動作無法復原。'
-  );
-  if (!confirmed) return;
-
-  stopSpeakingIfNeeded();
-  const doneIndex = currentIndex;
-  setLoading(true);
-  try {
-    const data = await apiCall({ action: 'delete', index: doneIndex });
-    renderItem(data);
-    showStatus('已刪除');
-  } catch (err) {
-    showStatus('刪除失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
-});
-
-// 事項文字編輯 → 自動同步（打字後停頓 1 秒才送出，避免每個字都打 API）
-el.prayerText.addEventListener('input', () => {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(async () => {
-    try {
-      await apiCall({ action: 'updateText', index: currentIndex, value: el.prayerText.value });
-      showStatus('已同步');
-    } catch (err) {
-      showStatus('同步失敗：' + err.message);
-    }
-  }, 1000);
-});
-
-el.cycleSelect.addEventListener('change', async () => {
-  if (!el.cycleSelect.value) return;
-  setLoading(true);
-  try {
-    await apiCall({ action: 'updateCycle', index: currentIndex, value: el.cycleSelect.value });
-    showStatus('週期已更新');
-  } catch (err) {
-    showStatus('更新失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
-});
-
-el.tagSelect.addEventListener('change', async () => {
-  if (!el.tagSelect.value) return;
-  setLoading(true);
-  try {
-    await apiCall({ action: 'updateTag', index: currentIndex, value: el.tagSelect.value });
-    showStatus('標籤已更新');
-  } catch (err) {
-    showStatus('更新失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
-});
 
 init();
 </script>
