@@ -379,29 +379,22 @@ function populateSelect(selectEl, map, placeholder) {
   });
 }
 
-// ===== 自訂標籤（存在手機瀏覽器本機，不影響 Google Sheet 後端） =====
-const CUSTOM_TAGS_KEY = 'prayerCard_customTags';
+// ===== 自訂標籤（永久存在 Google Sheet 後端，所有裝置共用，重新部署網頁也不會消失） =====
+let customTagsCache = []; // 從伺服器抓回來的自訂標籤清單，快取在記憶體裡
 
-function loadCustomTags() {
+// 開啟頁面時向伺服器抓一次目前完整的標籤清單
+async function loadTagList() {
   try {
-    const raw = localStorage.getItem(CUSTOM_TAGS_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const data = await apiCall({ action: 'getTagList' });
+    customTagsCache = data.custom || [];
   } catch (err) {
-    return [];
+    showStatus('讀取標籤清單失敗：' + err.message);
+    customTagsCache = [];
   }
 }
 
-function saveCustomTags(tags) {
-  try {
-    localStorage.setItem(CUSTOM_TAGS_KEY, JSON.stringify(tags));
-  } catch (err) {
-    showStatus('儲存標籤清單失敗：' + err.message);
-  }
-}
-
-// 把內建標籤（TAG_MAP）跟自訂標籤合併，一起顯示在下拉選單
+// 把內建標籤（TAG_MAP）跟自訂標籤（伺服器抓回來的）合併，一起顯示在下拉選單
 function populateTagSelect() {
-  const customTags = loadCustomTags();
   el.tagSelect.innerHTML = '<option value="">選擇標籤</option>';
 
   Object.values(TAG_MAP).forEach(v => {
@@ -411,7 +404,7 @@ function populateTagSelect() {
     el.tagSelect.appendChild(opt);
   });
 
-  customTags.forEach(v => {
+  customTagsCache.forEach(v => {
     const opt = document.createElement('option');
     opt.value = v;
     opt.textContent = v + '（自訂）';
@@ -477,11 +470,12 @@ async function loadAllItems() {
 
 async function init() {
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
+  await loadTagList();
   populateTagSelect();
   await loadAllItems();
 }
 
-el.addTagBtn.addEventListener('click', () => {
+el.addTagBtn.addEventListener('click', async () => {
   if (itemsCache.length === 0) return;
 
   const newTag = el.newTagInput.value.trim();
@@ -496,14 +490,15 @@ el.addTagBtn.addEventListener('click', () => {
     .then(() => showStatus('標籤已套用'))
     .catch(err => showStatus('套用失敗：' + err.message));
 
-  // 打勾才收錄進標籤清單，供未來下拉選單使用
+  // 打勾才永久收錄進標籤清單（存到 Google Sheet 後端，所有裝置共用）
   if (el.saveTagCheckbox.checked) {
-    const customTags = loadCustomTags();
-    if (!customTags.includes(newTag) && !Object.values(TAG_MAP).includes(newTag)) {
-      customTags.push(newTag);
-      saveCustomTags(customTags);
+    try {
+      const data = await apiCall({ action: 'addCustomTag', value: newTag });
+      customTagsCache = data.custom || [];
       populateTagSelect();
       el.tagSelect.value = newTag;
+    } catch (err) {
+      showStatus('加入清單失敗：' + err.message);
     }
   }
 
