@@ -156,6 +156,14 @@
   }
   .btn:active { opacity: 0.7; }
   .btn.secondary { background: var(--green); }
+  .btn.complete { background: #2e8b74; }
+  .controls.triple {
+    gap: 6px;
+  }
+  .controls.triple .btn {
+    font-size: 14px;
+    padding: 14px 2px;
+  }
   .jump-row {
     width: 100%;
     max-width: 480px;
@@ -292,9 +300,10 @@
   <div class="note" id="noteText"></div>
 </div>
 
-<div class="controls">
+<div class="controls triple">
   <button class="btn secondary" id="prevBtn">◀ 上一項</button>
   <button class="btn" id="nextBtn">下一項 ▶</button>
+  <button class="btn complete" id="completeBtn">✅ 完成</button>
 </div>
 
 <div class="controls">
@@ -304,7 +313,7 @@
 
 <div class="toggle-row">
   <label class="switch">
-    <input type="checkbox" id="pureReadToggle">
+    <input type="checkbox" id="pureReadToggle" checked>
     <span class="slider"></span>
   </label>
   <span>純朗讀模式（不標記完成）</span>
@@ -349,6 +358,7 @@ const el = {
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
+  completeBtn: document.getElementById('completeBtn'),
   randomBtn: document.getElementById('randomBtn'),
   speakBtn: document.getElementById('speakBtn'),
   jumpInput: document.getElementById('jumpInput'),
@@ -521,8 +531,15 @@ el.jumpBtn.addEventListener('click', () => {
   el.jumpInput.value = '';
 });
 
-// 「下一項」= 標記目前這項完成：本地立刻移除、畫面瞬間更新，API在背景默默同步，不卡畫面
+// 「下一項」= 純翻頁，不標記完成、不動F/E欄、不從清單移除
 el.nextBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos + 1);
+});
+
+// 「完成」= 標記目前這項完成：本地立刻移除、畫面瞬間更新，API在背景默默同步，不卡畫面
+el.completeBtn.addEventListener('click', () => {
   if (itemsCache.length === 0) return;
   stopSpeakingIfNeeded();
 
@@ -607,7 +624,7 @@ el.tagSelect.addEventListener('change', () => {
 // ===== 朗讀（連禱）功能：翻頁改成純本地操作，只有標記完成在背景打API，速度不受網路影響 =====
 const REPEATS_PER_ITEM = 3;
 let autoPrayActive = false;
-let pureReadMode = false; // 純朗讀模式：開啟時連禱不會標記完成、不寫入F欄、不從清單移除
+let pureReadMode = true; // 純朗讀模式：預設開啟，開啟時連禱不會標記完成、不寫入F欄、不從清單移除
 let zhVoice = null;
 
 el.pureReadToggle.addEventListener('change', (e) => {
@@ -643,65 +660,101 @@ function speakOnePass(text) {
 }
 
 async function runAutoPray() {
-  const isPureMode = pureReadMode; // 記錄本次連禱開始時的模式，開始後中途切換不影響這次執行
-  const totalAtStart = itemsCache.length;
-  let loopCount = 0;
+  try {
+    const isPureMode = pureReadMode; // 記錄本次連禱開始時的模式，開始後中途切換不影響這次執行
+    const totalAtStart = itemsCache.length;
+    let loopCount = 0;
 
-  while (autoPrayActive) {
-    if (itemsCache.length === 0) {
-      autoPrayActive = false;
-      el.speakBtn.textContent = '🔊 開始連禱';
-      showStatus('今天的禱告事項都完成了 🙏');
-      return;
-    }
-
-    for (let i = 0; i < REPEATS_PER_ITEM; i++) {
-      if (!autoPrayActive) return;
-      el.speakBtn.textContent = `⏹ 停止連禱（${i + 1}/${REPEATS_PER_ITEM}）`;
-      await speakOnePass(el.prayerText.value);
-    }
-    if (!autoPrayActive) return;
-
-    if (isPureMode) {
-      // 純朗讀模式：不打API、不標記完成、不從清單移除，單純往下一項移動
-      loopCount++;
-      if (loopCount >= totalAtStart) {
+    while (autoPrayActive) {
+      if (itemsCache.length === 0) {
         autoPrayActive = false;
         el.speakBtn.textContent = '🔊 開始連禱';
-        showStatus('本輪已唸完一遍（未標記完成）🙏');
+        showStatus('今天的禱告事項都完成了 🙏');
         return;
       }
-      renderFromCache(cachePos + 1);
-      continue;
+
+      for (let i = 0; i < REPEATS_PER_ITEM; i++) {
+        if (!autoPrayActive) return;
+        el.speakBtn.textContent = `⏹ 停止連禱（${i + 1}/${REPEATS_PER_ITEM}）`;
+        await speakOnePass(el.prayerText.value);
+      }
+      if (!autoPrayActive) return;
+
+      if (isPureMode) {
+        // 純朗讀模式：不打API、不標記完成、不從清單移除，單純往下一項移動
+        loopCount++;
+        if (loopCount >= totalAtStart) {
+          autoPrayActive = false;
+          el.speakBtn.textContent = '🔊 開始連禱';
+          showStatus('本輪已唸完一遍（未標記完成）🙏');
+          return;
+        }
+        renderFromCache(cachePos + 1);
+        continue;
+      }
+
+      const item = itemsCache[cachePos];
+      itemsCache.splice(cachePos, 1);
+
+      apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+        showStatus('同步失敗：' + err.message);
+      });
+
+      if (itemsCache.length === 0) {
+        autoPrayActive = false;
+        el.speakBtn.textContent = '🔊 開始連禱';
+        showStatus('今天的禱告事項都完成了 🙏');
+        renderEmptyState();
+        return;
+      }
+
+      renderFromCache(cachePos);
     }
-
-    const item = itemsCache[cachePos];
-    itemsCache.splice(cachePos, 1);
-
-    apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
-      showStatus('同步失敗：' + err.message);
-    });
-
-    if (itemsCache.length === 0) {
-      autoPrayActive = false;
-      el.speakBtn.textContent = '🔊 開始連禱';
-      showStatus('今天的禱告事項都完成了 🙏');
-      renderEmptyState();
-      return;
-    }
-
-    renderFromCache(cachePos);
+  } finally {
+    // 不管連禱從哪個路徑結束（正常唸完、被停止、發生錯誤），都確保釋放螢幕喚醒鎖
+    releaseWakeLock();
   }
 }
+
+// ===== 螢幕保持喚醒（避免連禱途中因為太久沒碰螢幕而自動熄屏鎖定中斷）=====
+// 注意：這只能防止「自動熄屏」，如果手動按電源鍵鎖屏，系統仍會強制中斷背景分頁的執行，這是手機系統層級的限制。
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (err) {
+    // 裝置不支援或無法取得，不影響其他功能，只是連禱途中螢幕可能還是會自動熄屏
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (err) { /* 忽略 */ }
+    wakeLock = null;
+  }
+}
+
+// 分頁切回前景時，如果連禱還在進行中，嘗試重新取得喚醒鎖（有些瀏覽器切背景時會自動釋放）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && autoPrayActive && !wakeLock) {
+    requestWakeLock();
+  }
+});
 
 el.speakBtn.addEventListener('click', () => {
   if (autoPrayActive) {
     autoPrayActive = false;
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     el.speakBtn.textContent = '🔊 開始連禱';
+    releaseWakeLock();
     return;
   }
   autoPrayActive = true;
+  requestWakeLock();
   runAutoPray();
 });
 
@@ -710,6 +763,7 @@ function stopSpeakingIfNeeded() {
   if (autoPrayActive) {
     autoPrayActive = false;
     el.speakBtn.textContent = '🔊 開始連禱';
+    releaseWakeLock();
   }
 }
 
