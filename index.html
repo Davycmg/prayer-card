@@ -421,9 +421,12 @@ function showStatus(msg) {
   setTimeout(() => { el.status.textContent = ''; }, 1800);
 }
 
+// ★★★ 修正處：加上時間戳記參數 + cache: 'no-store'，避免瀏覽器用舊的快取回應，
+// 這是造成「完成很多項後，重新整理網頁數字沒有正確減少」的根本原因。
 async function apiCall(params) {
+  params._t = Date.now(); // 加時間戳記，讓每次網址都不一樣，繞過快取
   const url = API_URL + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: 'no-store' }); // 明確告訴瀏覽器不要用快取
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
