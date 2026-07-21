@@ -471,25 +471,6 @@ function renderEmptyState() {
   el.noteText.textContent = '';
 }
 
-// 標籤是週幾（週一～週日）時，後端會直接匯出到 Google Tasks 並刪除該列，
-// 前端收到 exported:true 後，要把這一項從本地暫存區移除，並校正後續項目的列號
-// （道理跟刪除按鈕一樣：該列以下的列號全部要 -1，因為伺服器那邊已經整列刪除了）
-function removeItemAfterWeekdayExport(deletedRow) {
-  const idx = itemsCache.findIndex(it => it.row === deletedRow);
-  if (idx === -1) return;
-
-  itemsCache.splice(idx, 1);
-  itemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
-
-  if (itemsCache.length === 0) {
-    renderEmptyState();
-  } else {
-    if (cachePos >= itemsCache.length) cachePos = 0;
-    renderFromCache(cachePos);
-  }
-  showStatus('已匯出到 Google Tasks 並從清單移除');
-}
-
 // 初始載入：一次抓好整份今日待辦清單
 async function loadAllItems() {
   setLoading(true);
@@ -527,7 +508,7 @@ el.addTagBtn.addEventListener('click', async () => {
   apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag })
     .then(data => {
       if (data && data.exported) {
-        removeItemAfterWeekdayExport(rowRef);
+        showStatus('已複製到對應 Google Tasks 清單');
       } else if (data && data.copied) {
         showStatus('標籤已套用並複製到 Google Tasks');
       } else {
@@ -678,7 +659,7 @@ el.tagSelect.addEventListener('change', () => {
   apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
     .then(data => {
       if (data && data.exported) {
-        removeItemAfterWeekdayExport(rowRef);
+        showStatus('已複製到對應 Google Tasks 清單');
       } else if (data && data.copied) {
         showStatus('標籤已更新並複製到 Google Tasks');
       } else {
