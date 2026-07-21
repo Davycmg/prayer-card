@@ -134,6 +134,18 @@
     font-size: 13px;
     white-space: nowrap;
   }
+  .copy-tasks-btn {
+    margin-top: 10px;
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .copy-tasks-btn:active { opacity: 0.7; }
   .controls {
     width: 100%;
     max-width: 480px;
@@ -297,6 +309,8 @@
     <button id="addTagBtn">套用</button>
   </div>
 
+  <button class="copy-tasks-btn" id="copyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
+
   <div class="note" id="noteText"></div>
 </div>
 
@@ -355,6 +369,7 @@ const el = {
   newTagInput: document.getElementById('newTagInput'),
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
+  copyToTasksBtn: document.getElementById('copyToTasksBtn'),
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -421,7 +436,7 @@ function showStatus(msg) {
   setTimeout(() => { el.status.textContent = ''; }, 1800);
 }
 
-// ★★★ 修正處：加上時間戳記參數 + cache: 'no-store'，避免瀏覽器用舊的快取回應，
+// 加上時間戳記參數 + cache: 'no-store'，避免瀏覽器用舊的快取回應，
 // 這是造成「完成很多項後，重新整理網頁數字沒有正確減少」的根本原因。
 async function apiCall(params) {
   params._t = Date.now(); // 加時間戳記，讓每次網址都不一樣，繞過快取
@@ -513,6 +528,8 @@ el.addTagBtn.addEventListener('click', async () => {
     .then(data => {
       if (data && data.exported) {
         removeItemAfterWeekdayExport(rowRef);
+      } else if (data && data.copied) {
+        showStatus('標籤已套用並複製到 Google Tasks');
       } else {
         showStatus('標籤已套用');
       }
@@ -532,6 +549,23 @@ el.addTagBtn.addEventListener('click', async () => {
   }
 
   el.newTagInput.value = '';
+});
+
+// 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
+// 用來解決「標籤本來就已經是task預設清單、change事件不會觸發」的限制，可以隨時重複按。
+el.copyToTasksBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  apiCall({ action: 'copyToTasks', row: item.row })
+    .then(data => {
+      if (data && data.copied) {
+        showStatus('已複製到 Google Tasks 預設清單');
+      } else {
+        showStatus('複製失敗，請稍後再試');
+      }
+    })
+    .catch(err => showStatus('複製失敗：' + err.message));
 });
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
@@ -645,6 +679,8 @@ el.tagSelect.addEventListener('change', () => {
     .then(data => {
       if (data && data.exported) {
         removeItemAfterWeekdayExport(rowRef);
+      } else if (data && data.copied) {
+        showStatus('標籤已更新並複製到 Google Tasks');
       } else {
         showStatus('標籤已更新');
       }
