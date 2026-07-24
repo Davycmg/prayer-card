@@ -94,7 +94,14 @@
     background: white;
   }
   .meta-field.cycle select { background: var(--yellow); }
+  .meta-field.cycle select.cycle-empty {
+    background: #ff8a80;
+    border: 1px solid #d32f2f;
+    color: #7a0000;
+    font-weight: bold;
+  }
   .meta-field.tag select { background: var(--blue); }
+  .meta-field.weekday select { background: #d9ead3; }
   .note {
     margin-top: 14px;
     font-size: 13px;
@@ -300,6 +307,13 @@
     </div>
   </div>
 
+  <div class="meta-row">
+    <div class="meta-field weekday">
+      <label>星期標籤</label>
+      <select id="weekdaySelect"></select>
+    </div>
+  </div>
+
   <div class="add-tag-row">
     <input type="text" id="newTagInput" placeholder="新增標籤...">
     <label class="add-tag-checkbox">
@@ -355,6 +369,10 @@ const CYCLE_MAP = {
   'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
 };
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告' };
+const WEEKDAY_MAP = {
+  '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
+  '週五': '週五', '週六': '週六', '週日': '週日'
+};
 
 // ===== 本地暫存區：一次抓好今天的清單，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
 let itemsCache = [];   // [{row, text, cycle, note, tag}, ...]
@@ -366,6 +384,7 @@ const el = {
   prayerText: document.getElementById('prayerText'),
   cycleSelect: document.getElementById('cycleSelect'),
   tagSelect: document.getElementById('tagSelect'),
+  weekdaySelect: document.getElementById('weekdaySelect'),
   newTagInput: document.getElementById('newTagInput'),
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
@@ -419,12 +438,19 @@ function populateTagSelect() {
     el.tagSelect.appendChild(opt);
   });
 
-  customTagsCache.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v + '（自訂）';
-    el.tagSelect.appendChild(opt);
-  });
+  customTagsCache
+    .filter(v => !WEEKDAY_MAP[v]) // 週一～週日獨立到另一個下拉選單，不在這裡重複出現
+    .forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v + '（自訂）';
+      el.tagSelect.appendChild(opt);
+    });
+}
+
+// 週期空白時，用醒目底色提醒需要補上週期
+function updateCycleWarning() {
+  el.cycleSelect.classList.toggle('cycle-empty', !el.cycleSelect.value);
 }
 
 function setLoading(show) {
@@ -459,8 +485,10 @@ function renderFromCache(pos) {
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
   el.prayerText.value = item.text || '';
   el.cycleSelect.value = item.cycle || '';
-  el.tagSelect.value = item.tag || '';
+  el.tagSelect.value = WEEKDAY_MAP[item.tag] ? '' : (item.tag || '');
+  el.weekdaySelect.value = WEEKDAY_MAP[item.tag] ? item.tag : '';
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+  updateCycleWarning();
 }
 
 function renderEmptyState() {
@@ -468,7 +496,9 @@ function renderEmptyState() {
   el.prayerText.value = '🎉 今天沒有需要禱告的事項';
   el.cycleSelect.value = '';
   el.tagSelect.value = '';
+  el.weekdaySelect.value = '';
   el.noteText.textContent = '';
+  updateCycleWarning();
 }
 
 // 初始載入：一次抓好整份今日待辦清單
@@ -488,6 +518,7 @@ async function loadAllItems() {
 
 async function init() {
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
+  populateSelect(el.weekdaySelect, WEEKDAY_MAP, '選擇星期標籤');
   await loadTagList();
   populateTagSelect();
   await loadAllItems();
@@ -502,6 +533,7 @@ el.addTagBtn.addEventListener('click', async () => {
   const item = itemsCache[cachePos];
   item.tag = newTag;
   el.tagSelect.value = ''; // 自訂值不一定在下拉選單裡，先清空避免顯示錯亂
+  el.weekdaySelect.value = '';
   const rowRef = item.row;
 
   // 套用到目前這項，背景同步（不阻塞畫面）
@@ -646,6 +678,7 @@ el.cycleSelect.addEventListener('change', () => {
   if (!el.cycleSelect.value || itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
   item.cycle = el.cycleSelect.value;
+  updateCycleWarning();
   apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
     .then(() => showStatus('週期已更新'))
     .catch(err => showStatus('更新失敗：' + err.message));
@@ -655,6 +688,26 @@ el.tagSelect.addEventListener('change', () => {
   if (!el.tagSelect.value || itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
   item.tag = el.tagSelect.value;
+  el.weekdaySelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
+  const rowRef = item.row;
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+    .then(data => {
+      if (data && data.exported) {
+        showStatus('已複製到對應 Google Tasks 清單');
+      } else if (data && data.copied) {
+        showStatus('標籤已更新並複製到 Google Tasks');
+      } else {
+        showStatus('標籤已更新');
+      }
+    })
+    .catch(err => showStatus('更新失敗：' + err.message));
+});
+
+el.weekdaySelect.addEventListener('change', () => {
+  if (!el.weekdaySelect.value || itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  item.tag = el.weekdaySelect.value;
+  el.tagSelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
   const rowRef = item.row;
   apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
     .then(data => {
