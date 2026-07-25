@@ -1,12 +1,16 @@
-name: Deploy to Apps Script
+name: Push to Apps Script
 
+# 只自動 push 程式碼，不自動建立/更新正式部署版本：
+# Apps Script API 建立的網頁應用程式部署（executeAs: USER_DEPLOYING）沒辦法正確帶入
+# 部署者的 Sheets 授權狀態，只有透過 Apps Script 編輯器 UI 建立的部署才能正常運作。
+# 所以「發布新版本」這步維持手動：部署 → 管理部署作業 → 編輯 → 新版本 → 部署。
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
 
 jobs:
-  deploy:
+  push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -25,6 +29,3 @@ jobs:
 
       - name: Push source to Apps Script
         run: clasp push --force
-
-      - name: Deploy new version
-        run: clasp deploy --deploymentId "${{ secrets.CLASP_DEPLOYMENT_ID }}" --description "Auto deploy ${{ github.sha }}"
