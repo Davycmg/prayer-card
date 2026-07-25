@@ -1141,8 +1141,11 @@ function testImportGoogleTasksNow() {
 }
 
 /**
- * 自動合併「表單回覆1」裡B欄事項文字完全相同的重複列。
- * 合併規則：保留列號最小的那列（主列），其餘刪除。
+ * 自動合併「表單回覆1」裡B欄事項文字重複的列。
+ * 判定重複的規則：文字完全相同，或其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
+ * 增加了字詞，新文字會包含舊文字），都視為同一組——不再要求文字必須100%一模一樣。
+ * 合併規則：保留「文字最長」的那筆內容當最終文字（視為最新、最完整的版本），其餘列刪除。
+ * - B欄文字：採用組內最長的版本
  * - C欄週期：取合併範圍內天數最長的週期
  * - E欄日期：取合併範圍內最晚的日期
  * - D欄備註：所有不同備註合併（換行分隔，重複內容不疊加）
@@ -1158,16 +1161,22 @@ function autoMergeDuplicateItems() {
   const numRows = lastRow - 1;
   const allData = sheet.getRange(2, 1, numRows, 8).getValues();
 
-  // 依B欄文字分組，記錄每組出現在哪些實際列號
-  const groups = {};
+  // 依B欄文字分組：文字相同，或其中一筆是另一筆的子字串，都歸為同一組
+  const groups = []; // [{ texts: [...], rows: [...] }, ...]
   allData.forEach((row, i) => {
     const text = (row[COL.TEXT - 1] || '').toString().trim();
     if (!text) return;
-    if (!groups[text]) groups[text] = [];
-    groups[text].push(i + 2);
+
+    const matched = groups.find(g => g.texts.some(t => t.includes(text) || text.includes(t)));
+    if (matched) {
+      matched.texts.push(text);
+      matched.rows.push(i + 2);
+    } else {
+      groups.push({ texts: [text], rows: [i + 2] });
+    }
   });
 
-  const duplicateGroups = Object.entries(groups).filter(([, rows]) => rows.length > 1);
+  const duplicateGroups = groups.filter(g => g.rows.length > 1);
   if (duplicateGroups.length === 0) {
     console.log('沒有找到重複事項，無需合併。');
     return;
@@ -1176,10 +1185,19 @@ function autoMergeDuplicateItems() {
   let mergedGroupCount = 0;
   const rowsToDelete = [];
 
-  duplicateGroups.forEach(([text, rows]) => {
-    rows.sort((a, b) => a - b);
-    const targetRow = rows[0];       // 保留列號最小的當主列
-    const otherRows = rows.slice(1); // 其餘的合併後刪除
+  duplicateGroups.forEach(({ texts, rows }) => {
+    // 保留組內「文字最長」的版本當最終內容，代表中途新增字詞後最新、最完整的那筆
+    let targetRow = rows[0];
+    let targetText = texts[0];
+    rows.forEach((r, idx) => {
+      if (texts[idx].length > targetText.length) {
+        targetText = texts[idx];
+        targetRow = r;
+      }
+    });
+    const otherRows = rows.filter(r => r !== targetRow); // 其餘的合併後刪除
+
+    sheet.getRange(targetRow, COL.TEXT).setValue(targetText);
 
     let bestCycle = '';
     let bestCyclePeriod = -1;
