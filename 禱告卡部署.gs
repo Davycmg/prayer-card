@@ -1144,8 +1144,8 @@ function testImportGoogleTasksNow() {
  * 自動合併「表單回覆1」裡B欄事項文字重複的列。
  * 判定重複的規則：文字完全相同，或其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
  * 增加了字詞，新文字會包含舊文字），都視為同一組——不再要求文字必須100%一模一樣。
- * 合併規則：保留「文字最長」的那筆內容當最終文字（視為最新、最完整的版本），其餘列刪除。
- * - B欄文字：採用組內最長的版本
+ * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
+ * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
  * - C欄週期：取合併範圍內天數最長的週期
  * - E欄日期：取合併範圍內最晚的日期
  * - D欄備註：所有不同備註合併（換行分隔，重複內容不疊加）
@@ -1186,12 +1186,18 @@ function autoMergeDuplicateItems() {
   const rowsToDelete = [];
 
   duplicateGroups.forEach(({ texts, rows }) => {
-    // 保留組內「文字最長」的版本當最終內容，代表中途新增字詞後最新、最完整的那筆
+    // 把組內所有不重複的文字整合起來：已經被其他版本完整包含的子字串不重複列出，
+    // 避免「舊文字」跟「舊文字+新增內容」的新版本同時出現、內容互相包含卻重複顯示
+    const uniqueTexts = [...new Set(texts)];
+    const maximalTexts = uniqueTexts.filter(t => !uniqueTexts.some(other => other !== t && other.includes(t)));
+    const targetText = maximalTexts.join('\n');
+
+    // 主列固定選組內文字最長的那一列，當作其他欄位（週期/日期/標籤）合併結果要寫回的位置
     let targetRow = rows[0];
-    let targetText = texts[0];
+    let longestLen = texts[0].length;
     rows.forEach((r, idx) => {
-      if (texts[idx].length > targetText.length) {
-        targetText = texts[idx];
+      if (texts[idx].length > longestLen) {
+        longestLen = texts[idx].length;
         targetRow = r;
       }
     });
