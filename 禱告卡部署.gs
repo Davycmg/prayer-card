@@ -901,6 +901,12 @@ function doGet(e) {
       case 'copyToTasks':
         result = copyCurrentRowToTasks(parseInt(e.parameter.row, 10));
         break;
+      case 'getItemsByTag':
+        result = getItemsByTag(e.parameter.tag);
+        break;
+      case 'searchItems':
+        result = searchItems(e.parameter.keyword);
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
@@ -1006,6 +1012,68 @@ function getAllItems() {
   }
 
   return { items: items, total: items.length };
+}
+
+/**
+ * 查詢頁面用：掃描「表單回覆1」全部資料（不受今日待辦日期篩選影響），
+ * 回傳標籤（H欄）完全等於指定值的所有項目。
+ */
+function getItemsByTag(tag) {
+  const trimmedTag = (tag || '').toString().trim();
+  if (!trimmedTag) return { items: [] };
+
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { items: [] };
+
+  const numRows = lastRow - 1;
+  const allData = sheet.getRange(2, 1, numRows, 8).getValues();
+
+  const items = [];
+  for (let i = 0; i < allData.length; i++) {
+    const rowTag = (allData[i][COL.TAG - 1] || '').toString().trim();
+    if (rowTag !== trimmedTag) continue;
+    items.push({
+      row: i + 2,
+      text: allData[i][COL.TEXT - 1] || '',
+      cycle: allData[i][COL.CYCLE - 1] || '',
+      note: allData[i][COL.NOTE - 1] || '',
+      tag: allData[i][COL.TAG - 1] || ''
+    });
+  }
+
+  return { items: items };
+}
+
+/**
+ * 查詢頁面用：掃描「表單回覆1」全部資料（不受今日待辦日期篩選影響），
+ * 回傳事項文字（B欄）包含指定關鍵字的所有項目（不分大小寫）。
+ */
+function searchItems(keyword) {
+  const trimmedKeyword = (keyword || '').toString().trim().toLowerCase();
+  if (!trimmedKeyword) return { items: [] };
+
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { items: [] };
+
+  const numRows = lastRow - 1;
+  const allData = sheet.getRange(2, 1, numRows, 8).getValues();
+
+  const items = [];
+  for (let i = 0; i < allData.length; i++) {
+    const text = (allData[i][COL.TEXT - 1] || '').toString();
+    if (text.toLowerCase().indexOf(trimmedKeyword) === -1) continue;
+    items.push({
+      row: i + 2,
+      text: text,
+      cycle: allData[i][COL.CYCLE - 1] || '',
+      note: allData[i][COL.NOTE - 1] || '',
+      tag: allData[i][COL.TAG - 1] || ''
+    });
+  }
+
+  return { items: items };
 }
 
 /**
