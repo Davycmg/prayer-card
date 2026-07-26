@@ -870,6 +870,13 @@ function safeAlert(msg) {
 }
 
 function doGet(e) {
+  // ?page=query → 直接由這個網頁應用程式服務查詢頁（query.html），
+  // 不帶 page 參數時維持原本行為（JSON API，給 index.html／query.html 的 fetch 呼叫用）。
+  if (e.parameter.page === 'query') {
+    return HtmlService.createHtmlOutputFromFile('query')
+      .setTitle('禱告卡片 - 查詢');
+  }
+
   const action = (e.parameter.action || 'getAllItems');
   let result;
   try {
