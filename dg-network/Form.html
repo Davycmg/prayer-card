@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+      max-width: 480px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: #333;
+    }
+    h2 { color: #4a3b8f; margin-bottom: 4px; }
+    p.desc { color: #777; font-size: 13px; margin-top: 0; }
+    label { display: block; margin-top: 16px; font-weight: 500; font-size: 14px; }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      margin-top: 20px;
+      padding: 10px 24px;
+      background: #4a3b8f;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 12px; font-size: 14px; }
+    #hint { font-size: 12px; color: #4a3b8f; margin-top: 6px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h2>代禱表單</h2>
+  <p class="desc">輸入姓名後若已有紀錄，會自動帶出舊資料供你編輯</p>
+
+  <label>姓名</label>
+  <input type="text" id="name" onblur="lookup()" placeholder="輸入姓名後移開游標即查詢">
+  <div id="hint"></div>
+
+  <label>DG 週期</label>
+  <select id="cycle">
+    <option value="">請選擇</option>
+    <option value="每天">每天</option>
+    <option value="每兩天">每兩天</option>
+    <option value="每三天">每三天</option>
+    <option value="每週">每週</option>
+    <option value="每兩週">每兩週</option>
+    <option value="每月">每月</option>
+    <option value="每兩個月">每兩個月</option>
+    <option value="每季">每季</option>
+    <option value="每半年">每半年</option>
+    <option value="每年">每年</option>
+  </select>
+
+  <label>備註</label>
+  <textarea id="note" placeholder="選填"></textarea>
+
+  <button onclick="submitForm()" id="submitBtn">送出</button>
+  <div id="status"></div>
+
+  <script>
+    let matchedRows = []; // 記住查詢時抓到的同名列號，送出時要一併帶回去
+
+    // 確保 select 裡有這個值對應的 option，沒有的話動態補上（容錯：全形/半形括號、多餘空白等差異）
+    function ensureOptionExists(selectEl, value) {
+      if (!value) return;
+      const exists = Array.prototype.some.call(selectEl.options, function(opt) {
+        return opt.value === value;
+      });
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.text = value + '（原始資料，建議確認後改選標準選項）';
+        selectEl.appendChild(opt);
+      }
+    }
+
+    function lookup() {
+      const name = document.getElementById('name').value.trim();
+      const hint = document.getElementById('hint');
+      const cycleSelect = document.getElementById('cycle');
+      matchedRows = [];
+
+      if (!name) { hint.innerText = ''; return; }
+      hint.innerText = '查詢中...';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res) {
+            matchedRows = res.rows;
+            document.getElementById('note').value = res.note;
+
+            // 逐列列出各自的週期，例如：第1筆：每兩週｜第2筆：每兩週｜第3筆：每月
+            const rowDetail = res.rowCycles
+              .map(function(c, idx) { return '第' + (idx + 1) + '筆：' + c; })
+              .join('｜');
+
+            if (res.cycles.length === 1) {
+              // 只有一種週期，直接帶入（若跟選單選項文字不完全相符，先動態補上再選取）
+              ensureOptionExists(cycleSelect, res.cycles[0]);
+              cycleSelect.value = res.cycles[0];
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），已合併備註，送出後將整併為 1 筆';
+            } else if (res.cycles.length > 1) {
+              // 週期不一致，清空讓使用者自己選
+              cycleSelect.value = '';
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），週期不一致，請選擇正確週期後送出';
+            } else {
+              // 有資料但週期是空的
+              cycleSelect.value = '';
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），尚未設定週期，請選擇';
+            }
+          } else {
+            cycleSelect.value = '每月';
+            document.getElementById('note').value = '';
+            hint.innerText = '查無舊資料，送出後將新增一筆';
+          }
+        })
+        .withFailureHandler(function(err) {
+          hint.innerText = '查詢失敗：' + err.message;
+        })
+        .lookupByName(name);
+    }
+
+    function submitForm() {
+      const name = document.getElementById('name').value.trim();
+      const cycle = document.getElementById('cycle').value;
+      const statusEl = document.getElementById('status');
+
+      if (!name) {
+        statusEl.innerText = '請輸入姓名';
+        return;
+      }
+      if (!cycle) {
+        statusEl.innerText = '請選擇 DG 週期';
+        return;
+      }
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      const data = {
+        name: name,
+        cycle: cycle,
+        note: document.getElementById('note').value,
+        rows: matchedRows // 把查詢時記住的列號傳回去，後端會合併成一列
+      };
+      statusEl.innerText = '送出中...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.status === 'updated') {
+            statusEl.innerText = res.mergedCount > 1
+              ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
+              : '已更新原紀錄！';
+          } else {
+            statusEl.innerText = '已新增資料！';
+          }
+          btn.disabled = false;
+        })
+        .withFailureHandler(function(err) {
+          statusEl.innerText = '發生錯誤：' + err.message;
+          btn.disabled = false;
+        })
+        .submitForm(data);
+    }
+  </script>
+</body>
+</html>
