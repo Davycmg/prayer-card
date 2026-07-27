@@ -1,0 +1,51 @@
+name: Import DG網絡 Apps Script project (one-off)
+
+# 一次性用途：把 https://script.google.com/home/projects/1deOb0Nu0u8gEPDjaEwaWC3FxKmW3z62yewT3x7R2hkJxFX4tHz5cr4mu/edit
+# （容器綁定在試算表「DG網絡 (回覆)」，scriptId 由使用者確認）用 clasp clone 抓下來，
+# 存到 dg-network/ 子目錄，跟 prayer-card 本身的程式碼分開，避免檔名互相覆蓋。
+# 完成後這個 workflow 檔案可以刪除。
+on:
+  push:
+    branches: [claude/import-google-apps-script-b7ek3u]
+  workflow_dispatch: {}
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          ref: claude/import-google-apps-script-b7ek3u
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Restore clasp credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Clone DG網絡 Apps Script project
+        run: |
+          mkdir -p dg-network
+          cd dg-network
+          echo '{"scriptId":"1deOb0Nu0u8gEPDjaEwaWC3FxKmW3z62yewT3x7R2hkJxFX4tHz5cr4mu","rootDir":"."}' > .clasp.json
+          clasp pull
+
+      - name: Commit pulled files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dg-network
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Import DG網絡 Apps Script project into dg-network/"
+            git push origin HEAD:claude/import-google-apps-script-b7ek3u
+          fi
