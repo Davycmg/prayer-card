@@ -77,18 +77,6 @@
     white-space: nowrap;
   }
   .query-row button:active { opacity: 0.7; }
-  .plain-result {
-    margin-top: 14px;
-    padding: 14px;
-    background: var(--gray-bg);
-    border-radius: 8px;
-    font-size: 15px;
-    line-height: 1.8;
-    white-space: pre-wrap;
-    word-break: break-word;
-    min-height: 60px;
-    font-family: inherit;
-  }
   .result-count {
     margin-top: 10px;
     font-size: 12px;
@@ -177,6 +165,12 @@
     background: white;
   }
   .meta-field.cycle select { background: var(--yellow); }
+  .meta-field.cycle select.cycle-empty {
+    background: #ff8a80;
+    border: 1px solid #d32f2f;
+    color: #7a0000;
+    font-weight: bold;
+  }
   .meta-field.tag select { background: var(--blue); }
   .meta-field.weekday select { background: #d9ead3; }
   .note {
@@ -225,6 +219,177 @@
     color: var(--text-sub);
     text-align: center;
   }
+
+  /* ===== 標籤查詢卡片瀏覽（跟 index.html 同一套介面） ===== */
+  .tag-card-view {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .tag-card-view .progress {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 4px;
+    text-align: center;
+  }
+  .add-tag-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .add-tag-row input[type="text"] {
+    flex: 1;
+    min-width: 100px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 14px;
+  }
+  .add-tag-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--text-sub);
+    white-space: nowrap;
+  }
+  .add-tag-checkbox input { width: 16px; height: 16px; }
+  .add-tag-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  .copy-tasks-btn {
+    margin-top: 10px;
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .copy-tasks-btn:active { opacity: 0.7; }
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--purple);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn.secondary { background: var(--green); }
+  .btn.complete { background: #2e8b74; }
+  .controls.triple {
+    gap: 6px;
+  }
+  .controls.triple .btn {
+    font-size: 14px;
+    padding: 14px 2px;
+  }
+  .jump-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+  .jump-row input {
+    width: 70px;
+    padding: 8px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .toggle-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+    border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px; width: 18px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--purple); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  .danger-zone {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: center;
+  }
+  .danger-zone button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    color: #b0413e;
+    font-size: 13px;
+    opacity: 0.6;
+  }
+  .danger-zone button:active { opacity: 1; }
 </style>
 </head>
 <body>
@@ -239,7 +404,6 @@
     <select id="tagQuerySelect"></select>
     <button id="tagQueryBtn">查詢</button>
   </div>
-  <div class="plain-result" id="tagResultText"></div>
 
   <h2 style="margin-top:24px;">關鍵字查詢</h2>
   <div class="query-row">
@@ -248,6 +412,79 @@
   </div>
   <div class="result-count" id="keywordResultCount"></div>
   <div class="result-list" id="keywordResultList"></div>
+</div>
+
+<div class="tag-card-view" id="tagCardView" style="display:none;">
+  <button class="back-btn" id="tcBackBtn" style="align-self:flex-start; max-width:480px; width:100%;">← 返回查詢結果</button>
+
+  <div class="header" style="padding-top:0;">
+    <div class="progress" id="tcProgress">載入中...</div>
+  </div>
+
+  <div class="card">
+    <textarea class="prayer-text" id="tcPrayerText" placeholder="禱告事項內容..."></textarea>
+
+    <div class="meta-row">
+      <div class="meta-field cycle">
+        <label>DG 週期</label>
+        <select id="tcCycleSelect"></select>
+      </div>
+      <div class="meta-field tag">
+        <label>標籤</label>
+        <select id="tcTagSelect"></select>
+      </div>
+    </div>
+
+    <div class="meta-row">
+      <div class="meta-field weekday">
+        <label>星期標籤</label>
+        <select id="tcWeekdaySelect"></select>
+      </div>
+    </div>
+
+    <div class="add-tag-row">
+      <input type="text" id="tcNewTagInput" placeholder="新增標籤...">
+      <label class="add-tag-checkbox">
+        <input type="checkbox" id="tcSaveTagCheckbox" checked>
+        <span>加入清單</span>
+      </label>
+      <button id="tcAddTagBtn">套用</button>
+    </div>
+
+    <button class="copy-tasks-btn" id="tcCopyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
+
+    <div class="note" id="tcNoteText"></div>
+  </div>
+
+  <div class="controls triple">
+    <button class="btn secondary" id="tcPrevBtn">◀ 上一項</button>
+    <button class="btn" id="tcNextBtn">下一項 ▶</button>
+    <button class="btn complete" id="tcCompleteBtn">✅ 完成</button>
+  </div>
+
+  <div class="controls">
+    <button class="btn secondary" id="tcRandomBtn">🎲 隨機一項</button>
+    <button class="btn" id="tcSpeakBtn" style="background: var(--purple);">🔊 開始連禱</button>
+  </div>
+
+  <div class="toggle-row">
+    <label class="switch">
+      <input type="checkbox" id="tcPureReadToggle" checked>
+      <span class="slider"></span>
+    </label>
+    <span>純朗讀模式（不標記完成）</span>
+  </div>
+
+  <div class="jump-row">
+    <input type="number" id="tcJumpInput" placeholder="第幾項" min="1">
+    <button id="tcJumpBtn">跳到</button>
+  </div>
+
+  <div class="status" id="tcStatus"></div>
+
+  <div class="danger-zone">
+    <button id="tcDeleteBtn">🗑 刪除此項</button>
+  </div>
 </div>
 
 <div class="card edit-panel" id="editPanel">
@@ -308,12 +545,33 @@ let saveTimer = null;
 const el = {
   tagQuerySelect: document.getElementById('tagQuerySelect'),
   tagQueryBtn: document.getElementById('tagQueryBtn'),
-  tagResultText: document.getElementById('tagResultText'),
   keywordInput: document.getElementById('keywordInput'),
   keywordQueryBtn: document.getElementById('keywordQueryBtn'),
   keywordResultCount: document.getElementById('keywordResultCount'),
   keywordResultList: document.getElementById('keywordResultList'),
   listView: document.getElementById('listView'),
+  tagCardView: document.getElementById('tagCardView'),
+  tcBackBtn: document.getElementById('tcBackBtn'),
+  tcProgress: document.getElementById('tcProgress'),
+  tcPrayerText: document.getElementById('tcPrayerText'),
+  tcCycleSelect: document.getElementById('tcCycleSelect'),
+  tcTagSelect: document.getElementById('tcTagSelect'),
+  tcWeekdaySelect: document.getElementById('tcWeekdaySelect'),
+  tcNewTagInput: document.getElementById('tcNewTagInput'),
+  tcSaveTagCheckbox: document.getElementById('tcSaveTagCheckbox'),
+  tcAddTagBtn: document.getElementById('tcAddTagBtn'),
+  tcCopyToTasksBtn: document.getElementById('tcCopyToTasksBtn'),
+  tcNoteText: document.getElementById('tcNoteText'),
+  tcPrevBtn: document.getElementById('tcPrevBtn'),
+  tcNextBtn: document.getElementById('tcNextBtn'),
+  tcCompleteBtn: document.getElementById('tcCompleteBtn'),
+  tcRandomBtn: document.getElementById('tcRandomBtn'),
+  tcSpeakBtn: document.getElementById('tcSpeakBtn'),
+  tcPureReadToggle: document.getElementById('tcPureReadToggle'),
+  tcJumpInput: document.getElementById('tcJumpInput'),
+  tcJumpBtn: document.getElementById('tcJumpBtn'),
+  tcStatus: document.getElementById('tcStatus'),
+  tcDeleteBtn: document.getElementById('tcDeleteBtn'),
   editPanel: document.getElementById('editPanel'),
   backBtn: document.getElementById('backBtn'),
   editText: document.getElementById('editText'),
@@ -392,15 +650,16 @@ function populateTagQuerySelect() {
     });
 }
 
-// 編輯面板的標籤下拉選單（跟 index.html 一致：內建 + 自訂，星期獨立一個選單）
-function populateEditTagSelect() {
-  el.editTagSelect.innerHTML = '<option value="">選擇標籤</option>';
+// 標籤下拉選單（跟 index.html 一致：內建 + 自訂，星期獨立一個選單）
+// 給編輯面板（editTagSelect）跟標籤卡片瀏覽（tcTagSelect）共用
+function populateTagSelectInto(selectEl) {
+  selectEl.innerHTML = '<option value="">選擇標籤</option>';
 
   Object.values(TAG_MAP).forEach(v => {
     const opt = document.createElement('option');
     opt.value = v;
     opt.textContent = v;
-    el.editTagSelect.appendChild(opt);
+    selectEl.appendChild(opt);
   });
 
   customTagsCache
@@ -409,24 +668,29 @@ function populateEditTagSelect() {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v + '（自訂）';
-      el.editTagSelect.appendChild(opt);
+      selectEl.appendChild(opt);
     });
 }
 
-// ===== 依標籤查詢：純文字顯示，用分行區分不同項目 =====
+// ===== 依標籤查詢：跟 index.html 完全一樣的卡片瀏覽介面，依 E 欄日期由舊到新排列 =====
 el.tagQueryBtn.addEventListener('click', async () => {
   const tag = el.tagQuerySelect.value;
   if (!tag) { showStatus(el.status, '請先選擇標籤'); return; }
 
   setLoading(true);
   try {
-    const data = await apiCall({ action: 'getItemsByTag', tag: tag });
-    const items = data.items || [];
-    if (items.length === 0) {
-      el.tagResultText.textContent = '（沒有符合此標籤的項目）';
-    } else {
-      el.tagResultText.textContent = items.map(it => it.text).join('\n\n');
+    const data = await apiCall({ action: 'getItemsByTag', tag: tag }); // 後端已依E欄日期由舊到新排序
+    tcItemsCache = data.items || [];
+    tcCachePos = 0;
+
+    if (tcItemsCache.length === 0) {
+      showStatus(el.status, '沒有符合此標籤的項目');
+      return;
     }
+
+    el.listView.style.display = 'none';
+    el.tagCardView.style.display = 'flex';
+    tcRenderFromCache(0);
   } catch (err) {
     showStatus(el.status, '查詢失敗：' + err.message);
   } finally {
@@ -556,12 +820,388 @@ el.editDeleteBtn.addEventListener('click', async () => {
   }
 });
 
+// ===== 標籤卡片瀏覽：跟 index.html 完全一樣的介面與功能 =====
+let tcItemsCache = [];   // 目前這次標籤查詢的結果（後端已依E欄日期由舊到新排序）
+let tcCachePos = 0;
+let tcSaveTimer = null;
+
+function tcUpdateCycleWarning() {
+  // 跟 index.html 一致：週期空白時用醒目底色提醒，這裡沿用同一個 class 名稱即可
+  el.tcCycleSelect.classList.toggle('cycle-empty', !el.tcCycleSelect.value);
+}
+
+function tcRenderFromCache(pos) {
+  if (tcItemsCache.length === 0) {
+    tcRenderEmptyState();
+    return;
+  }
+  tcCachePos = ((pos % tcItemsCache.length) + tcItemsCache.length) % tcItemsCache.length;
+  const item = tcItemsCache[tcCachePos];
+
+  el.tcProgress.textContent = `第 ${tcCachePos + 1} 項 / 共 ${tcItemsCache.length} 項`;
+  el.tcPrayerText.value = item.text || '';
+  el.tcCycleSelect.value = item.cycle || '';
+  el.tcTagSelect.value = WEEKDAY_MAP[item.tag] ? '' : (item.tag || '');
+  el.tcWeekdaySelect.value = WEEKDAY_MAP[item.tag] ? item.tag : '';
+  el.tcNoteText.textContent = item.note ? ('備註：' + item.note) : '';
+  tcUpdateCycleWarning();
+}
+
+function tcRenderEmptyState() {
+  el.tcProgress.textContent = '第 0 項 / 共 0 項';
+  el.tcPrayerText.value = '（此標籤目前沒有項目）';
+  el.tcCycleSelect.value = '';
+  el.tcTagSelect.value = '';
+  el.tcWeekdaySelect.value = '';
+  el.tcNoteText.textContent = '';
+  tcUpdateCycleWarning();
+}
+
+el.tcBackBtn.addEventListener('click', () => {
+  tcStopSpeakingIfNeeded();
+  el.tagCardView.style.display = 'none';
+  el.listView.style.display = '';
+});
+
+el.tcAddTagBtn.addEventListener('click', async () => {
+  if (tcItemsCache.length === 0) return;
+
+  const newTag = el.tcNewTagInput.value.trim();
+  if (!newTag) { showStatus(el.tcStatus, '請輸入標籤內容'); return; }
+
+  const item = tcItemsCache[tcCachePos];
+  item.tag = newTag;
+  el.tcTagSelect.value = '';
+  el.tcWeekdaySelect.value = '';
+  const rowRef = item.row;
+
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag })
+    .then(data => {
+      if (data && data.exported) {
+        showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');
+      } else if (data && data.copied) {
+        showStatus(el.tcStatus, '標籤已套用並複製到 Google Tasks');
+      } else {
+        showStatus(el.tcStatus, '標籤已套用');
+      }
+    })
+    .catch(err => showStatus(el.tcStatus, '套用失敗：' + err.message));
+
+  if (el.tcSaveTagCheckbox.checked) {
+    try {
+      const data = await apiCall({ action: 'addCustomTag', value: newTag });
+      customTagsCache = data.custom || [];
+      populateTagSelectInto(el.editTagSelect);
+      populateTagSelectInto(el.tcTagSelect);
+      el.tcTagSelect.value = newTag;
+    } catch (err) {
+      showStatus(el.tcStatus, '加入清單失敗：' + err.message);
+    }
+  }
+
+  el.tcNewTagInput.value = '';
+});
+
+el.tcCopyToTasksBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+
+  apiCall({ action: 'copyToTasks', row: item.row })
+    .then(data => {
+      if (data && data.copied) {
+        showStatus(el.tcStatus, '已複製到 Google Tasks 預設清單');
+      } else {
+        showStatus(el.tcStatus, '複製失敗，請稍後再試');
+      }
+    })
+    .catch(err => showStatus(el.tcStatus, '複製失敗：' + err.message));
+});
+
+el.tcPrevBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  tcStopSpeakingIfNeeded();
+  tcRenderFromCache(tcCachePos - 1);
+});
+
+el.tcRandomBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  tcStopSpeakingIfNeeded();
+  tcRenderFromCache(Math.floor(Math.random() * tcItemsCache.length));
+});
+
+el.tcJumpBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) { showStatus(el.tcStatus, '目前沒有項目'); return; }
+  const val = parseInt(el.tcJumpInput.value, 10);
+  if (!val || val < 1) { showStatus(el.tcStatus, '請輸入有效項次'); return; }
+  tcRenderFromCache(val - 1);
+  el.tcJumpInput.value = '';
+});
+
+el.tcNextBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  tcStopSpeakingIfNeeded();
+  tcRenderFromCache(tcCachePos + 1);
+});
+
+el.tcCompleteBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  tcStopSpeakingIfNeeded();
+
+  const item = tcItemsCache[tcCachePos];
+  tcItemsCache.splice(tcCachePos, 1);
+
+  if (tcItemsCache.length === 0) {
+    tcRenderEmptyState();
+  } else {
+    tcRenderFromCache(tcCachePos);
+  }
+
+  apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+    showStatus(el.tcStatus, '同步失敗，請檢查網路：' + err.message);
+  });
+});
+
+el.tcDeleteBtn.addEventListener('click', async () => {
+  if (tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+  const preview = (item.text || '').slice(0, 20);
+  const confirmed = window.confirm(
+    '確定要刪除這一項嗎？\n\n「' + preview + ((item.text || '').length > 20 ? '...' : '') + '」\n\n這個動作無法復原。'
+  );
+  if (!confirmed) return;
+
+  tcStopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await apiCall({ action: 'deleteByRow', row: item.row });
+
+    const deletedRow = item.row;
+    tcItemsCache.splice(tcCachePos, 1);
+    tcItemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
+
+    if (tcItemsCache.length === 0) {
+      tcRenderEmptyState();
+    } else {
+      tcRenderFromCache(tcCachePos);
+    }
+    showStatus(el.tcStatus, '已刪除');
+  } catch (err) {
+    showStatus(el.tcStatus, '刪除失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.tcPrayerText.addEventListener('input', () => {
+  clearTimeout(tcSaveTimer);
+  tcSaveTimer = setTimeout(() => {
+    if (tcItemsCache.length === 0) return;
+    const item = tcItemsCache[tcCachePos];
+    item.text = el.tcPrayerText.value;
+    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text })
+      .then(() => showStatus(el.tcStatus, '已同步'))
+      .catch(err => showStatus(el.tcStatus, '同步失敗：' + err.message));
+  }, 1000);
+});
+
+el.tcCycleSelect.addEventListener('change', () => {
+  if (!el.tcCycleSelect.value || tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+  item.cycle = el.tcCycleSelect.value;
+  tcUpdateCycleWarning();
+  apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
+    .then(() => showStatus(el.tcStatus, '週期已更新'))
+    .catch(err => showStatus(el.tcStatus, '更新失敗：' + err.message));
+});
+
+el.tcTagSelect.addEventListener('change', () => {
+  if (!el.tcTagSelect.value || tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+  item.tag = el.tcTagSelect.value;
+  el.tcWeekdaySelect.value = '';
+  const rowRef = item.row;
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+    .then(data => {
+      if (data && data.exported) {
+        showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');
+      } else if (data && data.copied) {
+        showStatus(el.tcStatus, '標籤已更新並複製到 Google Tasks');
+      } else {
+        showStatus(el.tcStatus, '標籤已更新');
+      }
+    })
+    .catch(err => showStatus(el.tcStatus, '更新失敗：' + err.message));
+});
+
+el.tcWeekdaySelect.addEventListener('change', () => {
+  if (!el.tcWeekdaySelect.value || tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+  item.tag = el.tcWeekdaySelect.value;
+  el.tcTagSelect.value = '';
+  const rowRef = item.row;
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+    .then(data => {
+      if (data && data.exported) {
+        showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');
+      } else if (data && data.copied) {
+        showStatus(el.tcStatus, '標籤已更新並複製到 Google Tasks');
+      } else {
+        showStatus(el.tcStatus, '標籤已更新');
+      }
+    })
+    .catch(err => showStatus(el.tcStatus, '更新失敗：' + err.message));
+});
+
+// ===== 朗讀（連禱）功能：跟 index.html 完全一樣 =====
+const TC_REPEATS_PER_ITEM = 3;
+let tcAutoPrayActive = false;
+let tcPureReadMode = true;
+let tcZhVoice = null;
+
+el.tcPureReadToggle.addEventListener('change', (e) => {
+  tcPureReadMode = e.target.checked;
+});
+
+function tcLoadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  tcZhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+if (window.speechSynthesis) {
+  tcLoadVoices();
+  window.speechSynthesis.onvoiceschanged = tcLoadVoices;
+}
+
+function tcSpeakOnePass(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text || !text.trim()) {
+      resolve();
+      return;
+    }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-TW';
+    if (tcZhVoice) utter.voice = tcZhVoice;
+    utter.rate = 0.95;
+    utter.pitch = 1;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function tcRunAutoPray() {
+  try {
+    const isPureMode = tcPureReadMode;
+    const totalAtStart = tcItemsCache.length;
+    let loopCount = 0;
+
+    while (tcAutoPrayActive) {
+      if (tcItemsCache.length === 0) {
+        tcAutoPrayActive = false;
+        el.tcSpeakBtn.textContent = '🔊 開始連禱';
+        showStatus(el.tcStatus, '這個標籤的事項都完成了 🙏');
+        return;
+      }
+
+      for (let i = 0; i < TC_REPEATS_PER_ITEM; i++) {
+        if (!tcAutoPrayActive) return;
+        el.tcSpeakBtn.textContent = `⏹ 停止連禱（${i + 1}/${TC_REPEATS_PER_ITEM}）`;
+        await tcSpeakOnePass(el.tcPrayerText.value);
+      }
+      if (!tcAutoPrayActive) return;
+
+      if (isPureMode) {
+        loopCount++;
+        if (loopCount >= totalAtStart) {
+          tcAutoPrayActive = false;
+          el.tcSpeakBtn.textContent = '🔊 開始連禱';
+          showStatus(el.tcStatus, '本輪已唸完一遍（未標記完成）🙏');
+          return;
+        }
+        tcRenderFromCache(tcCachePos + 1);
+        continue;
+      }
+
+      const item = tcItemsCache[tcCachePos];
+      tcItemsCache.splice(tcCachePos, 1);
+
+      apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+        showStatus(el.tcStatus, '同步失敗：' + err.message);
+      });
+
+      if (tcItemsCache.length === 0) {
+        tcAutoPrayActive = false;
+        el.tcSpeakBtn.textContent = '🔊 開始連禱';
+        showStatus(el.tcStatus, '這個標籤的事項都完成了 🙏');
+        tcRenderEmptyState();
+        return;
+      }
+
+      tcRenderFromCache(tcCachePos);
+    }
+  } finally {
+    tcReleaseWakeLock();
+  }
+}
+
+let tcWakeLock = null;
+
+async function tcRequestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      tcWakeLock = await navigator.wakeLock.request('screen');
+      tcWakeLock.addEventListener('release', () => { tcWakeLock = null; });
+    }
+  } catch (err) {
+    // 裝置不支援或無法取得，不影響其他功能
+  }
+}
+
+async function tcReleaseWakeLock() {
+  if (tcWakeLock) {
+    try { await tcWakeLock.release(); } catch (err) { /* 忽略 */ }
+    tcWakeLock = null;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && tcAutoPrayActive && !tcWakeLock) {
+    tcRequestWakeLock();
+  }
+});
+
+el.tcSpeakBtn.addEventListener('click', () => {
+  if (tcAutoPrayActive) {
+    tcAutoPrayActive = false;
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    el.tcSpeakBtn.textContent = '🔊 開始連禱';
+    tcReleaseWakeLock();
+    return;
+  }
+  tcAutoPrayActive = true;
+  tcRequestWakeLock();
+  tcRunAutoPray();
+});
+
+function tcStopSpeakingIfNeeded() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (tcAutoPrayActive) {
+    tcAutoPrayActive = false;
+    el.tcSpeakBtn.textContent = '🔊 開始連禱';
+    tcReleaseWakeLock();
+  }
+}
+
 async function init() {
   populateSelect(el.editCycleSelect, CYCLE_MAP, '選擇週期');
   populateSelect(el.editWeekdaySelect, WEEKDAY_MAP, '選擇星期標籤');
+  populateSelect(el.tcCycleSelect, CYCLE_MAP, '選擇週期');
+  populateSelect(el.tcWeekdaySelect, WEEKDAY_MAP, '選擇星期標籤');
   await loadTagList();
   populateTagQuerySelect();
-  populateEditTagSelect();
+  populateTagSelectInto(el.editTagSelect);
+  populateTagSelectInto(el.tcTagSelect);
 }
 
 init();
