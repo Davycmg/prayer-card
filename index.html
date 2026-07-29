@@ -325,6 +325,7 @@
   </div>
 
   <button class="copy-tasks-btn" id="copyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
+  <button class="copy-tasks-btn" id="addToCalendarBtn">📅 新增到日曆（依週期重複）</button>
 
   <div class="note" id="noteText"></div>
 </div>
@@ -370,6 +371,19 @@ const CYCLE_MAP = {
   'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
 };
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告' };
+// 週期文字（跟 CYCLE_MAP 的值一致）對應 Google 日曆的 RRULE 重複規則
+const CYCLE_RRULE_MAP = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
+};
 const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
   '週五': '週五', '週六': '週六', '週日': '週日'
@@ -390,6 +404,7 @@ const el = {
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
+  addToCalendarBtn: document.getElementById('addToCalendarBtn'),
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -580,6 +595,34 @@ el.copyToTasksBtn.addEventListener('click', () => {
       }
     })
     .catch(err => showStatus('複製失敗：' + err.message));
+});
+
+// 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+el.addToCalendarBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  const rrule = CYCLE_RRULE_MAP[item.cycle];
+  if (!rrule) { showStatus('請先設定週期才能加入日曆'); return; }
+
+  const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+
+  // 用明天當第一次提醒日期，全天活動
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: item.text || '',
+    recur: rrule
+  });
+
+  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
 });
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
