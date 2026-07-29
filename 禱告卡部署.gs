@@ -917,6 +917,12 @@ function doGet(e) {
       case 'getTodayCalendarEvents':
         result = getTodayCalendarEvents();
         break;
+      case 'updateCalendarEventCycle':
+        result = updateCalendarEventCycle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value);
+        break;
+      case 'deleteCalendarEvent':
+        result = deleteCalendarEvent(e.parameter.eventId, e.parameter.recurringEventId);
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
@@ -1003,6 +1009,7 @@ function getTodayCalendarEvents() {
     const isAllDay = !!(ev.start && ev.start.date);
     return {
       id: ev.id,
+      recurringEventId: ev.recurringEventId || '',
       text: ev.summary || '(無標題)',
       time: isAllDay ? '全天' : formatEventTime_(ev.start.dateTime),
       note: ev.description ? stripHtml_(ev.description) : '',
@@ -1019,6 +1026,47 @@ function formatEventTime_(dateTimeStr) {
 
 function stripHtml_(html) {
   return html.toString().replace(/<[^>]*>/g, '').trim();
+}
+
+// 週期文字 → RRULE，跟 parseRRuleLabel_ 互為反向對照，維持顯示格式跟 CYCLE_MAP 一致
+const CALENDAR_CYCLE_RRULE_MAP_ = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
+};
+
+/**
+ * 修改一個日曆行程的重複規則。如果原本就是重複行程（有 recurringEventId），
+ * 改的是整個系列（用 recurringEventId 對應的主行程）；如果原本是單次行程，
+ * 直接在這個行程本身加上重複規則（等於把它變成一個新的重複系列）。
+ * cycleLabel 給「不重複」或空值時，會移除重複規則。
+ */
+function updateCalendarEventCycle(eventId, recurringEventId, cycleLabel) {
+  const targetId = recurringEventId || eventId;
+  if (!targetId) throw new Error('缺少行程 ID');
+
+  const rrule = CALENDAR_CYCLE_RRULE_MAP_[cycleLabel];
+  Calendar.Events.patch({ recurrence: rrule ? [rrule] : [] }, 'primary', targetId);
+  return { success: true };
+}
+
+/**
+ * 刪除一個日曆行程。如果是重複行程，會用 recurringEventId 刪除整個系列；
+ * 不是重複行程的話，就只刪除這一筆。
+ */
+function deleteCalendarEvent(eventId, recurringEventId) {
+  const targetId = recurringEventId || eventId;
+  if (!targetId) throw new Error('缺少行程 ID');
+
+  Calendar.Events.remove('primary', targetId);
+  return { success: true };
 }
 
 // 同一個重複行程系列，今天可能出現不只一筆（理論上不會，但保險起見快取，避免重複打 API）
