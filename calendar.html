@@ -103,6 +103,25 @@
     color: var(--text-sub);
     white-space: pre-wrap;
   }
+  .danger-zone {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: center;
+  }
+  .danger-zone button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    color: #b0413e;
+    font-size: 13px;
+    opacity: 0.6;
+  }
+  .danger-zone button:active { opacity: 1; }
   .controls {
     width: 100%;
     max-width: 480px;
@@ -223,11 +242,15 @@
   <div class="meta-row">
     <div class="meta-field cycle">
       <label>週期</label>
-      <select id="cycleSelect" disabled></select>
+      <select id="cycleSelect"></select>
     </div>
   </div>
 
   <div class="note" id="noteText"></div>
+</div>
+
+<div class="danger-zone">
+  <button id="deleteBtn">🗑 刪除這個行程（重複行程會整個系列一起刪除）</button>
 </div>
 
 <div class="controls">
@@ -261,8 +284,11 @@
 // ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getTodayCalendarEvents 這個 action）
 const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 
+// 跟後端 CALENDAR_CYCLE_RRULE_MAP_ 一致的顯示文字，「不重複」代表移除重複規則
+const CYCLE_OPTIONS = ['不重複', 'D每天', '2每兩天', '3每三天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'];
+
 // ===== 本地暫存區：一次抓好今天的行程，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
-let itemsCache = [];   // [{id, text, time, note, cycle}, ...]
+let itemsCache = [];   // [{id, recurringEventId, text, time, note, cycle}, ...]
 let cachePos = 0;
 
 const el = {
@@ -271,6 +297,7 @@ const el = {
   eventText: document.getElementById('eventText'),
   cycleSelect: document.getElementById('cycleSelect'),
   noteText: document.getElementById('noteText'),
+  deleteBtn: document.getElementById('deleteBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
   randomBtn: document.getElementById('randomBtn'),
@@ -299,6 +326,23 @@ async function apiCall(params) {
   return data;
 }
 
+// 依目前這項的週期文字，重建下拉選單選項；如果是無法對應到標準週期的自訂規則文字，
+// 先插入一個代表目前值的選項，讓畫面顯示正確，選別的選項才會套用成標準週期。
+function populateCycleSelect(currentLabel) {
+  const options = CYCLE_OPTIONS.slice();
+  const label = currentLabel || '不重複';
+  if (options.indexOf(label) === -1) options.unshift(label);
+
+  el.cycleSelect.innerHTML = '';
+  options.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.cycleSelect.appendChild(opt);
+  });
+  el.cycleSelect.value = label;
+}
+
 function renderFromCache(pos) {
   if (itemsCache.length === 0) {
     renderEmptyState();
@@ -310,7 +354,7 @@ function renderFromCache(pos) {
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
   el.eventTime.textContent = item.time || '';
   el.eventText.value = item.text || '';
-  el.cycleSelect.innerHTML = '<option>' + (item.cycle || '不重複') + '</option>';
+  populateCycleSelect(item.cycle);
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
 }
 
@@ -335,6 +379,56 @@ async function loadTodayEvents() {
     setLoading(false);
   }
 }
+
+// 週期選單改變 → 直接改寫 Google 日曆上的重複規則（是重複行程就整個系列一起改）
+el.cycleSelect.addEventListener('change', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const newValue = el.cycleSelect.value;
+  item.cycle = newValue;
+
+  setLoading(true);
+  apiCall({
+    action: 'updateCalendarEventCycle',
+    eventId: item.id,
+    recurringEventId: item.recurringEventId || '',
+    value: newValue
+  })
+    .then(() => showStatus('週期已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message))
+    .finally(() => setLoading(false));
+});
+
+// 刪除：直接刪掉 Google 日曆上的原始行程（重複行程會整個系列一起刪除），需要等API確認成功
+el.deleteBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const preview = (item.text || '').slice(0, 20);
+  const isRecurring = !!item.recurringEventId;
+  const confirmed = window.confirm(
+    '確定要刪除「' + preview + '」這個行程嗎？\n\n' +
+    (isRecurring ? '這是重複行程，會刪除整個系列。' : '') +
+    '\n這個動作無法復原。'
+  );
+  if (!confirmed) return;
+
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await apiCall({ action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' });
+    itemsCache.splice(cachePos, 1);
+    if (itemsCache.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromCache(cachePos);
+    }
+    showStatus('已刪除');
+  } catch (err) {
+    showStatus('刪除失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
 
 el.prevBtn.addEventListener('click', () => {
   if (itemsCache.length === 0) return;
