@@ -914,6 +914,9 @@ function doGet(e) {
       case 'searchItems':
         result = searchItems(e.parameter.keyword);
         break;
+      case 'getTodayCalendarEvents':
+        result = getTodayCalendarEvents();
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
@@ -976,6 +979,99 @@ function normalizeCode(value, map) {
   if (!value) return value;
   const key = value.toString().trim().toUpperCase();
   return map[key] || value;
+}
+
+/**
+ * 從 Google 帳號的預設日曆（primary），抓出「今天」的所有行程，
+ * 每筆附上時間、備註（說明文字）跟依重複規則換算出來的週期文字（跟 CYCLE_MAP 顯示格式一致）。
+ * 需要 appsscript.json 啟用 Calendar 進階服務（Advanced Calendar Service）才能讀到重複規則（RRULE）。
+ */
+function getTodayCalendarEvents() {
+  const now = new Date();
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+
+  const resp = Calendar.Events.list('primary', {
+    timeMin: startOfDay.toISOString(),
+    timeMax: endOfDay.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250
+  });
+
+  const items = (resp.items || []).map(function (ev) {
+    const isAllDay = !!(ev.start && ev.start.date);
+    return {
+      id: ev.id,
+      text: ev.summary || '(無標題)',
+      time: isAllDay ? '全天' : formatEventTime_(ev.start.dateTime),
+      note: ev.description ? stripHtml_(ev.description) : '',
+      cycle: getRecurrenceLabel_(ev)
+    };
+  });
+
+  return { items: items, total: items.length };
+}
+
+function formatEventTime_(dateTimeStr) {
+  return Utilities.formatDate(new Date(dateTimeStr), Session.getScriptTimeZone(), 'HH:mm');
+}
+
+function stripHtml_(html) {
+  return html.toString().replace(/<[^>]*>/g, '').trim();
+}
+
+// 同一個重複行程系列，今天可能出現不只一筆（理論上不會，但保險起見快取，避免重複打 API）
+const RECURRENCE_MASTER_CACHE_ = {};
+
+function getRecurrenceLabel_(ev) {
+  if (!ev.recurringEventId) return '不重複';
+
+  let master = RECURRENCE_MASTER_CACHE_[ev.recurringEventId];
+  if (!master) {
+    try {
+      master = Calendar.Events.get('primary', ev.recurringEventId);
+      RECURRENCE_MASTER_CACHE_[ev.recurringEventId] = master;
+    } catch (err) {
+      return '重複（無法讀取規則）';
+    }
+  }
+
+  const rrule = (master.recurrence || []).filter(function (r) { return r.indexOf('RRULE:') === 0; })[0];
+  return rrule ? parseRRuleLabel_(rrule) : '重複';
+}
+
+/**
+ * 把 RRULE 換算成跟 CYCLE_MAP 顯示格式一致的週期文字，方便跟禱告卡片的週期樣式對齊；
+ * 沒有對應到既有週期選項的，就直接顯示還原後的規則文字。
+ */
+function parseRRuleLabel_(rrule) {
+  const freqMatch = rrule.match(/FREQ=([A-Z]+)/);
+  const intervalMatch = rrule.match(/INTERVAL=(\d+)/);
+  const freq = freqMatch ? freqMatch[1] : '';
+  const interval = intervalMatch ? parseInt(intervalMatch[1], 10) : 1;
+
+  if (freq === 'DAILY') {
+    if (interval === 1) return 'D每天';
+    if (interval === 2) return '2每兩天';
+    if (interval === 3) return '3每三天';
+    return '每' + interval + '天';
+  }
+  if (freq === 'WEEKLY') {
+    if (interval === 1) return 'W每週';
+    if (interval === 2) return 'DW每兩週';
+    return '每' + interval + '週';
+  }
+  if (freq === 'MONTHLY') {
+    if (interval === 1) return 'M每月';
+    if (interval === 2) return '2M每兩個月';
+    if (interval === 3) return 'S每季';
+    if (interval === 6) return 'HY每半年';
+    return '每' + interval + '個月';
+  }
+  if (freq === 'YEARLY') return 'Y每年';
+
+  return '重複（' + rrule.replace('RRULE:', '') + '）';
 }
 
 /**
