@@ -923,6 +923,9 @@ function doGet(e) {
       case 'deleteCalendarEvent':
         result = deleteCalendarEvent(e.parameter.eventId, e.parameter.recurringEventId);
         break;
+      case 'updateCalendarEventTitle':
+        result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.value);
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
@@ -1052,8 +1055,48 @@ function updateCalendarEventCycle(eventId, recurringEventId, cycleLabel) {
   const targetId = recurringEventId || eventId;
   if (!targetId) throw new Error('缺少行程 ID');
 
-  const rrule = CALENDAR_CYCLE_RRULE_MAP_[cycleLabel];
+  const rrule = cycleLabelToRRule_(cycleLabel);
   Calendar.Events.patch({ recurrence: rrule ? [rrule] : [] }, 'primary', targetId);
+  return { success: true };
+}
+
+// 中文星期文字 → RRULE 的 BYDAY 代碼，跟 getByDaySuffix_ 的 dayLabel 互為反向對照
+const DAY_LABEL_TO_CODE_ = { 一: 'MO', 二: 'TU', 三: 'WE', 四: 'TH', 五: 'FR', 六: 'SA', 日: 'SU' };
+
+/**
+ * 把週期文字換算成 RRULE，支援「W每週（平日）」「W每週（週末）」「W每週（三）」這種
+ * 帶星期限定的週期文字（跟 parseRRuleLabel_／getByDaySuffix_ 的顯示格式對稱）。
+ */
+function cycleLabelToRRule_(cycleLabel) {
+  if (!cycleLabel || cycleLabel === '不重複') return '';
+
+  const match = cycleLabel.match(/^(.*?)（(.+)）$/);
+  const baseLabel = match ? match[1] : cycleLabel;
+  const daySuffix = match ? match[2] : '';
+
+  const baseRRule = CALENDAR_CYCLE_RRULE_MAP_[baseLabel];
+  if (!baseRRule || !daySuffix) return baseRRule || '';
+
+  let byDayCodes;
+  if (daySuffix === '平日') {
+    byDayCodes = ['MO', 'TU', 'WE', 'TH', 'FR'];
+  } else if (daySuffix === '週末') {
+    byDayCodes = ['SA', 'SU'];
+  } else {
+    byDayCodes = daySuffix.split('、').map(function (d) { return DAY_LABEL_TO_CODE_[d]; }).filter(Boolean);
+  }
+
+  return byDayCodes.length ? (baseRRule + ';BYDAY=' + byDayCodes.join(',')) : baseRRule;
+}
+
+/**
+ * 修改一個日曆行程的標題。只改這一次（用這個行程本身的 id，不是 recurringEventId），
+ * 如果原本是重複行程，Google 日曆會自動把這一次變成該系列的例外，其他次的標題不受影響——
+ * 跟平常在 Google 日曆網頁/App 上直接改單一次行程標題的行為一致。
+ */
+function updateCalendarEventTitle(eventId, value) {
+  if (!eventId) throw new Error('缺少行程 ID');
+  Calendar.Events.patch({ summary: value }, 'primary', eventId);
   return { success: true };
 }
 
