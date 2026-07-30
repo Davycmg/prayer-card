@@ -580,9 +580,37 @@ el.addTagBtn.addEventListener('click', async () => {
   el.newTagInput.value = '';
 });
 
+// 需要點兩下才會真的觸發，避免手機上滑動、誤觸就直接複製/開日曆：
+// 第一下只是進入「待確認」狀態（按鈕文字換成提示），CONFIRM_TIMEOUT_MS 內點第二下才會真的執行，
+// 逾時或點其他按鈕就自動還原，不會誤觸發。
+const CONFIRM_TIMEOUT_MS = 2500;
+
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+
+  function reset() {
+    confirming = false;
+    clearTimeout(resetTimer);
+    btn.textContent = originalText;
+  }
+
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+
 // 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
 // 用來解決「標籤本來就已經是task預設清單、change事件不會觸發」的限制，可以隨時重複按。
-el.copyToTasksBtn.addEventListener('click', () => {
+armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
 
@@ -598,7 +626,7 @@ el.copyToTasksBtn.addEventListener('click', () => {
 });
 
 // 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
-el.addToCalendarBtn.addEventListener('click', () => {
+armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
 
