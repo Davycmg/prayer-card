@@ -237,7 +237,7 @@
 
 <div class="card">
   <div class="event-time" id="eventTime"></div>
-  <textarea class="prayer-text" id="eventText" readonly placeholder="今天沒有行程"></textarea>
+  <textarea class="prayer-text" id="eventText" placeholder="今天沒有行程"></textarea>
 
   <div class="meta-row">
     <div class="meta-field cycle">
@@ -284,12 +284,20 @@
 // ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getTodayCalendarEvents 這個 action）
 const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 
-// 跟後端 CALENDAR_CYCLE_RRULE_MAP_ 一致的顯示文字，「不重複」代表移除重複規則
-const CYCLE_OPTIONS = ['不重複', 'D每天', '2每兩天', '3每三天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'];
+// 跟後端 CALENDAR_CYCLE_RRULE_MAP_／cycleLabelToRRule_ 一致的顯示文字，「不重複」代表移除重複規則
+const CYCLE_OPTIONS = [
+  '不重複',
+  'D每天', '2每兩天', '3每三天',
+  'W每週', 'W每週（平日）', 'W每週（週末）',
+  'W每週（一）', 'W每週（二）', 'W每週（三）', 'W每週（四）', 'W每週（五）', 'W每週（六）', 'W每週（日）',
+  'DW每兩週',
+  'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'
+];
 
 // ===== 本地暫存區：一次抓好今天的行程，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
 let itemsCache = [];   // [{id, recurringEventId, text, time, note, cycle}, ...]
 let cachePos = 0;
+let saveTimer = null;
 
 const el = {
   progress: document.getElementById('progress'),
@@ -354,6 +362,7 @@ function renderFromCache(pos) {
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
   el.eventTime.textContent = item.time || '';
   el.eventText.value = item.text || '';
+  el.eventText.readOnly = false;
   populateCycleSelect(item.cycle);
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
 }
@@ -362,6 +371,7 @@ function renderEmptyState() {
   el.progress.textContent = '第 0 項 / 共 0 項';
   el.eventTime.textContent = '';
   el.eventText.value = '🎉 今天沒有行程';
+  el.eventText.readOnly = true;
   el.cycleSelect.innerHTML = '';
   el.noteText.textContent = '';
 }
@@ -379,6 +389,21 @@ async function loadTodayEvents() {
     setLoading(false);
   }
 }
+
+// 標題編輯 → 本地暫存同步更新 + 背景同步API（打字後停頓1秒才送出）。
+// 只改這一次的標題，不用 recurringEventId：重複行程的話 Google 日曆會自動把這一次變成例外，
+// 不影響其他次的標題。
+el.eventText.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (itemsCache.length === 0) return;
+    const item = itemsCache[cachePos];
+    item.text = el.eventText.value;
+    apiCall({ action: 'updateCalendarEventTitle', eventId: item.id, value: item.text })
+      .then(() => showStatus('已同步'))
+      .catch(err => showStatus('同步失敗：' + err.message));
+  }, 1000);
+});
 
 // 週期選單改變 → 直接改寫 Google 日曆上的重複規則（是重複行程就整個系列一起改）
 el.cycleSelect.addEventListener('change', () => {
