@@ -92,8 +92,18 @@ function advancePrayerDate_(sheet, row) {
     baseDate.setHours(0, 0, 0, 0);
   }
 
-  const newDate = new Date(baseDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let newDate = new Date(baseDate);
   newDate.setDate(newDate.getDate() + period);
+
+  // 新日期不能還在過去：一直往後推，直到不早於今天為止（例如原日期拖了很久才按完成的情況）
+  let guard = 0;
+  while (newDate < today && guard < 1000) {
+    newDate.setDate(newDate.getDate() + period);
+    guard++;
+  }
 
   dateCell.setValue(newDate);
   dateCell.setNumberFormat('yyyy/MM/dd');
