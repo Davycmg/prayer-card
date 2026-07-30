@@ -91,6 +91,27 @@
     color: var(--text-sub);
     margin-bottom: 14px;
   }
+  .query-row {
+    width: 100%;
+    max-width: 960px;
+    margin-top: 16px;
+  }
+  .query-row a.btn {
+    display: block;
+    width: 100%;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .query-row a.btn:active { opacity: 0.7; }
 </style>
 </head>
 <body>
@@ -122,6 +143,10 @@
     <div class="progress" id="multiProgress">今日完成率：載入中...</div>
     <a class="btn" href="index.html">開始</a>
   </div>
+</div>
+
+<div class="query-row">
+  <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
 </div>
 
 <script>
