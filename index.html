@@ -583,7 +583,7 @@ el.addTagBtn.addEventListener('click', async () => {
 // 需要點兩下才會真的觸發，避免手機上滑動、誤觸就直接複製/開日曆：
 // 第一下只是進入「待確認」狀態（按鈕文字換成提示），CONFIRM_TIMEOUT_MS 內點第二下才會真的執行，
 // 逾時或點其他按鈕就自動還原，不會誤觸發。
-const CONFIRM_TIMEOUT_MS = 2500;
+const CONFIRM_TIMEOUT_MS = 1000;
 
 function armConfirmButton(btn, confirmText, onConfirmed) {
   let confirming = false;
