@@ -29,3 +29,24 @@ jobs:
 
       - name: Push source to Apps Script
         run: clasp push --force
+
+  push-dg-network:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      - name: Restore clasp credentials
+        run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
+
+      - name: Push dg-network source to its own Apps Script project
+        working-directory: dg-network
+        run: clasp push --force
