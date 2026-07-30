@@ -924,7 +924,7 @@ function doGet(e) {
         result = deleteCalendarEvent(e.parameter.eventId, e.parameter.recurringEventId);
         break;
       case 'updateCalendarEventTitle':
-        result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.value);
+        result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value);
         break;
       default:
         result = { error: 'unknown action: ' + action };
@@ -1090,13 +1090,13 @@ function cycleLabelToRRule_(cycleLabel) {
 }
 
 /**
- * 修改一個日曆行程的標題。只改這一次（用這個行程本身的 id，不是 recurringEventId），
- * 如果原本是重複行程，Google 日曆會自動把這一次變成該系列的例外，其他次的標題不受影響——
- * 跟平常在 Google 日曆網頁/App 上直接改單一次行程標題的行為一致。
+ * 修改一個日曆行程的標題。如果是重複行程，改的是整個系列（用 recurringEventId 對應的
+ * 主行程），所有次的標題都會一起更新；不是重複行程的話，就只改這一筆本身。
  */
-function updateCalendarEventTitle(eventId, value) {
-  if (!eventId) throw new Error('缺少行程 ID');
-  Calendar.Events.patch({ summary: value }, 'primary', eventId);
+function updateCalendarEventTitle(eventId, recurringEventId, value) {
+  const targetId = recurringEventId || eventId;
+  if (!targetId) throw new Error('缺少行程 ID');
+  Calendar.Events.patch({ summary: value }, 'primary', targetId);
   return { success: true };
 }
 
