@@ -1106,9 +1106,10 @@ function parseRRuleLabel_(rrule) {
     return '每' + interval + '天';
   }
   if (freq === 'WEEKLY') {
-    if (interval === 1) return 'W每週';
-    if (interval === 2) return 'DW每兩週';
-    return '每' + interval + '週';
+    const suffix = getByDaySuffix_(rrule);
+    if (interval === 1) return 'W每週' + suffix;
+    if (interval === 2) return 'DW每兩週' + suffix;
+    return '每' + interval + '週' + suffix;
   }
   if (freq === 'MONTHLY') {
     if (interval === 1) return 'M每月';
@@ -1120,6 +1121,27 @@ function parseRRuleLabel_(rrule) {
   if (freq === 'YEARLY') return 'Y每年';
 
   return '重複（' + rrule.replace('RRULE:', '') + '）';
+}
+
+/**
+ * 把 RRULE 裡的 BYDAY（星期幾限定）換算成附加說明文字，例如「（平日）」「（週末）」「（三、五）」，
+ * 只用來讓週期文字更準確，沒有 BYDAY 就回傳空字串（維持跟原本一樣的顯示）。
+ */
+function getByDaySuffix_(rrule) {
+  const match = rrule.match(/BYDAY=([A-Z,]+)/);
+  if (!match) return '';
+
+  const days = match[1].split(',');
+  const dayLabel = { MO: '一', TU: '二', WE: '三', TH: '四', FR: '五', SA: '六', SU: '日' };
+  const weekdayOrder = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+  const isWeekday = days.length === 5 && ['MO', 'TU', 'WE', 'TH', 'FR'].every(function (d) { return days.indexOf(d) !== -1; });
+  const isWeekend = days.length === 2 && ['SA', 'SU'].every(function (d) { return days.indexOf(d) !== -1; });
+
+  if (isWeekday) return '（平日）';
+  if (isWeekend) return '（週末）';
+
+  const sorted = days.slice().sort(function (a, b) { return weekdayOrder.indexOf(a) - weekdayOrder.indexOf(b); });
+  return '（' + sorted.map(function (d) { return dayLabel[d] || d; }).join('、') + '）';
 }
 
 /**
