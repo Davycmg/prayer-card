@@ -391,15 +391,14 @@ async function loadTodayEvents() {
 }
 
 // 標題編輯 → 本地暫存同步更新 + 背景同步API（打字後停頓1秒才送出）。
-// 只改這一次的標題，不用 recurringEventId：重複行程的話 Google 日曆會自動把這一次變成例外，
-// 不影響其他次的標題。
+// 是重複行程的話會用 recurringEventId 改整個系列，所有次的標題會一起更新。
 el.eventText.addEventListener('input', () => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (itemsCache.length === 0) return;
     const item = itemsCache[cachePos];
     item.text = el.eventText.value;
-    apiCall({ action: 'updateCalendarEventTitle', eventId: item.id, value: item.text })
+    apiCall({ action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value: item.text })
       .then(() => showStatus('已同步'))
       .catch(err => showStatus('同步失敗：' + err.message));
   }, 1000);
