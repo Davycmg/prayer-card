@@ -246,6 +246,40 @@ function markDone_(sheet, row) {
   sheet.getRange(row, COL.THIS).setNumberFormat('yyyy/MM/dd HH:mm:ss');
   sheet.getRange(row, COL.NEXT).setValue(next);
   sheet.getRange(row, COL.NEXT).setNumberFormat('yyyy/MM/dd HH:mm:ss');
+  recordPrayerCompleted_();
+}
+
+// 今日完成計數器：存在 PropertiesService（跟這份試算表綁定），日期不是今天就視同歸零重算
+const PRAYER_PROGRESS_DATE_KEY_ = 'PRAYER_PROGRESS_DATE';
+const PRAYER_PROGRESS_COUNT_KEY_ = 'PRAYER_PROGRESS_COUNT';
+
+function recordPrayerCompleted_() {
+  const props = PropertiesService.getDocumentProperties();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const storedDate = props.getProperty(PRAYER_PROGRESS_DATE_KEY_);
+  const count = (storedDate === today ? parseInt(props.getProperty(PRAYER_PROGRESS_COUNT_KEY_) || '0', 10) : 0) + 1;
+
+  props.setProperty(PRAYER_PROGRESS_DATE_KEY_, today);
+  props.setProperty(PRAYER_PROGRESS_COUNT_KEY_, String(count));
+}
+
+/**
+ * 今日代禱完成率：已完成數（今天累計標記完成的次數）÷（已完成數 + 目前還待代禱的項目數）。
+ */
+function getPrayerProgress_() {
+  const props = PropertiesService.getDocumentProperties();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const storedDate = props.getProperty(PRAYER_PROGRESS_DATE_KEY_);
+  const completed = storedDate === today ? parseInt(props.getProperty(PRAYER_PROGRESS_COUNT_KEY_) || '0', 10) : 0;
+  const remaining = getAllItems_().total;
+  const total = completed + remaining;
+
+  return {
+    completed: completed,
+    remaining: remaining,
+    total: total,
+    rate: total > 0 ? Math.round((completed / total) * 100) : 100
+  };
 }
 
 // ========== 代禱卡片：資料 API（fetch 用，前端一次撈全部、本地翻頁） ==========
@@ -272,6 +306,9 @@ function handleCardApi_(e, action) {
         result = updateFieldByRow_(parseInt(e.parameter.row, 10), COL.CYCLE, value);
         break;
       }
+      case 'getPrayerProgress':
+        result = getPrayerProgress_();
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
