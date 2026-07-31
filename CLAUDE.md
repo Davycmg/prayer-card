@@ -17,10 +17,12 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 `dg-network/` 是同一套代禱表單＋代禱卡片工具的**另一份獨立部署**，給「DG網絡」這個群組用，跟根目錄的 prayer-card 是各自獨立的 Google 試算表 + Apps Script 專案（各自的 scriptId、各自的資料），**不要混用**。
 
 - scriptId（`dg-network/.clasp.json`）：`1deOb0Nu0u8gEPDjaEwaWC3FxKmW3z62yewT3x7R2hkJxFX4tHz5cr4mu`
-- 檔案：`Code.js`（主程式）、`Form.html`（代禱表單）、`CardIndex.html`（代禱卡片網頁版）、`appsscript.json`
+- 檔案：`Code.js`（主程式）、`Form.html`（代禱表單）、`FormNoCycle.html`（代禱表單，不顯示 DG 週期欄位的簡化版）、`CardIndex.html`（代禱卡片網頁版）、`appsscript.json`
 - 資料來源分頁：`表單回覆 1`（Google 表單回覆），卡片操作用分頁：`代禱卡片`
-- 網址用法（單一部署網址）：
+- 部署網址：`https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec`
+- 網址用法（同一個部署網址，用參數區分）：
   - `.../exec` → 代禱表單（依姓名帶出舊資料編輯）
+  - `.../exec?form=simple` → 代禱表單簡化版（不顯示 DG 週期，有舊資料就沿用原週期，沒有就預設「每月」）
   - `.../exec?view=card` → 代禱卡片網頁（今日待代禱名單，可翻頁、朗讀）
   - `.../exec?action=xxx` → 代禱卡片專用資料 API（前端 fetch 用）
 - 也內建 Google Sheet 內操作版的代禱卡片（`onOpen` 選單「🙏 代禱卡片」），含自動合併同名重複資料、朗讀連禱等功能。
