@@ -95,6 +95,13 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=simple → 代禱表單（不顯示 DG 週期欄位的簡化版，跟 Form.html 其他部分一樣）
+  if (e.parameter.form === 'simple') {
+    return HtmlService.createHtmlOutputFromFile('FormNoCycle')
+      .setTitle('代禱表單')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
