@@ -1482,9 +1482,26 @@ function testImportGoogleTasksNow() {
 }
 
 /**
+ * 判斷兩則文字結尾是否有夠長的共同段落。用來抓「每次都在前面加一段新備註、
+ * 後面固定內容不變」這種重複（例如「整理代禱事項 下載主日影片...」跟「主禮任務 下載主日影片...」），
+ * 這種情況前綴不同，沒有任何一則是另一則的完整子字串，單純用 includes() 抓不到。
+ */
+function sharesLongCommonSuffix_(a, b) {
+  const MIN_SUFFIX_LEN = 20; // 共同結尾至少要這麼長，避免短句子誤判成重複
+  let i = a.length - 1, j = b.length - 1, len = 0;
+  while (i >= 0 && j >= 0 && a[i] === b[j]) { i--; j--; len++; }
+  if (len < MIN_SUFFIX_LEN) return false;
+
+  // 共同結尾還要佔較短那則文字相當高的比例，避免長文字只是尾端剛好幾個字重疊就誤判
+  const shorterLen = Math.min(a.length, b.length);
+  return len >= shorterLen * 0.6;
+}
+
+/**
  * 自動合併「表單回覆1」裡B欄事項文字重複的列。
- * 判定重複的規則：文字完全相同，或其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
- * 增加了字詞，新文字會包含舊文字），都視為同一組——不再要求文字必須100%一模一樣。
+ * 判定重複的規則：文字完全相同、其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
+ * 增加了字詞，新文字會包含舊文字），或兩則文字結尾有夠長的共同段落（見 sharesLongCommonSuffix_），
+ * 都視為同一組——不再要求文字必須100%一模一樣。
  * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
  * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
  * - C欄週期：取合併範圍內天數最長的週期
@@ -1508,7 +1525,9 @@ function autoMergeDuplicateItems() {
     const text = (row[COL.TEXT - 1] || '').toString().trim();
     if (!text) return;
 
-    const matched = groups.find(g => g.texts.some(t => t.includes(text) || text.includes(t)));
+    const matched = groups.find(g => g.texts.some(t =>
+      t.includes(text) || text.includes(t) || sharesLongCommonSuffix_(t, text)
+    ));
     if (matched) {
       matched.texts.push(text);
       matched.rows.push(i + 2);
