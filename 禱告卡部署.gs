@@ -1482,26 +1482,48 @@ function testImportGoogleTasksNow() {
 }
 
 /**
- * 判斷兩則文字結尾是否有夠長的共同段落。用來抓「每次都在前面加一段新備註、
- * 後面固定內容不變」這種重複（例如「整理代禱事項 下載主日影片...」跟「主禮任務 下載主日影片...」），
- * 這種情況前綴不同，沒有任何一則是另一則的完整子字串，單純用 includes() 抓不到。
+ * 計算兩則文字之間最長的連續共同子字串長度（不限定要出現在開頭或結尾）。
+ * 資料量小（單則文字頂多幾百字），用標準 O(a.length * b.length) 動態規劃即可，不會有效能問題。
  */
-function sharesLongCommonSuffix_(a, b) {
-  const MIN_SUFFIX_LEN = 20; // 共同結尾至少要這麼長，避免短句子誤判成重複
-  let i = a.length - 1, j = b.length - 1, len = 0;
-  while (i >= 0 && j >= 0 && a[i] === b[j]) { i--; j--; len++; }
-  if (len < MIN_SUFFIX_LEN) return false;
+function longestCommonSubstringLen_(a, b) {
+  let prevRow = new Array(b.length + 1).fill(0);
+  let maxLen = 0;
 
-  // 共同結尾還要佔較短那則文字相當高的比例，避免長文字只是尾端剛好幾個字重疊就誤判
+  for (let i = 1; i <= a.length; i++) {
+    const currRow = new Array(b.length + 1).fill(0);
+    for (let j = 1; j <= b.length; j++) {
+      if (a[i - 1] === b[j - 1]) {
+        currRow[j] = prevRow[j - 1] + 1;
+        if (currRow[j] > maxLen) maxLen = currRow[j];
+      }
+    }
+    prevRow = currRow;
+  }
+
+  return maxLen;
+}
+
+/**
+ * 判斷兩則文字是否有夠長的共同段落（不管差異出現在開頭、結尾、還是中間）。用來抓像
+ * 「整理代禱事項 下載主日影片...我先躲起來」跟「當天才弄代禱事項...下載主日影片...嘟嘟要餓10:10過來」
+ * 這種前後都加了不同備註、只有中間一大段固定內容相同的重複——單純比對開頭或結尾的子字串／共同字尾
+ * 都會因為「差異剛好出現在頭尾」而漏抓。
+ */
+function sharesLongCommonSubstring_(a, b) {
+  const MIN_COMMON_LEN = 20; // 共同段落至少要這麼長，避免短句子/常見用語誤判成重複
+  const len = longestCommonSubstringLen_(a, b);
+  if (len < MIN_COMMON_LEN) return false;
+
+  // 共同段落還要佔較短那則文字相當比例，避免長文字只是中間剛好幾句重疊就誤判
   const shorterLen = Math.min(a.length, b.length);
-  return len >= shorterLen * 0.6;
+  return len >= shorterLen * 0.5;
 }
 
 /**
  * 自動合併「表單回覆1」裡B欄事項文字重複的列。
  * 判定重複的規則：文字完全相同、其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
- * 增加了字詞，新文字會包含舊文字），或兩則文字結尾有夠長的共同段落（見 sharesLongCommonSuffix_），
- * 都視為同一組——不再要求文字必須100%一模一樣。
+ * 增加了字詞，新文字會包含舊文字），或兩則文字有夠長的共同段落（見 sharesLongCommonSubstring_，
+ * 不限定要出現在開頭或結尾），都視為同一組——不再要求文字必須100%一模一樣。
  * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
  * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
  * - C欄週期：取合併範圍內天數最長的週期
@@ -1526,7 +1548,7 @@ function autoMergeDuplicateItems() {
     if (!text) return;
 
     const matched = groups.find(g => g.texts.some(t =>
-      t.includes(text) || text.includes(t) || sharesLongCommonSuffix_(t, text)
+      t.includes(text) || text.includes(t) || sharesLongCommonSubstring_(t, text)
     ));
     if (matched) {
       matched.texts.push(text);
