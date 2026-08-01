@@ -1482,70 +1482,24 @@ function testImportGoogleTasksNow() {
 }
 
 /**
- * 計算兩則文字之間最長的連續共同子字串長度（不限定要出現在開頭或結尾）。
- * 資料量小（單則文字頂多幾百字），用標準 O(a.length * b.length) 動態規劃即可，不會有效能問題。
- */
-function longestCommonSubstringLen_(a, b) {
-  let prevRow = new Array(b.length + 1).fill(0);
-  let maxLen = 0;
-
-  for (let i = 1; i <= a.length; i++) {
-    const currRow = new Array(b.length + 1).fill(0);
-    for (let j = 1; j <= b.length; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        currRow[j] = prevRow[j - 1] + 1;
-        if (currRow[j] > maxLen) maxLen = currRow[j];
-      }
-    }
-    prevRow = currRow;
-  }
-
-  return maxLen;
-}
-
-/**
- * 判斷兩則文字是否有夠長的共同段落（不管差異出現在開頭、結尾、還是中間）。用來抓像
- * 「整理代禱事項 下載主日影片...我先躲起來」跟「當天才弄代禱事項...下載主日影片...嘟嘟要餓10:10過來」
- * 這種前後都加了不同備註、只有中間一大段固定內容相同的重複——單純比對開頭或結尾的子字串／共同字尾
- * 都會因為「差異剛好出現在頭尾」而漏抓。
- */
-function sharesLongCommonSubstring_(a, b) {
-  const MIN_COMMON_LEN = 20; // 共同段落至少要這麼長，避免短句子/常見用語誤判成重複
-  const len = longestCommonSubstringLen_(a, b);
-  if (len < MIN_COMMON_LEN) return false;
-
-  // 共同段落還要佔較短那則文字相當比例，避免長文字只是中間剛好幾句重疊就誤判
-  const shorterLen = Math.min(a.length, b.length);
-  return len >= shorterLen * 0.5;
-}
-
-/**
- * 判斷兩則文字是否重複，會先把各自拆成「單則筆記」（用換行拆開）再逐一比對，而不是拿
- * 整段文字直接比。原因：如果其中一則已經是之前合併過的結果（好幾則原始筆記用換行接在一起），
- * 直接拿整段去跟另一則比對，字數會被稀釋（分母變大、共同段落佔比就變小），
- * 明明還有一小段內容重複，也會因為比例不夠而被漏判——拆成單則筆記逐一比對就不會有這個問題，
- * 不管兩邊各自已經合併過幾次都一樣準確。
+ * 判斷兩則文字是否重複：完全相同，或其中一則是另一則的完整子字串（例如在禱告卡片中途
+ * 對同一項目增加了字詞，新文字會完整包含舊文字）。
+ *
+ * ⚠️ 這裡刻意只用「完整子字串」這種嚴格規則，不用模糊的「共同段落／相似度」比對。
+ * 之前（2026-08）試過用「兩則文字有夠長的共同子字串就算重複」的寬鬆規則，結果因為分組是
+ * 「傳遞性」的（A 跟 B 像、B 跟 C 像，C 就會被拉進 A 的組別，即使 A 跟 C 完全無關），
+ * 只要資料裡有幾句通用語句重複出現，就會像鏈條一樣把整份資料串成同一組，
+ * 曾經造成一次執行把 868 列不相關的資料誤判成同一組、全部刪除的嚴重資料遺失事故。
+ * 完整子字串規則沒有這種鏈式誤判風險，寧可漏合併一些真正的重複，也不要再發生誤刪。
  */
 function isDuplicateText_(a, b) {
-  const aLines = a.split('\n');
-  const bLines = b.split('\n');
-
-  for (const la of aLines) {
-    for (const lb of bLines) {
-      if (la === lb) return true;
-      if (la.includes(lb) || lb.includes(la)) return true;
-      if (sharesLongCommonSubstring_(la, lb)) return true;
-    }
-  }
-  return false;
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 /**
  * 自動合併「表單回覆1」裡B欄事項文字重複的列。
- * 判定重複的規則見 isDuplicateText_：文字完全相同、其中一筆是另一筆的子字串（例如在禱告卡片
- * 中途對同一項目增加了字詞，新文字會包含舊文字），或兩則文字有夠長的共同段落（不限定要出現在
- * 開頭或結尾），都視為同一組——不再要求文字必須100%一模一樣。比對前會先拆成單則筆記逐一比對，
- * 就算其中一筆已經是之前合併過的多則筆記接在一起，也不會因為字數被稀釋而漏判。
+ * 判定重複的規則見 isDuplicateText_：文字完全相同，或其中一筆是另一筆的完整子字串
+ * （例如在禱告卡片中途對同一項目增加了字詞，新文字會完整包含舊文字）。
  * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
  * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
  * - C欄週期：取合併範圍內天數最長的週期
