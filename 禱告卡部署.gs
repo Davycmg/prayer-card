@@ -1520,10 +1520,32 @@ function sharesLongCommonSubstring_(a, b) {
 }
 
 /**
+ * 判斷兩則文字是否重複，會先把各自拆成「單則筆記」（用換行拆開）再逐一比對，而不是拿
+ * 整段文字直接比。原因：如果其中一則已經是之前合併過的結果（好幾則原始筆記用換行接在一起），
+ * 直接拿整段去跟另一則比對，字數會被稀釋（分母變大、共同段落佔比就變小），
+ * 明明還有一小段內容重複，也會因為比例不夠而被漏判——拆成單則筆記逐一比對就不會有這個問題，
+ * 不管兩邊各自已經合併過幾次都一樣準確。
+ */
+function isDuplicateText_(a, b) {
+  const aLines = a.split('\n');
+  const bLines = b.split('\n');
+
+  for (const la of aLines) {
+    for (const lb of bLines) {
+      if (la === lb) return true;
+      if (la.includes(lb) || lb.includes(la)) return true;
+      if (sharesLongCommonSubstring_(la, lb)) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * 自動合併「表單回覆1」裡B欄事項文字重複的列。
- * 判定重複的規則：文字完全相同、其中一筆是另一筆的子字串（例如在禱告卡片中途對同一項目
- * 增加了字詞，新文字會包含舊文字），或兩則文字有夠長的共同段落（見 sharesLongCommonSubstring_，
- * 不限定要出現在開頭或結尾），都視為同一組——不再要求文字必須100%一模一樣。
+ * 判定重複的規則見 isDuplicateText_：文字完全相同、其中一筆是另一筆的子字串（例如在禱告卡片
+ * 中途對同一項目增加了字詞，新文字會包含舊文字），或兩則文字有夠長的共同段落（不限定要出現在
+ * 開頭或結尾），都視為同一組——不再要求文字必須100%一模一樣。比對前會先拆成單則筆記逐一比對，
+ * 就算其中一筆已經是之前合併過的多則筆記接在一起，也不會因為字數被稀釋而漏判。
  * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
  * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
  * - C欄週期：取合併範圍內天數最長的週期
@@ -1547,9 +1569,7 @@ function autoMergeDuplicateItems() {
     const text = (row[COL.TEXT - 1] || '').toString().trim();
     if (!text) return;
 
-    const matched = groups.find(g => g.texts.some(t =>
-      t.includes(text) || text.includes(t) || sharesLongCommonSubstring_(t, text)
-    ));
+    const matched = groups.find(g => g.texts.some(t => isDuplicateText_(t, text)));
     if (matched) {
       matched.texts.push(text);
       matched.rows.push(i + 2);
