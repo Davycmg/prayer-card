@@ -1636,14 +1636,18 @@ function runMergeDuplicateItems_(dryRun) {
       if (tag && !mergedTag) mergedTag = tag;
     });
 
-    if (dryRun) {
-      console.log(
-        `\n──── 第 ${mergedGroupCount + 1} 組 ────\n` +
-        `來源列：${rows.join(', ')}　主列：${targetRow}　將刪除：${otherRows.join(', ') || '無'}\n` +
-        `週期：${bestCycle || '(不變)'}　日期：${bestDate ? Utilities.formatDate(bestDate, Session.getScriptTimeZone(), 'yyyy/MM/dd') : '(不變)'}　標籤：${mergedTag || '(不變)'}\n` +
-        `合併後文字：\n${targetText}`
-      );
-    } else {
+    // 不管是 dry-run 還是正式執行，都把每組合併的細節印出來（正式執行時執行紀錄會永久留存，
+    // 事後想確認某次自動合併到底併了哪些資料，回去看 Log 就查得到，不用只靠當下彈出的 alert）。
+    const sourceLines = rows.map((r, idx) => `  第 ${r} 列${r === targetRow ? '（主列）' : ''}：${texts[idx]}`).join('\n');
+    console.log(
+      `\n──── 第 ${mergedGroupCount + 1} 組（共 ${rows.length} 筆）${dryRun ? '' : '── 已合併'} ────\n` +
+      `來源列：${rows.join(', ')}　主列：${targetRow}　${dryRun ? '將' : '已'}刪除：${otherRows.join(', ') || '無'}\n` +
+      `週期：${bestCycle || '(不變)'}　日期：${bestDate ? Utilities.formatDate(bestDate, Session.getScriptTimeZone(), 'yyyy/MM/dd') : '(不變)'}　標籤：${mergedTag || '(不變)'}\n` +
+      `原始內容：\n${sourceLines}\n` +
+      `合併後文字：\n${targetText}`
+    );
+
+    if (!dryRun) {
       sheet.getRange(targetRow, COL.TEXT).setValue(targetText);
       if (bestCycle) sheet.getRange(targetRow, COL.CYCLE).setValue(bestCycle);
       if (bestDate) {
@@ -1662,7 +1666,7 @@ function runMergeDuplicateItems_(dryRun) {
   });
 
   if (dryRun) {
-    const msg = `🔍 試算完成：找到 ${mergedGroupCount} 組重複事項，實際執行時會刪除 ${rowsToDelete.length} 列。（未寫入任何資料）`;
+    const msg = `🔍 試算完成：找到 ${mergedGroupCount} 組重複事項，實際執行時會刪除 ${rowsToDelete.length} 列。（未寫入任何資料，細節請往上看 Log）`;
     console.log('\n' + msg);
     return;
   }
@@ -1671,7 +1675,7 @@ function runMergeDuplicateItems_(dryRun) {
   rowsToDelete.sort((a, b) => b - a);
   rowsToDelete.forEach(r => sheet.deleteRow(r));
 
-  const msg = `✅ 自動合併完成：合併了 ${mergedGroupCount} 組重複事項，共刪除 ${rowsToDelete.length} 列多餘資料。`;
+  const msg = `✅ 自動合併完成：合併了 ${mergedGroupCount} 組重複事項，共刪除 ${rowsToDelete.length} 列多餘資料。合併了哪些內容請往上看 Log 的詳細清單。`;
   console.log(msg);
   safeAlert(msg); // 手動執行時會跳alert；觸發器自動執行時safeAlert內部會自動改寫Log，不會報錯
 }
