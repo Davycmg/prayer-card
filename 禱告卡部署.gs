@@ -1481,35 +1481,58 @@ function testImportGoogleTasksNow() {
   importGoogleTasksToday_();
 }
 
-/**
- * 判斷兩則文字是否重複：完全相同，或其中一則是另一則的完整子字串（例如在禱告卡片中途
- * 對同一項目增加了字詞，新文字會完整包含舊文字）。
+/*************************************************************
+ * 事項自動合併 v2
  *
- * ⚠️ 這裡刻意只用「完整子字串」這種嚴格規則，不用模糊的「共同段落／相似度」比對。
- * 之前（2026-08）試過用「兩則文字有夠長的共同子字串就算重複」的寬鬆規則，結果因為分組是
- * 「傳遞性」的（A 跟 B 像、B 跟 C 像，C 就會被拉進 A 的組別，即使 A 跟 C 完全無關），
- * 只要資料裡有幾句通用語句重複出現，就會像鏈條一樣把整份資料串成同一組，
- * 曾經造成一次執行把 868 列不相關的資料誤判成同一組、全部刪除的嚴重資料遺失事故。
- * 完整子字串規則沒有這種鏈式誤判風險，寧可漏合併一些真正的重複，也不要再發生誤刪。
- */
-function isDuplicateText_(a, b) {
-  return a === b || a.includes(b) || b.includes(a);
+ * 判重：整段字元 bigram 相似度（multiset 計數）＋ 片段涵蓋率雙路徑
+ * 合併：LCS 對齊，共同內容只留一次，各版本獨有片段保留在原本位置
+ * 分組：every（避免模糊比對造成的鏈式併吞）
+ *
+ * ── 使用步驟 ──────────────────────────────────────────────
+ * 1. 先執行 previewMergeDuplicateItems()，看 Log 確認分組與合併結果
+ * 2. 確認無誤後，再執行 autoMergeDuplicateItems()
+ * 3. MERGE_CONFIG.DRY_RUN = true 時，autoMergeDuplicateItems()
+ *    也只會試算並輸出 Log，不會寫入或刪列
+ *
+ * ⚠️ 第一次跑之前請先複製一份試算表備份，刪列不可逆。
+ * （2026-08 事故記錄：舊版用「共同子字串就算重複」的寬鬆規則＋some分組，
+ * 因為分組具傳遞性，一次誤刪了868列不相關資料。這版改用「挑最佳分數歸屬」
+ * 取代「碰到第一個符合的組就塞進去」，降低誤歸組風險，但請務必先跑 preview 再正式執行。）
+ *************************************************************/
+
+const MERGE_CONFIG = {
+  // ── 整筆事項的判重 ──
+  DUP_DICE_THRESHOLD: 0.70,       // 字元 bigram 相似度，≥ 此值視為同一事項
+  DUP_MIN_LENGTH: 20,             // 正規化後短於此長度就不做模糊比對，避免短句誤判
+  DUP_COVERAGE_THRESHOLD: 0.70,   // 較短那筆的片段被較長那筆涵蓋的比例
+  DUP_COVERAGE_MIN_SEGMENTS: 3,   // 涵蓋率這條路徑至少要有幾個片段才生效
+
+  // ── 片段層級的去重 ──
+  SEGMENT_SIMILARITY: 0.80,       // 片段間 bigram 相似度，≥ 此值視為同一句
+  SEGMENT_MIN_LENGTH: 4,          // 短於此長度的片段只接受完全相同，不做模糊比對
+  FALLBACK_SPLIT_LENGTH: 40,      // 整段無空白且長於此值時，改用標點斷句
+
+  // ── 輸出與安全 ──
+  MERGE_SEPARATOR: '\n',          // 合併後片段的連接符，想維持原本外觀可改成 ' '
+  MAX_CELL_LENGTH: 45000,         // 單格上限保護（Google Sheets 硬上限為 50000）
+  LCS_CELL_BUDGET: 40000,         // DP 表格上限，超過就退回簡單接續合併
+  DRY_RUN: false                  // true = 只試算不寫入
+};
+
+/*************************************************************
+ * 主流程
+ *************************************************************/
+
+function autoMergeDuplicateItems() {
+  runMergeDuplicateItems_(MERGE_CONFIG.DRY_RUN);
 }
 
-/**
- * 自動合併「表單回覆1」裡B欄事項文字重複的列。
- * 判定重複的規則見 isDuplicateText_：文字完全相同，或其中一筆是另一筆的完整子字串
- * （例如在禱告卡片中途對同一項目增加了字詞，新文字會完整包含舊文字）。
- * 合併規則：把組內所有不同版本的文字整合起來（換行分隔），不會漏掉任何一筆的內容，其餘列刪除。
- * - B欄文字：組內每個版本都保留（已經被其他版本完整包含的子字串不重複列出），換行合併
- * - C欄週期：取合併範圍內天數最長的週期
- * - E欄日期：取合併範圍內最晚的日期
- * - D欄備註：所有不同備註合併（換行分隔，重複內容不疊加）
- * - H欄標籤：取第一個非空的標籤
- * 這支是觸發器安全版本（不呼叫UI alert，只寫Log），可搭配每日自動觸發器使用，
- * 也可以手動執行測試（執行完會嘗試跳alert，如果沒有UI環境會自動改寫Log，不會報錯）。
- */
-function autoMergeDuplicateItems() {
+/** 只試算不寫入，用來確認門檻值與合併結果是否符合預期 */
+function previewMergeDuplicateItems() {
+  runMergeDuplicateItems_(true);
+}
+
+function runMergeDuplicateItems_(dryRun) {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
@@ -1517,13 +1540,32 @@ function autoMergeDuplicateItems() {
   const numRows = lastRow - 1;
   const allData = sheet.getRange(2, 1, numRows, 8).getValues();
 
-  // 依B欄文字分組：文字相同，或其中一筆是另一筆的子字串，都歸為同一組
+  // 列號 → 該列資料，之後就不必再逐列打 API 讀取
+  const dataByRow = {};
+  allData.forEach((row, i) => { dataByRow[i + 2] = row; });
+
+  // ── 分組 ──
+  // 每組取「目前最完整的版本」當代表，新的一筆只跟代表比對。
+  // 同一則事項會隨時間長大，第1版與第4版可能已低於門檻，但兩者都貼近最完整的那版；
+  // some 會造成鏈式併吞（A像B、B像C，A與C無關卻被串成一組），every 又會擋掉正常的增長版本。
+  // 另外不取「第一個命中的組」，而是從所有達標的組裡挑相似度最高的，避免靜默歸錯組。
   const groups = []; // [{ texts: [...], rows: [...] }, ...]
   allData.forEach((row, i) => {
     const text = (row[COL.TEXT - 1] || '').toString().trim();
     if (!text) return;
 
-    const matched = groups.find(g => g.texts.some(t => isDuplicateText_(t, text)));
+    let matched = null;
+    let bestScore = -1;
+    groups.forEach(g => {
+      const rep = g.texts.reduce((longest, t) => (t.length > longest.length ? t : longest), '');
+      if (!isDuplicateText_(rep, text)) return;
+      const score = similarityScore_(rep, text);
+      if (score > bestScore) {
+        bestScore = score;
+        matched = g;
+      }
+    });
+
     if (matched) {
       matched.texts.push(text);
       matched.rows.push(i + 2);
@@ -1534,7 +1576,9 @@ function autoMergeDuplicateItems() {
 
   const duplicateGroups = groups.filter(g => g.rows.length > 1);
   if (duplicateGroups.length === 0) {
-    console.log('沒有找到重複事項，無需合併。');
+    const none = '沒有找到重複事項，無需合併。';
+    console.log(none);
+    if (!dryRun) safeAlert(none);
     return;
   }
 
@@ -1542,13 +1586,16 @@ function autoMergeDuplicateItems() {
   const rowsToDelete = [];
 
   duplicateGroups.forEach(({ texts, rows }) => {
-    // 把組內所有不重複的文字整合起來：已經被其他版本完整包含的子字串不重複列出，
-    // 避免「舊文字」跟「舊文字+新增內容」的新版本同時出現、內容互相包含卻重複顯示
-    const uniqueTexts = [...new Set(texts)];
-    const maximalTexts = uniqueTexts.filter(t => !uniqueTexts.some(other => other !== t && other.includes(t)));
-    const targetText = maximalTexts.join('\n');
+    // ── 文字合併 ──
+    // 以最完整的版本為骨幹，用 LCS 對齊其他版本：
+    // 共同片段只留一次，各版本獨有的片段插回它原本相對的位置。
+    let targetText = mergeTextsBySegment_(texts);
+    if (targetText.length > MERGE_CONFIG.MAX_CELL_LENGTH) {
+      console.warn(`⚠️ 第 ${rows.join(',')} 列合併後長度 ${targetText.length} 超過上限，已截斷。`);
+      targetText = targetText.substring(0, MERGE_CONFIG.MAX_CELL_LENGTH);
+    }
 
-    // 主列固定選組內文字最長的那一列，當作其他欄位（週期/日期/標籤）合併結果要寫回的位置
+    // 主列固定選組內文字最長的那一列，其他欄位的合併結果寫回這一列
     let targetRow = rows[0];
     let longestLen = texts[0].length;
     rows.forEach((r, idx) => {
@@ -1559,8 +1606,7 @@ function autoMergeDuplicateItems() {
     });
     const otherRows = rows.filter(r => r !== targetRow); // 其餘的合併後刪除
 
-    sheet.getRange(targetRow, COL.TEXT).setValue(targetText);
-
+    // ── 其他欄位合併 ──
     let bestCycle = '';
     let bestCyclePeriod = -1;
     let bestDate = null;
@@ -1568,7 +1614,8 @@ function autoMergeDuplicateItems() {
     let mergedTag = '';
 
     rows.forEach(r => {
-      const rowData = sheet.getRange(r, 1, 1, 8).getValues()[0];
+      const rowData = dataByRow[r];
+      if (!rowData) return;
 
       const cycle = (rowData[COL.CYCLE - 1] || '').toString().trim();
       const period = CYCLE_PERIOD_DAYS[cycle] || 0;
@@ -1579,36 +1626,46 @@ function autoMergeDuplicateItems() {
 
       const dateVal = rowData[COL.DATE - 1];
       if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
-        if (!bestDate || dateVal.getTime() > bestDate.getTime()) {
-          bestDate = dateVal;
-        }
+        if (!bestDate || dateVal.getTime() > bestDate.getTime()) bestDate = dateVal;
       }
 
       const note = (rowData[COL.NOTE - 1] || '').toString().trim();
-      if (note && !notesSet.includes(note)) {
-        notesSet.push(note);
-      }
+      if (note && !notesSet.includes(note)) notesSet.push(note);
 
       const tag = (rowData[COL.TAG - 1] || '').toString().trim();
-      if (tag && !mergedTag) {
-        mergedTag = tag;
-      }
+      if (tag && !mergedTag) mergedTag = tag;
     });
 
-    if (bestCycle) sheet.getRange(targetRow, COL.CYCLE).setValue(bestCycle);
-    if (bestDate) {
-      const dateCell = sheet.getRange(targetRow, COL.DATE);
-      dateCell.setValue(bestDate);
-      dateCell.setNumberFormat('yyyy/MM/dd');
+    if (dryRun) {
+      console.log(
+        `\n──── 第 ${mergedGroupCount + 1} 組 ────\n` +
+        `來源列：${rows.join(', ')}　主列：${targetRow}　將刪除：${otherRows.join(', ') || '無'}\n` +
+        `週期：${bestCycle || '(不變)'}　日期：${bestDate ? Utilities.formatDate(bestDate, Session.getScriptTimeZone(), 'yyyy/MM/dd') : '(不變)'}　標籤：${mergedTag || '(不變)'}\n` +
+        `合併後文字：\n${targetText}`
+      );
+    } else {
+      sheet.getRange(targetRow, COL.TEXT).setValue(targetText);
+      if (bestCycle) sheet.getRange(targetRow, COL.CYCLE).setValue(bestCycle);
+      if (bestDate) {
+        const dateCell = sheet.getRange(targetRow, COL.DATE);
+        dateCell.setValue(bestDate);
+        dateCell.setNumberFormat('yyyy/MM/dd');
+      }
+      if (notesSet.length > 0) {
+        sheet.getRange(targetRow, COL.NOTE).setValue(notesSet.join('\n'));
+      }
+      if (mergedTag) sheet.getRange(targetRow, COL.TAG).setValue(mergedTag);
     }
-    if (notesSet.length > 0) {
-      sheet.getRange(targetRow, COL.NOTE).setValue(notesSet.join('\n'));
-    }
-    if (mergedTag) sheet.getRange(targetRow, COL.TAG).setValue(mergedTag);
 
     otherRows.forEach(r => rowsToDelete.push(r));
     mergedGroupCount++;
   });
+
+  if (dryRun) {
+    const msg = `🔍 試算完成：找到 ${mergedGroupCount} 組重複事項，實際執行時會刪除 ${rowsToDelete.length} 列。（未寫入任何資料）`;
+    console.log('\n' + msg);
+    return;
+  }
 
   // 由大到小刪除，避免刪除較上面的列時，讓還沒處理的列號跟著位移錯亂
   rowsToDelete.sort((a, b) => b - a);
@@ -1617,6 +1674,250 @@ function autoMergeDuplicateItems() {
   const msg = `✅ 自動合併完成：合併了 ${mergedGroupCount} 組重複事項，共刪除 ${rowsToDelete.length} 列多餘資料。`;
   console.log(msg);
   safeAlert(msg); // 手動執行時會跳alert；觸發器自動執行時safeAlert內部會自動改寫Log，不會報錯
+}
+
+/*************************************************************
+ * 判重
+ *************************************************************/
+
+/**
+ * 兩段文字是否為同一事項的不同版本。
+ * 依序走四條路徑：完全相同 → 互為子字串 → 字元 bigram 相似度 → 片段涵蓋率。
+ */
+function isDuplicateText_(a, b) {
+  const na = normalizeText_(a);
+  const nb = normalizeText_(b);
+  if (!na || !nb) return false;
+
+  // 1. 完全相同
+  if (na === nb) return true;
+
+  // 2. 其中一段完整包含另一段
+  if (na.includes(nb) || nb.includes(na)) return true;
+
+  // 3. 太短的文字不做模糊比對，避免「開會」「買菜」這種誤判
+  if (Math.min(na.length, nb.length) < MERGE_CONFIG.DUP_MIN_LENGTH) return false;
+
+  // 4. 整段字元相似度：對語音轉文字的斷句差異免疫
+  if (bigramDice_(na, nb) >= MERGE_CONFIG.DUP_DICE_THRESHOLD) return true;
+
+  // 5. 片段涵蓋率：接住「舊短筆記 vs 後來的完整版」這種長度懸殊、
+  //    整段相似度會被稀釋、又不構成連續子字串的情況
+  const cov = segmentCoverage_(a, b);
+  return cov.coverage >= MERGE_CONFIG.DUP_COVERAGE_THRESHOLD
+      && cov.minSize >= MERGE_CONFIG.DUP_COVERAGE_MIN_SEGMENTS;
+}
+
+/**
+ * 分組時用來挑選最佳歸屬的相似度分數（0~1）。
+ * 只在 isDuplicateText_ 已經判定達標之後才呼叫，純粹用來排名。
+ */
+function similarityScore_(a, b) {
+  const na = normalizeText_(a);
+  const nb = normalizeText_(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 1;
+  return Math.max(bigramDice_(na, nb), segmentCoverage_(a, b).coverage);
+}
+
+/** 去空白、去常見標點、統一大小寫，只留下用來比對的骨架 */
+function normalizeText_(text) {
+  return (text === null || text === undefined ? '' : text)
+    .toString()
+    .replace(/\s+/g, '')
+    .replace(/[，。！？、：；,.!?;:\-—～~（）()「」『』【】\[\]“”"'‘’]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Sørensen–Dice 係數，以字元 bigram 的 multiset 計算。
+ * 用計數而非集合，才能正確反映內部本來就重複多次的語音筆記。
+ * 傳入的字串必須已經 normalizeText_ 過。
+ */
+function bigramDice_(a, b) {
+  if (a === b) return a ? 1 : 0;
+  if (a.length < 2 || b.length < 2) return 0;
+
+  const counts = new Map();
+  for (let i = 0; i < a.length - 1; i++) {
+    const gram = a.substr(i, 2);
+    counts.set(gram, (counts.get(gram) || 0) + 1);
+  }
+
+  let matches = 0;
+  for (let i = 0; i < b.length - 1; i++) {
+    const gram = b.substr(i, 2);
+    const c = counts.get(gram) || 0;
+    if (c > 0) {
+      matches++;
+      counts.set(gram, c - 1);
+    }
+  }
+
+  return (2 * matches) / (a.length + b.length - 2);
+}
+
+/** 較短那筆的片段有多少比例出現在較長那筆裡 */
+function segmentCoverage_(a, b) {
+  const A = uniqueSegments_(splitSegments_(a));
+  const B = uniqueSegments_(splitSegments_(b));
+  if (!A.length || !B.length) return { coverage: 0, minSize: 0 };
+
+  const shortArr = A.length <= B.length ? A : B;
+  const longArr  = A.length <= B.length ? B : A;
+  const longNorm = longArr.map(normalizeText_);
+
+  let hit = 0;
+  shortArr.forEach(seg => {
+    const ns = normalizeText_(seg);
+    if (longNorm.some(nl => isSameNormalized_(ns, nl))) hit++;
+  });
+
+  return { coverage: hit / shortArr.length, minSize: shortArr.length };
+}
+
+/*************************************************************
+ * 片段處理
+ *************************************************************/
+
+/**
+ * 切片段。手機語音輸入是靠停頓插入空白，所以只用空白／換行斷開，
+ * 不切「，、。」——那些留在片段裡，合併後讀起來才是完整句子。
+ */
+function splitSegments_(text) {
+  const raw = (text === null || text === undefined ? '' : text).toString();
+  let segs = raw.split(/[\s　]+/).map(s => s.trim()).filter(s => s.length > 0);
+
+  // 後備：打字輸入或語音辨識沒斷開時，整筆會變成單一巨大片段，
+  // 合併層就完全失效。這種情況改用標點斷句。
+  if (segs.length === 1 && normalizeText_(raw).length >= MERGE_CONFIG.FALLBACK_SPLIT_LENGTH) {
+    segs = raw.split(/[，。；、！？!?;]+/).map(s => s.trim()).filter(s => s.length > 0);
+  }
+  return segs;
+}
+
+/** 兩個片段是否為同一句（已正規化版本） */
+function isSameNormalized_(na, nb) {
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  // 太短的片段只接受完全相同，避免「下載」被任何含「下載」的長句吸收
+  if (na.length < MERGE_CONFIG.SEGMENT_MIN_LENGTH ||
+      nb.length < MERGE_CONFIG.SEGMENT_MIN_LENGTH) return false;
+  if (na.includes(nb) || nb.includes(na)) return true;
+  // 解決「修正投影片」vs「修改投影片」這種一字之差的轉寫落差
+  return bigramDice_(na, nb) >= MERGE_CONFIG.SEGMENT_SIMILARITY;
+}
+
+function isSameSegment_(a, b) {
+  return isSameNormalized_(normalizeText_(a), normalizeText_(b));
+}
+
+/** 同一串片段內部去重，同一句有長短寫法時保留較完整的那個 */
+function uniqueSegments_(segments) {
+  const kept = [];
+  const keptNorm = [];
+  segments.forEach(seg => {
+    const ns = normalizeText_(seg);
+    if (!ns) return;
+    const idx = keptNorm.findIndex(k => isSameNormalized_(k, ns));
+    if (idx === -1) {
+      kept.push(seg);
+      keptNorm.push(ns);
+    } else if (seg.length > kept[idx].length) {
+      kept[idx] = seg;
+      keptNorm[idx] = ns;
+    }
+  });
+  return kept;
+}
+
+/*************************************************************
+ * 合併
+ *************************************************************/
+
+/**
+ * 把同一組的多個版本合併成一段文字。
+ * 先各自內部去重（處理「主禮筆記…」整段重講兩遍的情況），
+ * 再以最完整的版本為骨幹，逐一 LCS 對齊其餘版本。
+ */
+function mergeTextsBySegment_(texts) {
+  const cleaned = texts
+    .map(t => uniqueSegments_(splitSegments_(t)))
+    .filter(arr => arr.length > 0);
+  if (cleaned.length === 0) return '';
+
+  // 由最完整的版本開始，讓它的敘事順序主導輸出
+  cleaned.sort((x, y) => y.join('').length - x.join('').length);
+
+  let merged = cleaned[0];
+  for (let i = 1; i < cleaned.length; i++) {
+    merged = lcsMergeSegments_(merged, cleaned[i]);
+  }
+
+  // 跨版本再掃一次，清掉對齊過程殘留的重複
+  merged = uniqueSegments_(merged);
+
+  // 丟掉已被其他較長片段完整包含的短片段
+  const nm = merged.map(normalizeText_);
+  const kept = merged.filter((seg, i) =>
+    !merged.some((other, k) =>
+      k !== i && nm[k].length > nm[i].length && nm[k].includes(nm[i])));
+
+  return kept.join(MERGE_CONFIG.MERGE_SEPARATOR);
+}
+
+/**
+ * 以最長共同子序列對齊兩串片段，做無衝突的三方合併：
+ * 共同片段只輸出一次，各自獨有的片段插在它前面最近的共同錨點之後，
+ * 因此新增內容會落在原本的語意位置，而不是全部被堆到結尾。
+ */
+function lcsMergeSegments_(a, b) {
+  const n = a.length, m = b.length;
+  if (n === 0) return b.slice();
+  if (m === 0) return a.slice();
+  // DP 表過大時退回簡單接續，避免觸發器逾時
+  if (n * m > MERGE_CONFIG.LCS_CELL_BUDGET) return uniqueSegments_(a.concat(b));
+
+  const na = a.map(normalizeText_);
+  const nb = b.map(normalizeText_);
+
+  // 先算好相等矩陣，DP 內就不必重複做模糊比對
+  const eq = [];
+  for (let i = 0; i < n; i++) {
+    const rowEq = new Array(m);
+    for (let j = 0; j < m; j++) rowEq[j] = isSameNormalized_(na[i], nb[j]);
+    eq.push(rowEq);
+  }
+
+  // dp[i][j] = a[i..] 與 b[j..] 的 LCS 長度
+  const dp = [];
+  for (let i = 0; i <= n; i++) dp.push(new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = eq[i][j]
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (eq[i][j]) {
+      out.push(a[i].length >= b[j].length ? a[i] : b[j]); // 同一句取較完整的寫法
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push(a[i++]); // 骨幹版本獨有
+    } else {
+      out.push(b[j++]); // 另一版本獨有
+    }
+  }
+  while (i < n) out.push(a[i++]);
+  while (j < m) out.push(b[j++]);
+
+  return out;
 }
 
 /**
