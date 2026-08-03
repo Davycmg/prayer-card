@@ -111,6 +111,14 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed → 代禱表單（固定名單版，一次列出 FIXED_ROSTER_NAMES 那幾位，不顯示 DG 週期欄位，
+  // 每人各自姓名+備註，統一「全部送出」）
+  if (e.parameter.form === 'fixed') {
+    return HtmlService.createHtmlOutputFromFile('FormFixedRoster')
+      .setTitle('代禱表單（固定名單）')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
