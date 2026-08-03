@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+      max-width: 480px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: #333;
+    }
+    h2 { color: #4a3b8f; margin-bottom: 4px; }
+    p.desc { color: #777; font-size: 13px; margin-top: 0; }
+    .person-block {
+      margin-top: 20px;
+      padding: 14px;
+      border: 1px solid #e0ddf0;
+      border-radius: 8px;
+      background: #faf9ff;
+    }
+    .person-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: #4a3b8f;
+    }
+    .person-hint {
+      font-size: 12px;
+      color: #4a3b8f;
+      margin-top: 4px;
+      min-height: 16px;
+    }
+    label { display: block; margin-top: 10px; font-weight: 500; font-size: 14px; }
+    textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+      min-height: 70px;
+      resize: vertical;
+    }
+    button {
+      margin-top: 24px;
+      padding: 10px 24px;
+      background: #4a3b8f;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 12px; font-size: 14px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h2>代禱表單（固定名單）</h2>
+  <p class="desc">固定列出以下幾位，載入時會自動帶出舊備註；送出會一次更新全部人的資料</p>
+
+  <div id="personList"></div>
+
+  <button onclick="submitAll()" id="submitBtn">全部送出</button>
+  <div id="status"></div>
+
+  <script>
+    // 跟後端 Code.js 的 FIXED_ROSTER_NAMES 保持一致，顯示順序以這裡為準
+    const FIXED_NAMES = ['王銓興', '陳豪雷', '張天維', '郭大衛', '賴秀華', '江吉昇', '劉彥漢', '李麗文', '何雅雯'];
+    const DEFAULT_CYCLE = '每月';
+
+    // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期
+    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '' }));
+
+    function personBlockHtml(name, idx) {
+      return (
+        '<div class="person-block">' +
+          '<div class="person-name">' + name + '</div>' +
+          '<div class="person-hint" id="hint-' + idx + '">查詢中...</div>' +
+          '<label>備註</label>' +
+          '<textarea id="note-' + idx + '" placeholder="選填"></textarea>' +
+        '</div>'
+      );
+    }
+
+    function renderList() {
+      document.getElementById('personList').innerHTML =
+        FIXED_NAMES.map(function (name, idx) { return personBlockHtml(name, idx); }).join('');
+    }
+
+    function lookupOne(idx) {
+      const name = FIXED_NAMES[idx];
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            const hint = document.getElementById('hint-' + idx);
+            const noteEl = document.getElementById('note-' + idx);
+
+            if (res) {
+              state[idx].rows = res.rows;
+              state[idx].cycle = res.cycles.length >= 1 ? res.cycles[0] : DEFAULT_CYCLE;
+              noteEl.value = res.note;
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，送出後將整併為 1 筆';
+            } else {
+              state[idx].rows = [];
+              state[idx].cycle = DEFAULT_CYCLE;
+              noteEl.value = '';
+              hint.innerText = '查無舊資料，送出後將新增一筆';
+            }
+            resolve();
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('hint-' + idx).innerText = '查詢失敗：' + err.message;
+            state[idx].cycle = DEFAULT_CYCLE;
+            resolve();
+          })
+          .lookupByName(name);
+      });
+    }
+
+    async function init() {
+      renderList();
+      // 依序查詢（不用 Promise.all 平行送出，避免同時打太多 google.script.run 造成不穩定）
+      for (let i = 0; i < FIXED_NAMES.length; i++) {
+        await lookupOne(i);
+      }
+    }
+
+    function submitOne(idx) {
+      const name = FIXED_NAMES[idx];
+      const note = document.getElementById('note-' + idx).value;
+      const cycle = state[idx].cycle || DEFAULT_CYCLE;
+
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function () { resolve({ name: name, ok: true }); })
+          .withFailureHandler(function (err) { resolve({ name: name, ok: false, error: err.message }); })
+          .submitForm({ name: name, cycle: cycle, note: note, rows: state[idx].rows });
+      });
+    }
+
+    async function submitAll() {
+      const btn = document.getElementById('submitBtn');
+      const statusEl = document.getElementById('status');
+      btn.disabled = true;
+      statusEl.innerText = '送出中...';
+
+      const results = [];
+      for (let i = 0; i < FIXED_NAMES.length; i++) {
+        results.push(await submitOne(i));
+      }
+
+      const failed = results.filter(function (r) { return !r.ok; });
+      if (failed.length === 0) {
+        statusEl.innerText = '✅ 已更新全部 ' + results.length + ' 位的資料！';
+      } else {
+        statusEl.innerText = '⚠️ ' + failed.length + ' 位更新失敗：' +
+          failed.map(function (r) { return r.name + '（' + r.error + '）'; }).join('、');
+      }
+      btn.disabled = false;
+    }
+
+    init();
+  </script>
+</body>
+</html>
