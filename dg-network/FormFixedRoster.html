@@ -82,8 +82,9 @@
     const FIXED_NAMES = ['王銓興', '陳豪雷', '張天維', '郭大衛', '賴秀華', '江吉昇', '劉彥漢', '李麗文', '何雅雯'];
     const DEFAULT_CYCLE = '每月';
 
-    // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期
-    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '' }));
+    // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期、
+    // touched = 這次打開頁面之後有沒有實際打字過（自動帶出來的舊備註不算，複製按鈕只抓 touched 的人）
+    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '', touched: false }));
 
     function personBlockHtml(name, idx) {
       return (
@@ -99,6 +100,13 @@
     function renderList() {
       document.getElementById('personList').innerHTML =
         FIXED_NAMES.map(function (name, idx) { return personBlockHtml(name, idx); }).join('');
+
+      // 監聽每個備註欄位的實際輸入事件，用來分辨「使用者這次真的有打字」跟「只是自動帶出舊資料」
+      FIXED_NAMES.forEach(function (name, idx) {
+        document.getElementById('note-' + idx).addEventListener('input', function () {
+          state[idx].touched = true;
+        });
+      });
     }
 
     function lookupOne(idx) {
@@ -152,18 +160,28 @@
       });
     }
 
-    // 把「這次打開頁面所輸入的文字」（目前每個人備註欄位的當下內容，不管有沒有送出）
-    // 依 FIXED_NAMES 順序組成「姓名：備註」的文字，複製到剪貼簿。
+    // 把「這次打開頁面之後，使用者實際有打字的人」（state[idx].touched 為 true 的），
+    // 依 FIXED_NAMES 順序組成「姓名：備註」的文字。自動帶出來、完全沒動過的舊備註不算。
     function buildCopyText() {
-      return FIXED_NAMES.map(function (name, idx) {
-        const note = (document.getElementById('note-' + idx).value || '').trim();
-        return name + '：' + note;
-      }).join('\n\n');
+      return FIXED_NAMES
+        .map(function (name, idx) { return { name: name, idx: idx }; })
+        .filter(function (p) { return state[p.idx].touched; })
+        .map(function (p) {
+          const note = (document.getElementById('note-' + p.idx).value || '').trim();
+          return p.name + '：' + note;
+        })
+        .join('\n\n');
     }
 
     async function copyAll() {
       const copyStatus = document.getElementById('copyStatus');
       const text = buildCopyText();
+
+      if (!text) {
+        copyStatus.innerText = '這次還沒有輸入任何內容';
+        setTimeout(function () { copyStatus.innerText = ''; }, 2500);
+        return;
+      }
 
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
