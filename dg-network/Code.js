@@ -95,6 +95,15 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // view=card-fixed → 代禱卡片網頁（固定名單版，只顯示 FIXED_ROSTER_NAMES 那幾位，依指定順序）
+  if (view === 'card-fixed') {
+    const tmpl = HtmlService.createTemplateFromFile('CardIndexFixed');
+    tmpl.apiUrl = ScriptApp.getService().getUrl();
+    return tmpl.evaluate()
+      .setTitle('代禱卡片（固定名單）')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // form=simple → 代禱表單（不顯示 DG 週期欄位的簡化版，跟 Form.html 其他部分一樣）
   if (e.parameter.form === 'simple') {
     return HtmlService.createHtmlOutputFromFile('FormNoCycle')
@@ -298,6 +307,9 @@ function handleCardApi_(e, action) {
       case 'getAllItems':
         result = getAllItems_();
         break;
+      case 'getFixedRosterItems':
+        result = getFixedRosterItems_();
+        break;
       case 'completeByRow':
         result = completeByRow_(parseInt(e.parameter.row, 10));
         break;
@@ -367,6 +379,39 @@ function getAllItems_() {
     }
   }
 
+  return { items: items, total: items.length };
+}
+
+// 固定名單：CardIndexFixed.html 專用，不受今天待代禱日期篩選影響，永遠依這個順序顯示這幾位
+const FIXED_ROSTER_NAMES = [
+  '王銓興', '陳豪雷', '張天維', '郭大衛', '賴秀華', '江吉昇', '劉彥漢', '李麗文', '何雅雯'
+];
+
+/**
+ * 依 FIXED_ROSTER_NAMES 的順序，把這幾位固定名單成員目前的資料抓出來（不受代禱日期篩選影響）。
+ * 姓名在「表單回覆 1」裡如果有多筆（理論上不會，但保險起見），取第一筆命中的；
+ * 完全找不到的名字，也會照樣列在清單裡（row 為 null，備註/週期空白），
+ * 前端遇到 row 為 null 時，「完成」「刪除」要停用，避免對不存在的資料操作。
+ */
+function getFixedRosterItems_() {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  const allData = lastRow >= 2 ? sheet.getRange(2, 1, lastRow - 1, 7).getValues() : [];
+
+  const byName = {};
+  allData.forEach((rowData, i) => {
+    const name = (rowData[COL.NAME - 1] || '').toString().trim();
+    if (name && !(name in byName)) {
+      byName[name] = {
+        row: i + 2,
+        name: name,
+        cycle: rowData[COL.CYCLE - 1] || '',
+        note: rowData[COL.NOTE - 1] || ''
+      };
+    }
+  });
+
+  const items = FIXED_ROSTER_NAMES.map(name => byName[name] || { row: null, name: name, cycle: '', note: '' });
   return { items: items, total: items.length };
 }
 
