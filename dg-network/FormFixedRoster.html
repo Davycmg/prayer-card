@@ -56,11 +56,21 @@
     }
     button:disabled { background: #ccc; cursor: not-allowed; }
     #status { margin-top: 12px; font-size: 14px; text-align: center; }
+    #copyBtn {
+      margin-top: 0;
+      background: white;
+      color: #4a3b8f;
+      border: 1px solid #4a3b8f;
+    }
+    #copyStatus { margin-top: 6px; font-size: 13px; text-align: center; color: #4a3b8f; min-height: 16px; }
   </style>
 </head>
 <body>
   <h2>代禱表單（固定名單）</h2>
   <p class="desc">固定列出以下幾位，載入時會自動帶出舊備註；送出會一次更新全部人的資料</p>
+
+  <button onclick="copyAll()" id="copyBtn">📋 一鍵複製目前內容</button>
+  <div id="copyStatus"></div>
 
   <div id="personList"></div>
 
@@ -140,6 +150,41 @@
           .withFailureHandler(function (err) { resolve({ name: name, ok: false, error: err.message }); })
           .submitForm({ name: name, cycle: cycle, note: note, rows: state[idx].rows });
       });
+    }
+
+    // 把「這次打開頁面所輸入的文字」（目前每個人備註欄位的當下內容，不管有沒有送出）
+    // 依 FIXED_NAMES 順序組成「姓名：備註」的文字，複製到剪貼簿。
+    function buildCopyText() {
+      return FIXED_NAMES.map(function (name, idx) {
+        const note = (document.getElementById('note-' + idx).value || '').trim();
+        return name + '：' + note;
+      }).join('\n\n');
+    }
+
+    async function copyAll() {
+      const copyStatus = document.getElementById('copyStatus');
+      const text = buildCopyText();
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // 舊瀏覽器/非安全環境沒有 navigator.clipboard，退回用隱藏 textarea + execCommand
+          const tmp = document.createElement('textarea');
+          tmp.value = text;
+          tmp.style.position = 'fixed';
+          tmp.style.opacity = '0';
+          document.body.appendChild(tmp);
+          tmp.focus();
+          tmp.select();
+          document.execCommand('copy');
+          document.body.removeChild(tmp);
+        }
+        copyStatus.innerText = '✅ 已複製到剪貼簿';
+      } catch (err) {
+        copyStatus.innerText = '複製失敗：' + err.message;
+      }
+      setTimeout(function () { copyStatus.innerText = ''; }, 2500);
     }
 
     async function submitAll() {
