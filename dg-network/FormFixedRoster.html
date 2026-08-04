@@ -40,9 +40,14 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       font-family: inherit;
-      min-height: 70px;
+      min-height: 60px;
       resize: vertical;
     }
+    textarea[readonly] {
+      background: #f0eff7;
+      color: #666;
+    }
+    textarea.new-input { min-height: 50px; }
     button {
       margin-top: 24px;
       padding: 10px 24px;
@@ -67,9 +72,9 @@
 </head>
 <body>
   <h2>代禱表單（固定名單）</h2>
-  <p class="desc">固定列出以下幾位，載入時會自動帶出舊備註；送出會一次更新全部人的資料</p>
+  <p class="desc">固定列出以下幾位；「舊備註」是唯讀參考、「新增內容」才是這次要輸入的，送出時會自動併入舊備註</p>
 
-  <button onclick="copyAll()" id="copyBtn">📋 一鍵複製目前內容</button>
+  <button onclick="copyAll()" id="copyBtn">📋 一鍵複製新輸入內容</button>
   <div id="copyStatus"></div>
 
   <div id="personList"></div>
@@ -83,16 +88,18 @@
     const DEFAULT_CYCLE = '每月';
 
     // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期、
-    // touched = 這次打開頁面之後有沒有實際打字過（自動帶出來的舊備註不算，複製按鈕只抓 touched 的人）
-    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '', touched: false }));
+    // existingNote = 查詢到的舊備註（唯讀欄位顯示用，送出時當作底稿，把新增內容併進去）
+    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '', existingNote: '' }));
 
     function personBlockHtml(name, idx) {
       return (
         '<div class="person-block">' +
           '<div class="person-name">' + name + '</div>' +
           '<div class="person-hint" id="hint-' + idx + '">查詢中...</div>' +
-          '<label>備註</label>' +
-          '<textarea id="note-' + idx + '" placeholder="選填"></textarea>' +
+          '<label>舊備註（唯讀）</label>' +
+          '<textarea id="old-note-' + idx + '" readonly></textarea>' +
+          '<label>新增內容</label>' +
+          '<textarea id="new-note-' + idx + '" class="new-input" placeholder="這次要新增的內容..."></textarea>' +
         '</div>'
       );
     }
@@ -100,13 +107,6 @@
     function renderList() {
       document.getElementById('personList').innerHTML =
         FIXED_NAMES.map(function (name, idx) { return personBlockHtml(name, idx); }).join('');
-
-      // 監聽每個備註欄位的實際輸入事件，用來分辨「使用者這次真的有打字」跟「只是自動帶出舊資料」
-      FIXED_NAMES.forEach(function (name, idx) {
-        document.getElementById('note-' + idx).addEventListener('input', function () {
-          state[idx].touched = true;
-        });
-      });
     }
 
     function lookupOne(idx) {
@@ -115,17 +115,19 @@
         google.script.run
           .withSuccessHandler(function (res) {
             const hint = document.getElementById('hint-' + idx);
-            const noteEl = document.getElementById('note-' + idx);
+            const oldNoteEl = document.getElementById('old-note-' + idx);
 
             if (res) {
               state[idx].rows = res.rows;
               state[idx].cycle = res.cycles.length >= 1 ? res.cycles[0] : DEFAULT_CYCLE;
-              noteEl.value = res.note;
+              state[idx].existingNote = res.note || '';
+              oldNoteEl.value = state[idx].existingNote;
               hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，送出後將整併為 1 筆';
             } else {
               state[idx].rows = [];
               state[idx].cycle = DEFAULT_CYCLE;
-              noteEl.value = '';
+              state[idx].existingNote = '';
+              oldNoteEl.value = '';
               hint.innerText = '查無舊資料，送出後將新增一筆';
             }
             resolve();
@@ -147,9 +149,18 @@
       }
     }
 
+    // 送出時把「新增內容」併入「舊備註」：舊備註不變地保留在前面，新增內容接在後面（換行分隔）；
+    // 新增內容是空的話就只送舊備註，等於這個人這次沒有變動。
+    function mergedNote(idx) {
+      const oldNote = state[idx].existingNote || '';
+      const newNote = (document.getElementById('new-note-' + idx).value || '').trim();
+      if (!newNote) return oldNote;
+      return oldNote ? (oldNote + '\n' + newNote) : newNote;
+    }
+
     function submitOne(idx) {
       const name = FIXED_NAMES[idx];
-      const note = document.getElementById('note-' + idx).value;
+      const note = mergedNote(idx);
       const cycle = state[idx].cycle || DEFAULT_CYCLE;
 
       return new Promise(function (resolve) {
@@ -160,16 +171,16 @@
       });
     }
 
-    // 把「這次打開頁面之後，使用者實際有打字的人」（state[idx].touched 為 true 的），
-    // 依 FIXED_NAMES 順序組成「姓名：備註」的文字。自動帶出來、完全沒動過的舊備註不算。
+    // 一鍵複製只抓「新增內容」欄位裡有打字的人，依 FIXED_NAMES 順序組成「姓名：新增內容」的文字，
+    // 舊備註（唯讀欄位）完全不會被複製進去。
     function buildCopyText() {
       return FIXED_NAMES
         .map(function (name, idx) { return { name: name, idx: idx }; })
-        .filter(function (p) { return state[p.idx].touched; })
         .map(function (p) {
-          const note = (document.getElementById('note-' + p.idx).value || '').trim();
-          return p.name + '：' + note;
+          return { name: p.name, newNote: (document.getElementById('new-note-' + p.idx).value || '').trim() };
         })
+        .filter(function (p) { return p.newNote; })
+        .map(function (p) { return p.name + '：' + p.newNote; })
         .join('\n\n');
     }
 
