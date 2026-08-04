@@ -103,6 +103,19 @@
     color: var(--text-sub);
     white-space: pre-wrap;
   }
+  .export-btn {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 16px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .export-btn:active { opacity: 0.7; }
   .danger-zone {
     width: 100%;
     max-width: 480px;
@@ -249,6 +262,8 @@
   <div class="note" id="noteText"></div>
 </div>
 
+<button class="export-btn" id="exportToSheetBtn">📤 匯出到禱告卡片清單（表單回覆 1）</button>
+
 <div class="danger-zone">
   <button id="deleteBtn">🗑 刪除這個行程（重複行程會整個系列一起刪除）</button>
 </div>
@@ -305,6 +320,7 @@ const el = {
   eventText: document.getElementById('eventText'),
   cycleSelect: document.getElementById('cycleSelect'),
   noteText: document.getElementById('noteText'),
+  exportToSheetBtn: document.getElementById('exportToSheetBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -421,6 +437,23 @@ el.cycleSelect.addEventListener('change', () => {
     .then(() => showStatus('週期已更新'))
     .catch(err => showStatus('更新失敗：' + err.message))
     .finally(() => setLoading(false));
+});
+
+// 匯出：把這個行程連同目前週期，複製成「表單回覆 1」的一筆新資料，
+// 不會動到原本的日曆行程，可以重複按（每按一次就多新增一筆）。
+el.exportToSheetBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  setLoading(true);
+  try {
+    await apiCall({ action: 'exportCalendarEventToPrayerSheet', value: item.text || '', cycle: item.cycle || '' });
+    showStatus('已匯出到禱告卡片清單');
+  } catch (err) {
+    showStatus('匯出失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
 });
 
 // 刪除：直接刪掉 Google 日曆上的原始行程（重複行程會整個系列一起刪除），需要等API確認成功
