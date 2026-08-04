@@ -119,6 +119,14 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed2 → 代禱表單（另一組固定名單：吳安祺、郭大衛），跟 form=fixed 同一份程式邏輯，
+  // 只是換一份名單的獨立副本（FormFixedRoster2.html）
+  if (e.parameter.form === 'fixed2') {
+    return HtmlService.createHtmlOutputFromFile('FormFixedRoster2')
+      .setTitle('代禱表單（固定名單 2）')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
