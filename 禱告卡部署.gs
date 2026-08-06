@@ -974,6 +974,9 @@ function doGet(e) {
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
+      case 'addItem':
+        result = addItem(e.parameter.text, e.parameter.cycle, e.parameter.note, e.parameter.tag);
+        break;
       default:
         result = { error: 'unknown action: ' + action };
     }
@@ -1367,6 +1370,24 @@ function deleteByRow(row) {
   if (!row || row < 2) return { success: false };
   getSheet_().deleteRow(row);
   return { success: true, deletedRow: row };
+}
+
+/**
+ * 新增一筆事項：附加到「表單回覆 1」的最後一列，只填 B（事項）／C（週期）／D（備註）／H（標籤），
+ * E（本次禱告時間）／F（本次禱告完成）留空，跟現有邏輯一致（空白＝今天就要禱告）。
+ */
+function addItem(text, cycle, note, tag) {
+  const trimmedText = (text || '').toString().trim();
+  if (!trimmedText) return { error: '事項不可空白' };
+
+  const sheet = getSheet_();
+  const newRow = sheet.getLastRow() + 1;
+  sheet.getRange(newRow, COL.TEXT).setValue(trimmedText);
+  sheet.getRange(newRow, COL.CYCLE).setValue(normalizeCode(cycle, CYCLE_MAP));
+  sheet.getRange(newRow, COL.NOTE).setValue((note || '').toString().trim());
+  sheet.getRange(newRow, COL.TAG).setValue(normalizeCode(tag, TAG_MAP));
+
+  return { success: true, row: newRow };
 }
 
 /**
