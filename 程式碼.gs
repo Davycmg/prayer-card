@@ -47,7 +47,7 @@ const cycleRule = SpreadsheetApp.newDataValidation()
 
   // 標籤欄位資料驗證（固定清單）
   const tagRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['G工作日', 'W週末', 'F家庭會議', 'A安祺禱告'], true)
+    .requireValueInList(['G工作日', 'W週末', 'F家庭會議', 'A安祺禱告', 'A安祺輸入'], true)
     .setAllowInvalid(true)
     .build();
   card.getRange('D13').setDataValidation(tagRule);
@@ -264,7 +264,8 @@ function onEdit(e) {
       'G': 'G工作日',
       'W': 'W週末',
       'F': 'F家庭會議',
-      'A': 'A安祺禱告'
+      'A': 'A安祺禱告',
+      'AI': 'A安祺輸入'
     };
 
     let matched = TAG_MAP[newValue];
