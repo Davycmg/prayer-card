@@ -331,11 +331,18 @@ function findOrCreateTaskList_(name) {
 function copyRowToDefaultTaskList_(sheet, row) {
   const title = sheet.getRange(row, COL.TEXT).getValue().toString();
   const notes = sheet.getRange(row, COL.NOTE).getValue().toString();
+  return copyTextToDefaultTaskList_(title, notes, '列 ' + row);
+}
 
+/**
+ * 共用底層邏輯：把任意標題／備註複製到 Google Tasks 預設清單（第一個清單），不依賴試算表的列。
+ * 給 copyRowToDefaultTaskList_（禱告卡片）跟 exportCalendarEventToTasks（為習慣禱告的日曆行程）共用。
+ */
+function copyTextToDefaultTaskList_(title, notes, logLabel) {
   try {
     const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
     if (!taskLists.items || taskLists.items.length === 0) {
-      Logger.log('找不到任何 Google Tasks 清單，無法複製（列 ' + row + '）');
+      Logger.log('找不到任何 Google Tasks 清單，無法複製（' + logLabel + '）');
       return false;
     }
     const defaultListId = taskLists.items[0].id;
@@ -347,7 +354,7 @@ function copyRowToDefaultTaskList_(sheet, row) {
 
     return true;
   } catch (err) {
-    Logger.log('複製到 Google Tasks 預設清單失敗（列 ' + row + '）：' + err.toString());
+    Logger.log('複製到 Google Tasks 預設清單失敗（' + logLabel + '）：' + err.toString());
     return false;
   }
 }
@@ -978,6 +985,9 @@ function doGet(e) {
       case 'exportCalendarEventToPrayerSheet':
         result = exportCalendarEventToPrayerSheet(e.parameter.value, e.parameter.cycle);
         break;
+      case 'exportCalendarEventToTasks':
+        result = exportCalendarEventToTasks(e.parameter.value);
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1168,6 +1178,16 @@ function exportCalendarEventToPrayerSheet(value, cycle) {
   const sheet = getSheet_();
   sheet.appendRow([new Date(), value, cycle || '', '', '', '', '', '']);
   return { exported: true };
+}
+
+/**
+ * 把「為習慣禱告」（calendar.html）的一個行程直接複製到 Google Tasks 預設清單，
+ * 不會動到原本的日曆行程，可以重複按、重複複製。
+ */
+function exportCalendarEventToTasks(value) {
+  if (!value) throw new Error('缺少事項內容');
+  const copied = copyTextToDefaultTaskList_(value, '', '為習慣禱告日曆行程');
+  return { success: copied, copied: copied };
 }
 
 /**
