@@ -263,6 +263,7 @@
 </div>
 
 <button class="export-btn" id="exportToSheetBtn">📤 匯出到禱告卡片清單（表單回覆 1）</button>
+<button class="export-btn" id="exportToTasksBtn">📋 匯出到 Google Tasks 預設清單</button>
 
 <div class="danger-zone">
   <button id="deleteBtn">🗑 刪除這個行程（重複行程會整個系列一起刪除）</button>
@@ -321,6 +322,7 @@ const el = {
   cycleSelect: document.getElementById('cycleSelect'),
   noteText: document.getElementById('noteText'),
   exportToSheetBtn: document.getElementById('exportToSheetBtn'),
+  exportToTasksBtn: document.getElementById('exportToTasksBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -454,6 +456,22 @@ el.exportToSheetBtn.addEventListener('click', async () => {
   } finally {
     setLoading(false);
   }
+});
+
+// 匯出：把這個行程複製到 Google Tasks 預設清單，不會動到原本的日曆行程，可以重複按。
+el.exportToTasksBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  apiCall({ action: 'exportCalendarEventToTasks', value: item.text || '' })
+    .then(data => {
+      if (data && data.copied) {
+        showStatus('已複製到 Google Tasks 預設清單');
+      } else {
+        showStatus('複製失敗，請稍後再試');
+      }
+    })
+    .catch(err => showStatus('複製失敗：' + err.message));
 });
 
 // 刪除：直接刪掉 Google 日曆上的原始行程（重複行程會整個系列一起刪除），需要等API確認成功
