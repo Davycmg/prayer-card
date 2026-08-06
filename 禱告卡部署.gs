@@ -921,6 +921,10 @@ function doGet(e) {
     return HtmlService.createHtmlOutputFromFile('query')
       .setTitle('禱告卡片 - 查詢');
   }
+  if (e.parameter.page === 'add-item') {
+    return HtmlService.createHtmlOutputFromFile('add-item')
+      .setTitle('禱告卡片 - 新增事項');
+  }
 
   const action = (e.parameter.action || 'getAllItems');
   let result;
