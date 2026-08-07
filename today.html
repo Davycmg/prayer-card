@@ -448,41 +448,77 @@ async function runAutoPlay() {
   const totalAtStart = itemsCache.length;
   let loopCount = 0;
 
-  while (autoPlayActive) {
-    if (itemsCache.length === 0) {
-      autoPlayActive = false;
-      el.speakBtn.textContent = '🔊 開始朗讀';
-      showStatus('今天沒有待辦事項 🎉');
-      return;
-    }
+  try {
+    while (autoPlayActive) {
+      if (itemsCache.length === 0) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('今天沒有待辦事項 🎉');
+        return;
+      }
 
-    for (let i = 0; i < REPEATS_PER_ITEM; i++) {
+      for (let i = 0; i < REPEATS_PER_ITEM; i++) {
+        if (!autoPlayActive) return;
+        el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${REPEATS_PER_ITEM}）`;
+        await speakOnePass(el.eventText.value);
+      }
       if (!autoPlayActive) return;
-      el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${REPEATS_PER_ITEM}）`;
-      await speakOnePass(el.eventText.value);
-    }
-    if (!autoPlayActive) return;
 
-    loopCount++;
-    if (loopCount >= totalAtStart) {
-      autoPlayActive = false;
-      el.speakBtn.textContent = '🔊 開始朗讀';
-      showStatus('本輪已唸完一遍 🙏');
-      return;
+      loopCount++;
+      if (loopCount >= totalAtStart) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('本輪已唸完一遍 🙏');
+        return;
+      }
+      renderFromCache(cachePos + 1);
     }
-    renderFromCache(cachePos + 1);
+  } finally {
+    // 不管朗讀從哪個路徑結束（正常唸完、被停止、發生錯誤），都確保釋放螢幕喚醒鎖
+    releaseWakeLock();
   }
 }
+
+// ===== 螢幕保持喚醒（避免朗讀途中因為太久沒碰螢幕而自動熄屏鎖定中斷）=====
+// 注意：這只能防止「自動熄屏」，如果手動按電源鍵鎖屏，系統仍會強制中斷背景分頁的執行，這是手機系統層級的限制。
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (err) {
+    // 裝置不支援或無法取得，不影響其他功能，只是朗讀途中螢幕可能還是會自動熄屏
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (err) { /* 忽略 */ }
+    wakeLock = null;
+  }
+}
+
+// 分頁切回前景時，如果朗讀還在進行中，嘗試重新取得喚醒鎖（有些瀏覽器切背景時會自動釋放）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && autoPlayActive && !wakeLock) {
+    requestWakeLock();
+  }
+});
 
 el.speakBtn.addEventListener('click', () => {
   if (autoPlayActive) {
     autoPlayActive = false;
     if (window.speechSynthesis) window.speechSynthesis.cancel();
     el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
     return;
   }
   if (itemsCache.length === 0) { showStatus('今天沒有待辦事項'); return; }
   autoPlayActive = true;
+  requestWakeLock();
   runAutoPlay();
 });
 
@@ -491,6 +527,7 @@ function stopSpeakingIfNeeded() {
   if (autoPlayActive) {
     autoPlayActive = false;
     el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
   }
 }
 
