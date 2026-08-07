@@ -344,6 +344,33 @@
     font-size: 13px;
     color: var(--text-sub);
   }
+  .repeat-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .repeat-row .repeat-options {
+    display: flex;
+    gap: 6px;
+  }
+  .repeat-row button {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .repeat-row button.active {
+    background: var(--purple);
+    color: white;
+  }
   .switch {
     position: relative;
     display: inline-block;
@@ -467,6 +494,15 @@
     <button class="btn" id="tcSpeakBtn" style="background: var(--purple);">🔊 開始連禱</button>
   </div>
 
+  <div class="repeat-row">
+    <span>每項朗讀次數：</span>
+    <div class="repeat-options" id="tcRepeatOptions">
+      <button type="button" data-count="1">1 次</button>
+      <button type="button" data-count="2">2 次</button>
+      <button type="button" data-count="3">3 次</button>
+    </div>
+  </div>
+
   <div class="toggle-row">
     <label class="switch">
       <input type="checkbox" id="tcPureReadToggle" checked>
@@ -567,6 +603,7 @@ const el = {
   tcCompleteBtn: document.getElementById('tcCompleteBtn'),
   tcRandomBtn: document.getElementById('tcRandomBtn'),
   tcSpeakBtn: document.getElementById('tcSpeakBtn'),
+  tcRepeatOptions: document.getElementById('tcRepeatOptions'),
   tcPureReadToggle: document.getElementById('tcPureReadToggle'),
   tcJumpInput: document.getElementById('tcJumpInput'),
   tcJumpBtn: document.getElementById('tcJumpBtn'),
@@ -1053,7 +1090,7 @@ el.tcWeekdaySelect.addEventListener('change', () => {
 });
 
 // ===== 朗讀（連禱）功能：跟 index.html 完全一樣 =====
-const TC_REPEATS_PER_ITEM = 3;
+let tcRepeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
 let tcAutoPrayActive = false;
 let tcPureReadMode = true;
 let tcZhVoice = null;
@@ -1061,6 +1098,20 @@ let tcZhVoice = null;
 el.tcPureReadToggle.addEventListener('change', (e) => {
   tcPureReadMode = e.target.checked;
 });
+
+function tcUpdateRepeatButtons() {
+  el.tcRepeatOptions.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === tcRepeatCount);
+  });
+}
+el.tcRepeatOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-count]');
+  if (!btn) return;
+  tcRepeatCount = parseInt(btn.dataset.count, 10);
+  localStorage.setItem('prayerRepeatCount', String(tcRepeatCount));
+  tcUpdateRepeatButtons();
+});
+tcUpdateRepeatButtons();
 
 function tcLoadVoices() {
   const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
@@ -1104,9 +1155,9 @@ async function tcRunAutoPray() {
         return;
       }
 
-      for (let i = 0; i < TC_REPEATS_PER_ITEM; i++) {
+      for (let i = 0; i < tcRepeatCount; i++) {
         if (!tcAutoPrayActive) return;
-        el.tcSpeakBtn.textContent = `⏹ 停止連禱（${i + 1}/${TC_REPEATS_PER_ITEM}）`;
+        el.tcSpeakBtn.textContent = `⏹ 停止連禱（${i + 1}/${tcRepeatCount}）`;
         await tcSpeakOnePass(el.tcPrayerText.value);
       }
       if (!tcAutoPrayActive) return;
