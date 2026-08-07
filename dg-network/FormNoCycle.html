@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+      max-width: 480px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: #333;
+    }
+    h2 { color: #4a3b8f; margin-bottom: 4px; }
+    p.desc { color: #777; font-size: 13px; margin-top: 0; }
+    label { display: block; margin-top: 16px; font-weight: 500; font-size: 14px; }
+    input, textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      margin-top: 20px;
+      padding: 10px 24px;
+      background: #4a3b8f;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 12px; font-size: 14px; }
+    #hint { font-size: 12px; color: #4a3b8f; margin-top: 6px; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h2>代禱表單</h2>
+  <p class="desc">輸入姓名後若已有紀錄，會自動帶出舊資料供你編輯</p>
+
+  <label>姓名</label>
+  <input type="text" id="name" onblur="lookup()" placeholder="輸入姓名後移開游標即查詢">
+  <div id="hint"></div>
+
+  <!-- 這個版本不顯示 DG 週期欄位：有舊資料就沿用原本的週期，沒有的話預設「每月」 -->
+  <input type="hidden" id="cycle" value="">
+
+  <label>備註</label>
+  <textarea id="note" placeholder="選填"></textarea>
+
+  <button onclick="submitForm()" id="submitBtn">送出</button>
+  <div id="status"></div>
+
+  <script>
+    let matchedRows = []; // 記住查詢時抓到的同名列號，送出時要一併帶回去
+    const DEFAULT_CYCLE = '每月';
+
+    function lookup() {
+      const name = document.getElementById('name').value.trim();
+      const hint = document.getElementById('hint');
+      const cycleField = document.getElementById('cycle');
+      matchedRows = [];
+
+      if (!name) { hint.innerText = ''; return; }
+      hint.innerText = '查詢中...';
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res) {
+            matchedRows = res.rows;
+            document.getElementById('note').value = res.note;
+
+            if (res.cycles.length >= 1) {
+              // 有設定過週期（一種或多種都算），沿用第一筆抓到的週期，畫面上不顯示、不用選
+              cycleField.value = res.cycles[0];
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，已合併備註，送出後將整併為 1 筆';
+            } else {
+              // 有資料但週期是空的，套用預設週期
+              cycleField.value = DEFAULT_CYCLE;
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，已合併備註，送出後將整併為 1 筆';
+            }
+          } else {
+            cycleField.value = DEFAULT_CYCLE;
+            document.getElementById('note').value = '';
+            hint.innerText = '查無舊資料，送出後將新增一筆';
+          }
+        })
+        .withFailureHandler(function(err) {
+          hint.innerText = '查詢失敗：' + err.message;
+        })
+        .lookupByName(name);
+    }
+
+    function submitForm() {
+      const name = document.getElementById('name').value.trim();
+      const cycleField = document.getElementById('cycle');
+      const statusEl = document.getElementById('status');
+
+      if (!name) {
+        statusEl.innerText = '請輸入姓名';
+        return;
+      }
+      if (!cycleField.value) cycleField.value = DEFAULT_CYCLE;
+
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      const data = {
+        name: name,
+        cycle: cycleField.value,
+        note: document.getElementById('note').value,
+        rows: matchedRows // 把查詢時記住的列號傳回去，後端會合併成一列
+      };
+      statusEl.innerText = '送出中...';
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (res.status === 'updated') {
+            statusEl.innerText = res.mergedCount > 1
+              ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
+              : '已更新原紀錄！';
+          } else {
+            statusEl.innerText = '已新增資料！';
+          }
+          btn.disabled = false;
+        })
+        .withFailureHandler(function(err) {
+          statusEl.innerText = '發生錯誤：' + err.message;
+          btn.disabled = false;
+        })
+        .submitForm(data);
+    }
+  </script>
+</body>
+</html>

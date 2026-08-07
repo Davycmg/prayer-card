@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>禱告首頁</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
+<style>
+  :root {
+    --purple: #674ea7;
+    --gray-bg: #f5f5f7;
+    --text-main: #1a1a1a;
+    --text-sub: #666666;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px;
+  }
+  .header {
+    width: 100%;
+    max-width: 960px;
+    text-align: center;
+    padding: 12px 0 28px;
+  }
+  .header h1 {
+    font-size: 24px;
+    color: var(--purple);
+    margin: 0;
+  }
+  .columns {
+    width: 100%;
+    max-width: 960px;
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .column {
+    flex: 1 1 260px;
+    max-width: 300px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 28px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .column .icon {
+    font-size: 40px;
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .column h2 {
+    font-size: 18px;
+    margin: 0 0 8px;
+    color: var(--text-main);
+  }
+  .column p {
+    font-size: 13px;
+    color: var(--text-sub);
+    margin: 0 0 20px;
+    line-height: 1.5;
+  }
+  .column a.btn {
+    display: block;
+    width: 100%;
+    padding: 14px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    background: var(--purple);
+    text-decoration: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .column a.btn:active { opacity: 0.7; }
+  .column .progress {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 14px;
+  }
+  .query-row {
+    width: 100%;
+    max-width: 960px;
+    margin-top: 16px;
+  }
+  .query-row a.btn {
+    display: block;
+    width: 100%;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    text-decoration: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .query-row a.btn + a.btn {
+    margin-top: 10px;
+  }
+  .query-row a.btn:active { opacity: 0.7; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🙏 禱告首頁</h1>
+</div>
+
+<div class="columns">
+  <div class="column">
+    <div class="icon">🔁</div>
+    <h2>為習慣禱告</h2>
+    <p>從 Google 日曆抓出今天的行程，依重複規則逐項為習慣代禱</p>
+    <a class="btn" href="calendar.html">開始</a>
+  </div>
+
+  <div class="column">
+    <div class="icon">🌐</div>
+    <h2>為網絡禱告</h2>
+    <p>DG 網絡的代禱卡片，今天待代禱的名單</p>
+    <div class="progress" id="networkProgress">今日完成率：載入中...</div>
+    <a class="btn" href="https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec?view=card">開始</a>
+  </div>
+
+  <div class="column">
+    <div class="icon">🙏</div>
+    <h2>多方禱告</h2>
+    <p>禱告卡片主清單，今天待禱告的事項</p>
+    <div class="progress" id="multiProgress">今日完成率：載入中...</div>
+    <a class="btn" href="index.html">開始</a>
+  </div>
+
+  <div class="column">
+    <div class="icon">📋</div>
+    <h2>今日待辦禱告</h2>
+    <p>從 Google Tasks 預設清單抓出還沒完成的項目，逐項代禱</p>
+    <a class="btn" href="today.html">開始</a>
+  </div>
+</div>
+
+<div class="query-row">
+  <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
+  <a class="btn" href="add-item.html">➕ 新增禱告事項</a>
+</div>
+
+<script>
+const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
+
+async function loadProgress(apiUrl, elId) {
+  const el = document.getElementById(elId);
+  try {
+    const url = apiUrl + '?' + new URLSearchParams({ action: 'getPrayerProgress', _t: Date.now() }).toString();
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    el.textContent = `今日完成率：${data.rate}%（${data.completed}/${data.total}）`;
+  } catch (err) {
+    el.textContent = '今日完成率：載入失敗';
+  }
+}
+
+loadProgress(NETWORK_API_URL, 'networkProgress');
+loadProgress(MULTI_API_URL, 'multiProgress');
+</script>
+
+</body>
+</html>

@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>禱告卡片</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
 <style>
   :root {
     --purple: #674ea7;
@@ -94,7 +95,14 @@
     background: white;
   }
   .meta-field.cycle select { background: var(--yellow); }
+  .meta-field.cycle select.cycle-empty {
+    background: #ff8a80;
+    border: 1px solid #d32f2f;
+    color: #7a0000;
+    font-weight: bold;
+  }
   .meta-field.tag select { background: var(--blue); }
+  .meta-field.weekday select { background: #d9ead3; }
   .note {
     margin-top: 14px;
     font-size: 13px;
@@ -327,6 +335,13 @@
     </div>
   </div>
 
+  <div class="meta-row">
+    <div class="meta-field weekday">
+      <label>星期標籤</label>
+      <select id="weekdaySelect"></select>
+    </div>
+  </div>
+
   <div class="add-tag-row">
     <input type="text" id="newTagInput" placeholder="新增標籤...">
     <label class="add-tag-checkbox">
@@ -337,6 +352,7 @@
   </div>
 
   <button class="copy-tasks-btn" id="copyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
+  <button class="copy-tasks-btn" id="addToCalendarBtn">📅 新增到日曆（依週期重複）</button>
 
   <div class="note" id="noteText"></div>
 </div>
@@ -390,7 +406,24 @@ const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', 'W': 'W每週', 'DW': 'DW每兩週',
   'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
 };
-const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告' };
+const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
+// 週期文字（跟 CYCLE_MAP 的值一致）對應 Google 日曆的 RRULE 重複規則
+const CYCLE_RRULE_MAP = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
+};
+const WEEKDAY_MAP = {
+  '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
+  '週五': '週五', '週六': '週六', '週日': '週日'
+};
 
 // ===== 本地暫存區：一次抓好今天的清單，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
 let itemsCache = [];   // [{row, text, cycle, note, tag}, ...]
@@ -402,10 +435,12 @@ const el = {
   prayerText: document.getElementById('prayerText'),
   cycleSelect: document.getElementById('cycleSelect'),
   tagSelect: document.getElementById('tagSelect'),
+  weekdaySelect: document.getElementById('weekdaySelect'),
   newTagInput: document.getElementById('newTagInput'),
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
+  addToCalendarBtn: document.getElementById('addToCalendarBtn'),
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -456,12 +491,19 @@ function populateTagSelect() {
     el.tagSelect.appendChild(opt);
   });
 
-  customTagsCache.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v + '（自訂）';
-    el.tagSelect.appendChild(opt);
-  });
+  customTagsCache
+    .filter(v => !WEEKDAY_MAP[v]) // 週一～週日獨立到另一個下拉選單，不在這裡重複出現
+    .forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = v + '（自訂）';
+      el.tagSelect.appendChild(opt);
+    });
+}
+
+// 週期空白時，用醒目底色提醒需要補上週期
+function updateCycleWarning() {
+  el.cycleSelect.classList.toggle('cycle-empty', !el.cycleSelect.value);
 }
 
 function setLoading(show) {
@@ -496,8 +538,10 @@ function renderFromCache(pos) {
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
   el.prayerText.value = item.text || '';
   el.cycleSelect.value = item.cycle || '';
-  el.tagSelect.value = item.tag || '';
+  el.tagSelect.value = WEEKDAY_MAP[item.tag] ? '' : (item.tag || '');
+  el.weekdaySelect.value = WEEKDAY_MAP[item.tag] ? item.tag : '';
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+  updateCycleWarning();
 }
 
 function renderEmptyState() {
@@ -505,7 +549,9 @@ function renderEmptyState() {
   el.prayerText.value = '🎉 今天沒有需要禱告的事項';
   el.cycleSelect.value = '';
   el.tagSelect.value = '';
+  el.weekdaySelect.value = '';
   el.noteText.textContent = '';
+  updateCycleWarning();
 }
 
 // 初始載入：一次抓好整份今日待辦清單
@@ -525,6 +571,7 @@ async function loadAllItems() {
 
 async function init() {
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
+  populateSelect(el.weekdaySelect, WEEKDAY_MAP, '選擇星期標籤');
   await loadTagList();
   populateTagSelect();
   await loadAllItems();
@@ -539,6 +586,7 @@ el.addTagBtn.addEventListener('click', async () => {
   const item = itemsCache[cachePos];
   item.tag = newTag;
   el.tagSelect.value = ''; // 自訂值不一定在下拉選單裡，先清空避免顯示錯亂
+  el.weekdaySelect.value = '';
   const rowRef = item.row;
 
   // 套用到目前這項，背景同步（不阻塞畫面）
@@ -569,9 +617,37 @@ el.addTagBtn.addEventListener('click', async () => {
   el.newTagInput.value = '';
 });
 
+// 需要點兩下才會真的觸發，避免手機上滑動、誤觸就直接複製/開日曆：
+// 第一下只是進入「待確認」狀態（按鈕文字換成提示），CONFIRM_TIMEOUT_MS 內點第二下才會真的執行，
+// 逾時或點其他按鈕就自動還原，不會誤觸發。
+const CONFIRM_TIMEOUT_MS = 1000;
+
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+
+  function reset() {
+    confirming = false;
+    clearTimeout(resetTimer);
+    btn.textContent = originalText;
+  }
+
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+
 // 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
 // 用來解決「標籤本來就已經是task預設清單、change事件不會觸發」的限制，可以隨時重複按。
-el.copyToTasksBtn.addEventListener('click', () => {
+armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
 
@@ -584,6 +660,34 @@ el.copyToTasksBtn.addEventListener('click', () => {
       }
     })
     .catch(err => showStatus('複製失敗：' + err.message));
+});
+
+// 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  const rrule = CYCLE_RRULE_MAP[item.cycle];
+  if (!rrule) { showStatus('請先設定週期才能加入日曆'); return; }
+
+  const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+
+  // 用明天當第一次提醒日期，全天活動
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: item.text || '',
+    recur: rrule
+  });
+
+  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
 });
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
@@ -683,6 +787,7 @@ el.cycleSelect.addEventListener('change', () => {
   if (!el.cycleSelect.value || itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
   item.cycle = el.cycleSelect.value;
+  updateCycleWarning();
   apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
     .then(() => showStatus('週期已更新'))
     .catch(err => showStatus('更新失敗：' + err.message));
@@ -692,6 +797,26 @@ el.tagSelect.addEventListener('change', () => {
   if (!el.tagSelect.value || itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
   item.tag = el.tagSelect.value;
+  el.weekdaySelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
+  const rowRef = item.row;
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+    .then(data => {
+      if (data && data.exported) {
+        showStatus('已複製到對應 Google Tasks 清單');
+      } else if (data && data.copied) {
+        showStatus('標籤已更新並複製到 Google Tasks');
+      } else {
+        showStatus('標籤已更新');
+      }
+    })
+    .catch(err => showStatus('更新失敗：' + err.message));
+});
+
+el.weekdaySelect.addEventListener('change', () => {
+  if (!el.weekdaySelect.value || itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  item.tag = el.weekdaySelect.value;
+  el.tagSelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
   const rowRef = item.row;
   apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
     .then(data => {

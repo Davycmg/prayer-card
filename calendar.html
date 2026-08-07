@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>為習慣禱告</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔁</text></svg>">
+<style>
+  :root {
+    --purple: #674ea7;
+    --purple-light: #d9d2e9;
+    --green: #6aa84f;
+    --yellow: #fff2cc;
+    --gray-bg: #f5f5f7;
+    --text-main: #1a1a1a;
+    --text-sub: #666666;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .header {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    padding: 12px 0;
+  }
+  .header h1 {
+    font-size: 20px;
+    color: var(--purple);
+    margin: 0;
+  }
+  .progress {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 4px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px 20px;
+    margin-top: 12px;
+  }
+  .event-time {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-bottom: 6px;
+  }
+  .prayer-text {
+    font-size: 22px;
+    line-height: 1.6;
+    min-height: 100px;
+    white-space: pre-wrap;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    resize: none;
+    color: var(--text-main);
+  }
+  .meta-row {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .meta-field {
+    flex: 1;
+    min-width: 130px;
+  }
+  .meta-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 4px;
+  }
+  .meta-field select {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+    background: var(--yellow);
+    color: var(--text-main);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-sub);
+    white-space: pre-wrap;
+  }
+  .export-btn {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 16px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .export-btn:active { opacity: 0.7; }
+  .danger-zone {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: center;
+  }
+  .danger-zone button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    color: #b0413e;
+    font-size: 13px;
+    opacity: 0.6;
+  }
+  .danger-zone button:active { opacity: 1; }
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--purple);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn.secondary { background: var(--green); }
+  .jump-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+  .jump-row input {
+    width: 70px;
+    padding: 8px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .toggle-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+    border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px; width: 18px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--purple); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  .status {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    height: 16px;
+    text-align: center;
+  }
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: var(--purple);
+    display: none;
+  }
+  .loading-overlay.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🔁 為習慣禱告</h1>
+  <div class="progress" id="progress">載入中...</div>
+</div>
+
+<div class="card">
+  <div class="event-time" id="eventTime"></div>
+  <textarea class="prayer-text" id="eventText" placeholder="今天沒有行程"></textarea>
+
+  <div class="meta-row">
+    <div class="meta-field cycle">
+      <label>週期</label>
+      <select id="cycleSelect"></select>
+    </div>
+  </div>
+
+  <div class="note" id="noteText"></div>
+</div>
+
+<button class="export-btn" id="exportToSheetBtn">📤 匯出到禱告卡片清單（表單回覆 1）</button>
+<button class="export-btn" id="exportToTasksBtn">📋 匯出到 Google Tasks 預設清單</button>
+
+<div class="danger-zone">
+  <button id="deleteBtn">🗑 刪除這個行程（重複行程會整個系列一起刪除）</button>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="prevBtn">◀ 上一項</button>
+  <button class="btn" id="nextBtn">下一項 ▶</button>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn" id="speakBtn" style="background: var(--purple);">🔊 開始朗讀</button>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="pureReadToggle" checked disabled>
+    <span class="slider"></span>
+  </label>
+  <span>純朗讀模式（唸一輪自動停止）</span>
+</div>
+
+<div class="jump-row">
+  <input type="number" id="jumpInput" placeholder="第幾項" min="1">
+  <button id="jumpBtn">跳到</button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<script>
+// ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getTodayCalendarEvents 這個 action）
+const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
+
+// 跟後端 CALENDAR_CYCLE_RRULE_MAP_／cycleLabelToRRule_ 一致的顯示文字，「不重複」代表移除重複規則
+const CYCLE_OPTIONS = [
+  '不重複',
+  'D每天', '2每兩天', '3每三天',
+  'W每週', 'W每週（平日）', 'W每週（週末）',
+  'W每週（一）', 'W每週（二）', 'W每週（三）', 'W每週（四）', 'W每週（五）', 'W每週（六）', 'W每週（日）',
+  'DW每兩週',
+  'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'
+];
+
+// ===== 本地暫存區：一次抓好今天的行程，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
+let itemsCache = [];   // [{id, recurringEventId, text, time, note, cycle}, ...]
+let cachePos = 0;
+let saveTimer = null;
+
+const el = {
+  progress: document.getElementById('progress'),
+  eventTime: document.getElementById('eventTime'),
+  eventText: document.getElementById('eventText'),
+  cycleSelect: document.getElementById('cycleSelect'),
+  noteText: document.getElementById('noteText'),
+  exportToSheetBtn: document.getElementById('exportToSheetBtn'),
+  exportToTasksBtn: document.getElementById('exportToTasksBtn'),
+  deleteBtn: document.getElementById('deleteBtn'),
+  prevBtn: document.getElementById('prevBtn'),
+  nextBtn: document.getElementById('nextBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  speakBtn: document.getElementById('speakBtn'),
+  jumpInput: document.getElementById('jumpInput'),
+  jumpBtn: document.getElementById('jumpBtn'),
+  status: document.getElementById('status'),
+  loadingOverlay: document.getElementById('loadingOverlay')
+};
+
+function setLoading(show) {
+  el.loadingOverlay.classList.toggle('show', show);
+}
+
+function showStatus(msg) {
+  el.status.textContent = msg;
+  setTimeout(() => { el.status.textContent = ''; }, 1800);
+}
+
+async function apiCall(params) {
+  params._t = Date.now(); // 加時間戳記，繞過瀏覽器快取
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// 依目前這項的週期文字，重建下拉選單選項；如果是無法對應到標準週期的自訂規則文字，
+// 先插入一個代表目前值的選項，讓畫面顯示正確，選別的選項才會套用成標準週期。
+function populateCycleSelect(currentLabel) {
+  const options = CYCLE_OPTIONS.slice();
+  const label = currentLabel || '不重複';
+  if (options.indexOf(label) === -1) options.unshift(label);
+
+  el.cycleSelect.innerHTML = '';
+  options.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.cycleSelect.appendChild(opt);
+  });
+  el.cycleSelect.value = label;
+}
+
+function renderFromCache(pos) {
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+    return;
+  }
+  cachePos = ((pos % itemsCache.length) + itemsCache.length) % itemsCache.length;
+  const item = itemsCache[cachePos];
+
+  el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
+  el.eventTime.textContent = item.time || '';
+  el.eventText.value = item.text || '';
+  el.eventText.readOnly = false;
+  populateCycleSelect(item.cycle);
+  el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+}
+
+function renderEmptyState() {
+  el.progress.textContent = '第 0 項 / 共 0 項';
+  el.eventTime.textContent = '';
+  el.eventText.value = '🎉 今天沒有行程';
+  el.eventText.readOnly = true;
+  el.cycleSelect.innerHTML = '';
+  el.noteText.textContent = '';
+}
+
+async function loadTodayEvents() {
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'getTodayCalendarEvents' });
+    itemsCache = data.items || [];
+    cachePos = 0;
+    renderFromCache(0);
+  } catch (err) {
+    showStatus('載入失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// 標題編輯 → 本地暫存同步更新 + 背景同步API（打字後停頓1秒才送出）。
+// 是重複行程的話會用 recurringEventId 改整個系列，所有次的標題會一起更新。
+el.eventText.addEventListener('input', () => {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    if (itemsCache.length === 0) return;
+    const item = itemsCache[cachePos];
+    item.text = el.eventText.value;
+    apiCall({ action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value: item.text })
+      .then(() => showStatus('已同步'))
+      .catch(err => showStatus('同步失敗：' + err.message));
+  }, 1000);
+});
+
+// 週期選單改變 → 直接改寫 Google 日曆上的重複規則（是重複行程就整個系列一起改）
+el.cycleSelect.addEventListener('change', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const newValue = el.cycleSelect.value;
+  item.cycle = newValue;
+
+  setLoading(true);
+  apiCall({
+    action: 'updateCalendarEventCycle',
+    eventId: item.id,
+    recurringEventId: item.recurringEventId || '',
+    value: newValue
+  })
+    .then(() => showStatus('週期已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message))
+    .finally(() => setLoading(false));
+});
+
+// 匯出：把這個行程連同目前週期，複製成「表單回覆 1」的一筆新資料，
+// 不會動到原本的日曆行程，可以重複按（每按一次就多新增一筆）。
+el.exportToSheetBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  setLoading(true);
+  try {
+    await apiCall({ action: 'exportCalendarEventToPrayerSheet', value: item.text || '', cycle: item.cycle || '' });
+    showStatus('已匯出到禱告卡片清單');
+  } catch (err) {
+    showStatus('匯出失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+// 匯出：把這個行程複製到 Google Tasks 預設清單，不會動到原本的日曆行程，可以重複按。
+el.exportToTasksBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  apiCall({ action: 'exportCalendarEventToTasks', value: item.text || '' })
+    .then(data => {
+      if (data && data.copied) {
+        showStatus('已複製到 Google Tasks 預設清單');
+      } else {
+        showStatus('複製失敗，請稍後再試');
+      }
+    })
+    .catch(err => showStatus('複製失敗：' + err.message));
+});
+
+// 刪除：直接刪掉 Google 日曆上的原始行程（重複行程會整個系列一起刪除），需要等API確認成功
+el.deleteBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const preview = (item.text || '').slice(0, 20);
+  const isRecurring = !!item.recurringEventId;
+  const confirmed = window.confirm(
+    '確定要刪除「' + preview + '」這個行程嗎？\n\n' +
+    (isRecurring ? '這是重複行程，會刪除整個系列。' : '') +
+    '\n這個動作無法復原。'
+  );
+  if (!confirmed) return;
+
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await apiCall({ action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' });
+    itemsCache.splice(cachePos, 1);
+    if (itemsCache.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromCache(cachePos);
+    }
+    showStatus('已刪除');
+  } catch (err) {
+    showStatus('刪除失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.prevBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos - 1);
+});
+
+el.nextBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos + 1);
+});
+
+el.randomBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromCache(Math.floor(Math.random() * itemsCache.length));
+});
+
+el.jumpBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) { showStatus('今天沒有行程'); return; }
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  renderFromCache(val - 1);
+  el.jumpInput.value = '';
+});
+
+// ===== 朗讀：純本地操作，唸完一輪（每項3次）自動停止，不會呼叫任何寫入API =====
+const REPEATS_PER_ITEM = 3;
+let autoPlayActive = false;
+let zhVoice = null;
+
+function loadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  zhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakOnePass(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text || !text.trim()) { resolve(); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-TW';
+    if (zhVoice) utter.voice = zhVoice;
+    utter.rate = 0.95;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function runAutoPlay() {
+  const totalAtStart = itemsCache.length;
+  let loopCount = 0;
+
+  while (autoPlayActive) {
+    if (itemsCache.length === 0) {
+      autoPlayActive = false;
+      el.speakBtn.textContent = '🔊 開始朗讀';
+      showStatus('今天沒有行程 🎉');
+      return;
+    }
+
+    for (let i = 0; i < REPEATS_PER_ITEM; i++) {
+      if (!autoPlayActive) return;
+      el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${REPEATS_PER_ITEM}）`;
+      await speakOnePass(el.eventText.value);
+    }
+    if (!autoPlayActive) return;
+
+    loopCount++;
+    if (loopCount >= totalAtStart) {
+      autoPlayActive = false;
+      el.speakBtn.textContent = '🔊 開始朗讀';
+      showStatus('本輪已唸完一遍 🙏');
+      return;
+    }
+    renderFromCache(cachePos + 1);
+  }
+}
+
+el.speakBtn.addEventListener('click', () => {
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    return;
+  }
+  if (itemsCache.length === 0) { showStatus('今天沒有行程'); return; }
+  autoPlayActive = true;
+  runAutoPlay();
+});
+
+function stopSpeakingIfNeeded() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    el.speakBtn.textContent = '🔊 開始朗讀';
+  }
+}
+
+loadTodayEvents();
+</script>
+
+</body>
+</html>

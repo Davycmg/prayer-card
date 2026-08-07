@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: 'Roboto', 'Noto Sans TC', sans-serif;
+      max-width: 480px;
+      margin: 24px auto;
+      padding: 0 16px;
+      color: #333;
+    }
+    h2 { color: #4a3b8f; margin-bottom: 4px; }
+    p.desc { color: #777; font-size: 13px; margin-top: 0; }
+    .person-block {
+      margin-top: 20px;
+      padding: 14px;
+      border: 1px solid #e0ddf0;
+      border-radius: 8px;
+      background: #faf9ff;
+    }
+    .person-name {
+      font-weight: 700;
+      font-size: 16px;
+      color: #4a3b8f;
+    }
+    .person-hint {
+      font-size: 12px;
+      color: #4a3b8f;
+      margin-top: 4px;
+      min-height: 16px;
+    }
+    label { display: block; margin-top: 10px; font-weight: 500; font-size: 14px; }
+    textarea {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      box-sizing: border-box;
+      font-size: 14px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: inherit;
+      min-height: 60px;
+      resize: vertical;
+    }
+    textarea.new-input { min-height: 50px; }
+    button {
+      margin-top: 24px;
+      padding: 10px 24px;
+      background: #4a3b8f;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      width: 100%;
+    }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    #status { margin-top: 12px; font-size: 14px; text-align: center; }
+    #copyBtn {
+      margin-top: 0;
+      background: white;
+      color: #4a3b8f;
+      border: 1px solid #4a3b8f;
+    }
+    #copyStatus { margin-top: 6px; font-size: 13px; text-align: center; color: #4a3b8f; min-height: 16px; }
+  </style>
+</head>
+<body>
+  <h2>中午RPG</h2>
+  <p class="desc">固定列出以下幾位；「新增內容」是這次要輸入的，送出時會自動併入既有備註</p>
+
+  <button onclick="copyAll()" id="copyBtn">📋 一鍵複製新輸入內容</button>
+  <div id="copyStatus"></div>
+
+  <div id="personList"></div>
+
+  <button onclick="submitAll()" id="submitBtn">全部送出</button>
+  <div id="status"></div>
+
+  <script>
+    // 跟後端 Code.js 的 FIXED_ROSTER_NAMES 保持一致，顯示順序以這裡為準
+    const FIXED_NAMES = ['王銓興', '陳豪雷', '張天維', '郭大衛', '賴秀華', '江吉昇', '劉彥漢', '李麗文', '何雅雯'];
+    const DEFAULT_CYCLE = '每月';
+
+    // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期、
+    // existingNote = 查詢到的舊備註（唯讀欄位顯示用，送出時當作底稿，把新增內容併進去）
+    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '', existingNote: '' }));
+
+    function personBlockHtml(name, idx) {
+      return (
+        '<div class="person-block">' +
+          '<div class="person-name">' + name + '</div>' +
+          '<div class="person-hint" id="hint-' + idx + '">查詢中...</div>' +
+          '<label>新增內容</label>' +
+          '<textarea id="new-note-' + idx + '" class="new-input" placeholder="這次要新增的內容..."></textarea>' +
+        '</div>'
+      );
+    }
+
+    function renderList() {
+      document.getElementById('personList').innerHTML =
+        FIXED_NAMES.map(function (name, idx) { return personBlockHtml(name, idx); }).join('');
+    }
+
+    function lookupOne(idx) {
+      const name = FIXED_NAMES[idx];
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function (res) {
+            const hint = document.getElementById('hint-' + idx);
+
+            if (res) {
+              state[idx].rows = res.rows;
+              state[idx].cycle = res.cycles.length >= 1 ? res.cycles[0] : DEFAULT_CYCLE;
+              state[idx].existingNote = res.note || '';
+              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，送出後將整併為 1 筆';
+            } else {
+              state[idx].rows = [];
+              state[idx].cycle = DEFAULT_CYCLE;
+              state[idx].existingNote = '';
+              hint.innerText = '查無舊資料，送出後將新增一筆';
+            }
+            resolve();
+          })
+          .withFailureHandler(function (err) {
+            document.getElementById('hint-' + idx).innerText = '查詢失敗：' + err.message;
+            state[idx].cycle = DEFAULT_CYCLE;
+            resolve();
+          })
+          .lookupByName(name);
+      });
+    }
+
+    async function init() {
+      renderList();
+      // 依序查詢（不用 Promise.all 平行送出，避免同時打太多 google.script.run 造成不穩定）
+      for (let i = 0; i < FIXED_NAMES.length; i++) {
+        await lookupOne(i);
+      }
+    }
+
+    // 送出時把「新增內容」併入「舊備註」：舊備註不變地保留在前面，新增內容接在後面（換行分隔）；
+    // 新增內容是空的話就只送舊備註，等於這個人這次沒有變動。
+    function mergedNote(idx) {
+      const oldNote = state[idx].existingNote || '';
+      const newNote = (document.getElementById('new-note-' + idx).value || '').trim();
+      if (!newNote) return oldNote;
+      return oldNote ? (oldNote + '\n' + newNote) : newNote;
+    }
+
+    function submitOne(idx) {
+      const name = FIXED_NAMES[idx];
+      const note = mergedNote(idx);
+      const cycle = state[idx].cycle || DEFAULT_CYCLE;
+
+      return new Promise(function (resolve) {
+        google.script.run
+          .withSuccessHandler(function () { resolve({ name: name, ok: true }); })
+          .withFailureHandler(function (err) { resolve({ name: name, ok: false, error: err.message }); })
+          .submitForm({ name: name, cycle: cycle, note: note, rows: state[idx].rows });
+      });
+    }
+
+    // 一鍵複製只抓「新增內容」欄位裡有打字的人，依 FIXED_NAMES 順序組成「姓名：新增內容」的文字。
+    function buildCopyText() {
+      return FIXED_NAMES
+        .map(function (name, idx) { return { name: name, idx: idx }; })
+        .map(function (p) {
+          return { name: p.name, newNote: (document.getElementById('new-note-' + p.idx).value || '').trim() };
+        })
+        .filter(function (p) { return p.newNote; })
+        .map(function (p) { return p.name + '：' + p.newNote; })
+        .join('\n\n');
+    }
+
+    async function copyAll() {
+      const copyStatus = document.getElementById('copyStatus');
+      const text = buildCopyText();
+
+      if (!text) {
+        copyStatus.innerText = '這次還沒有輸入任何內容';
+        setTimeout(function () { copyStatus.innerText = ''; }, 2500);
+        return;
+      }
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          // 舊瀏覽器/非安全環境沒有 navigator.clipboard，退回用隱藏 textarea + execCommand
+          const tmp = document.createElement('textarea');
+          tmp.value = text;
+          tmp.style.position = 'fixed';
+          tmp.style.opacity = '0';
+          document.body.appendChild(tmp);
+          tmp.focus();
+          tmp.select();
+          document.execCommand('copy');
+          document.body.removeChild(tmp);
+        }
+        copyStatus.innerText = '✅ 已複製到剪貼簿';
+      } catch (err) {
+        copyStatus.innerText = '複製失敗：' + err.message;
+      }
+      setTimeout(function () { copyStatus.innerText = ''; }, 2500);
+    }
+
+    async function submitAll() {
+      const btn = document.getElementById('submitBtn');
+      const statusEl = document.getElementById('status');
+      btn.disabled = true;
+      statusEl.innerText = '送出中...';
+
+      const results = [];
+      for (let i = 0; i < FIXED_NAMES.length; i++) {
+        results.push(await submitOne(i));
+      }
+
+      const failed = results.filter(function (r) { return !r.ok; });
+      if (failed.length === 0) {
+        statusEl.innerText = '✅ 已更新全部 ' + results.length + ' 位的資料！';
+      } else {
+        statusEl.innerText = '⚠️ ' + failed.length + ' 位更新失敗：' +
+          failed.map(function (r) { return r.name + '（' + r.error + '）'; }).join('、');
+      }
+      btn.disabled = false;
+    }
+
+    init();
+  </script>
+</body>
+</html>
