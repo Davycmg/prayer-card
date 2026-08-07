@@ -43,10 +43,6 @@
       min-height: 60px;
       resize: vertical;
     }
-    textarea[readonly] {
-      background: #f0eff7;
-      color: #666;
-    }
     textarea.new-input { min-height: 50px; }
     button {
       margin-top: 24px;
@@ -71,8 +67,8 @@
   </style>
 </head>
 <body>
-  <h2>代禱表單（固定名單）</h2>
-  <p class="desc">固定列出以下幾位；「舊備註」是唯讀參考、「新增內容」才是這次要輸入的，送出時會自動併入舊備註</p>
+  <h2>中午RPG</h2>
+  <p class="desc">固定列出以下幾位；「新增內容」是這次要輸入的，送出時會自動併入既有備註</p>
 
   <button onclick="copyAll()" id="copyBtn">📋 一鍵複製新輸入內容</button>
   <div id="copyStatus"></div>
@@ -96,8 +92,6 @@
         '<div class="person-block">' +
           '<div class="person-name">' + name + '</div>' +
           '<div class="person-hint" id="hint-' + idx + '">查詢中...</div>' +
-          '<label>舊備註（唯讀）</label>' +
-          '<textarea id="old-note-' + idx + '" readonly></textarea>' +
           '<label>新增內容</label>' +
           '<textarea id="new-note-' + idx + '" class="new-input" placeholder="這次要新增的內容..."></textarea>' +
         '</div>'
@@ -115,19 +109,16 @@
         google.script.run
           .withSuccessHandler(function (res) {
             const hint = document.getElementById('hint-' + idx);
-            const oldNoteEl = document.getElementById('old-note-' + idx);
 
             if (res) {
               state[idx].rows = res.rows;
               state[idx].cycle = res.cycles.length >= 1 ? res.cycles[0] : DEFAULT_CYCLE;
               state[idx].existingNote = res.note || '';
-              oldNoteEl.value = state[idx].existingNote;
               hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料，送出後將整併為 1 筆';
             } else {
               state[idx].rows = [];
               state[idx].cycle = DEFAULT_CYCLE;
               state[idx].existingNote = '';
-              oldNoteEl.value = '';
               hint.innerText = '查無舊資料，送出後將新增一筆';
             }
             resolve();
@@ -171,8 +162,7 @@
       });
     }
 
-    // 一鍵複製只抓「新增內容」欄位裡有打字的人，依 FIXED_NAMES 順序組成「姓名：新增內容」的文字，
-    // 舊備註（唯讀欄位）完全不會被複製進去。
+    // 一鍵複製只抓「新增內容」欄位裡有打字的人，依 FIXED_NAMES 順序組成「姓名：新增內容」的文字。
     function buildCopyText() {
       return FIXED_NAMES
         .map(function (name, idx) { return { name: name, idx: idx }; })
