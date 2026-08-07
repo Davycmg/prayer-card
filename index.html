@@ -559,7 +559,7 @@ async function loadAllItems() {
   setLoading(true);
   try {
     const data = await apiCall({ action: 'getAllItems' });
-    itemsCache = data.items || [];
+    itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入');
     cachePos = 0;
     renderFromCache(0);
   } catch (err) {
