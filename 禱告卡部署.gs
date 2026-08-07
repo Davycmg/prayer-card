@@ -988,6 +988,15 @@ function doGet(e) {
       case 'exportCalendarEventToTasks':
         result = exportCalendarEventToTasks(e.parameter.value);
         break;
+      case 'getTodayTasksList':
+        result = getTodayTasksList();
+        break;
+      case 'updateTaskTitle':
+        result = updateTaskTitle(e.parameter.taskId, e.parameter.value);
+        break;
+      case 'completeTaskItem':
+        result = completeTaskItem(e.parameter.taskId);
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1188,6 +1197,55 @@ function exportCalendarEventToTasks(value) {
   if (!value) throw new Error('缺少事項內容');
   const copied = copyTextToDefaultTaskList_(value, '', '為習慣禱告日曆行程');
   return { success: copied, copied: copied };
+}
+
+/**
+ * 給 today.html 用：從 Google Tasks 預設清單（第一個清單）抓出所有未完成的項目，
+ * 當作「今天」的臨時清單——這份清單本身就是即時抓取，不額外存檔，
+ * 所以每次打開 today.html 都會自動反映當下 Google Tasks 預設清單的最新內容（等同「每天更新」）。
+ */
+function getTodayTasksList() {
+  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
+  if (!taskLists.items || taskLists.items.length === 0) {
+    return { items: [], total: 0 };
+  }
+  const defaultListId = taskLists.items[0].id;
+
+  const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
+  const items = (tasksResult.items || []).map(function (t) {
+    return {
+      id: t.id,
+      text: t.title || '(無標題)',
+      note: t.notes || ''
+    };
+  });
+
+  return { items: items, total: items.length };
+}
+
+/**
+ * 修改 Google Tasks 預設清單裡一個項目的標題。
+ */
+function updateTaskTitle(taskId, value) {
+  if (!taskId) throw new Error('缺少 Task ID');
+  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
+  if (!taskLists.items || taskLists.items.length === 0) throw new Error('找不到 Google Tasks 清單');
+  const defaultListId = taskLists.items[0].id;
+  Tasks.Tasks.patch({ title: value }, defaultListId, taskId);
+  return { success: true };
+}
+
+/**
+ * 把 Google Tasks 預設清單裡的一個項目標記為完成，讓它從 today.html 的清單消失
+ * （不是真的刪除，Tasks 裡還留著已完成的紀錄）。
+ */
+function completeTaskItem(taskId) {
+  if (!taskId) throw new Error('缺少 Task ID');
+  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
+  if (!taskLists.items || taskLists.items.length === 0) throw new Error('找不到 Google Tasks 清單');
+  const defaultListId = taskLists.items[0].id;
+  Tasks.Tasks.patch({ status: 'completed' }, defaultListId, taskId);
+  return { success: true };
 }
 
 /**
