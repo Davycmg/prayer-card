@@ -50,3 +50,5 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 `importReminders()`（匯入「提醒事項」PDF 內容到「表單回覆 1」，327 筆資料以 Base64 內嵌）這類一次性用途的 Apps Script 程式碼，**不會**存在這個 GitHub repo 裡（`git grep` 全歷史都找不到），因為是直接在 Apps Script 編輯器貼上執行一次、沒有透過 `clasp push` 推回 repo。
 
 `importReminders()` 這份 code 的原始出處：https://claude.ai/chat/82f4e06a-80c2-409e-8f49-563f0fddb7db
+
+2026-08-07 有一份更新版 `importReminders260807()`（同樣寫入同一份試算表／「表單回覆 1」，65 筆資料，標籤規則改成排除 `#安祺禱告` 與週期標籤），一樣只在 Apps Script 編輯器貼上執行一次，不進這個 repo。要執行的話貼到主要 prayer-card 專案：https://script.google.com/home/projects/1xh1RZ3UG79qlw7-uYbB_ahH52ilKz9CF-UEw-j7hr-rjtz3TeDK4NJFu/edit
