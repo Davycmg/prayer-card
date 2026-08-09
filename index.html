@@ -102,6 +102,12 @@
     font-weight: bold;
   }
   .meta-field.tag select { background: var(--blue); }
+  .meta-field.tag select.tag-highlight {
+    background: #ff8a80;
+    border: 1px solid #d32f2f;
+    color: #7a0000;
+    font-weight: bold;
+  }
   .meta-field.weekday select { background: #d9ead3; }
   .note {
     margin-top: 14px;
@@ -506,6 +512,11 @@ function updateCycleWarning() {
   el.cycleSelect.classList.toggle('cycle-empty', !el.cycleSelect.value);
 }
 
+// 標籤是 A安祺禱告 時，用醒目底色提醒
+function updateTagWarning() {
+  el.tagSelect.classList.toggle('tag-highlight', el.tagSelect.value === TAG_MAP['A']);
+}
+
 function setLoading(show) {
   el.loadingOverlay.classList.toggle('show', show);
 }
@@ -542,6 +553,7 @@ function renderFromCache(pos) {
   el.weekdaySelect.value = WEEKDAY_MAP[item.tag] ? item.tag : '';
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
   updateCycleWarning();
+  updateTagWarning();
 }
 
 function renderEmptyState() {
@@ -552,6 +564,7 @@ function renderEmptyState() {
   el.weekdaySelect.value = '';
   el.noteText.textContent = '';
   updateCycleWarning();
+  updateTagWarning();
 }
 
 // 初始載入：一次抓好整份今日待辦清單
@@ -798,6 +811,7 @@ el.tagSelect.addEventListener('change', () => {
   const item = itemsCache[cachePos];
   item.tag = el.tagSelect.value;
   el.weekdaySelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
+  updateTagWarning();
   const rowRef = item.row;
   apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
     .then(data => {
@@ -817,6 +831,7 @@ el.weekdaySelect.addEventListener('change', () => {
   const item = itemsCache[cachePos];
   item.tag = el.weekdaySelect.value;
   el.tagSelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
+  updateTagWarning();
   const rowRef = item.row;
   apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
     .then(data => {
