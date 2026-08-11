@@ -226,6 +226,55 @@ function submitForm(formData) {
   }
 }
 
+/**
+ * 批次查詢多個姓名是否已有舊資料，給多人輸入表單即時顯示狀態用。
+ */
+function lookupByNames(names) {
+  return (names || []).map(function (rawName) {
+    const name = (rawName || '').trim();
+    if (!name) return { name: name, existing: null };
+    return { name: name, existing: lookupByName(name) };
+  });
+}
+
+/**
+ * 一次輸入多人（用半形逗點分隔），週期一致。
+ * 已經有舊資料的人（lookupByName 查得到）完全不動，只新增查無資料的人。
+ */
+function submitFormMulti(formData) {
+  const sheet = getSheet_();
+  const cycle = formData.cycle || '';
+  const note = formData.note || '';
+  const email = formData.email || '';
+  const names = Array.isArray(formData.names) ? formData.names : [];
+
+  if (!cycle) throw new Error('請選擇 DG 週期');
+
+  const now = new Date();
+  const nextDate = computeNextDate_(now, cycle);
+
+  const created = [];
+  const skipped = [];
+  const seen = [];
+
+  names.forEach(function (rawName) {
+    const name = (rawName || '').trim();
+    if (!name || seen.indexOf(name) !== -1) return;
+    seen.push(name);
+
+    const existing = lookupByName(name);
+    if (existing) {
+      skipped.push(name);
+      return;
+    }
+
+    sheet.appendRow([now, name, cycle, note, email, now, nextDate]);
+    created.push(name);
+  });
+
+  return { created: created, skipped: skipped };
+}
+
 // ========== 代禱卡片：共用邏輯（網頁版API + Google Sheet版都會用到） ==========
 
 /**

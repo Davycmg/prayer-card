@@ -44,7 +44,7 @@
   <p class="desc">輸入姓名後若已有紀錄，會自動帶出舊資料供你編輯</p>
 
   <label>姓名</label>
-  <input type="text" id="name" onblur="lookup()" placeholder="輸入姓名後移開游標即查詢">
+  <input type="text" id="name" onblur="lookup()" placeholder="可用半形逗點「,」分隔多人，例如：小明,小華">
   <div id="hint"></div>
 
   <label>DG 週期</label>
@@ -69,74 +69,52 @@
   <div id="status"></div>
 
   <script>
-    let matchedRows = []; // 記住查詢時抓到的同名列號，送出時要一併帶回去
-
-    // 確保 select 裡有這個值對應的 option，沒有的話動態補上（容錯：全形/半形括號、多餘空白等差異）
-    function ensureOptionExists(selectEl, value) {
-      if (!value) return;
-      const exists = Array.prototype.some.call(selectEl.options, function(opt) {
-        return opt.value === value;
+    // 把輸入框內容用半形逗點拆成姓名清單，去除空白與重複
+    function parseNames() {
+      const raw = document.getElementById('name').value;
+      const names = [];
+      raw.split(',').forEach(function(part) {
+        const name = part.trim();
+        if (name && names.indexOf(name) === -1) names.push(name);
       });
-      if (!exists) {
-        const opt = document.createElement('option');
-        opt.value = value;
-        opt.text = value + '（原始資料，建議確認後改選標準選項）';
-        selectEl.appendChild(opt);
-      }
+      return names;
     }
 
     function lookup() {
-      const name = document.getElementById('name').value.trim();
+      const names = parseNames();
       const hint = document.getElementById('hint');
       const cycleSelect = document.getElementById('cycle');
-      matchedRows = [];
 
-      if (!name) { hint.innerText = ''; return; }
+      if (names.length === 0) { hint.innerText = ''; return; }
       hint.innerText = '查詢中...';
 
       google.script.run
-        .withSuccessHandler(function(res) {
-          if (res) {
-            matchedRows = res.rows;
-            document.getElementById('note').value = res.note;
+        .withSuccessHandler(function(results) {
+          const existingNames = results.filter(function(r) { return r.existing; }).map(function(r) { return r.name; });
+          const newNames = results.filter(function(r) { return !r.existing; }).map(function(r) { return r.name; });
 
-            // 逐列列出各自的週期，例如：第1筆：每兩週｜第2筆：每兩週｜第3筆：每月
-            const rowDetail = res.rowCycles
-              .map(function(c, idx) { return '第' + (idx + 1) + '筆：' + c; })
-              .join('｜');
-
-            if (res.cycles.length === 1) {
-              // 只有一種週期，直接帶入（若跟選單選項文字不完全相符，先動態補上再選取）
-              ensureOptionExists(cycleSelect, res.cycles[0]);
-              cycleSelect.value = res.cycles[0];
-              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），已合併備註，送出後將整併為 1 筆';
-            } else if (res.cycles.length > 1) {
-              // 週期不一致，清空讓使用者自己選
-              cycleSelect.value = '';
-              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），週期不一致，請選擇正確週期後送出';
-            } else {
-              // 有資料但週期是空的
-              cycleSelect.value = '';
-              hint.innerText = '找到 ' + res.rows.length + ' 筆舊資料（' + rowDetail + '），尚未設定週期，請選擇';
-            }
+          if (existingNames.length > 0 && newNames.length === 0) {
+            hint.innerText = '「' + existingNames.join('、') + '」都已有舊資料，送出後不會變動，只是提醒（本表單不會更新既有資料）';
+          } else if (existingNames.length > 0 && newNames.length > 0) {
+            hint.innerText = '「' + existingNames.join('、') + '」已有舊資料，送出後不變動；「' + newNames.join('、') + '」尚無資料，送出後將新增';
           } else {
-            cycleSelect.value = '每月';
-            document.getElementById('note').value = '';
-            hint.innerText = '查無舊資料，送出後將新增一筆';
+            hint.innerText = '「' + newNames.join('、') + '」查無舊資料，送出後將新增';
           }
+
+          if (!cycleSelect.value) cycleSelect.value = '每月';
         })
         .withFailureHandler(function(err) {
           hint.innerText = '查詢失敗：' + err.message;
         })
-        .lookupByName(name);
+        .lookupByNames(names);
     }
 
     function submitForm() {
-      const name = document.getElementById('name').value.trim();
+      const names = parseNames();
       const cycle = document.getElementById('cycle').value;
       const statusEl = document.getElementById('status');
 
-      if (!name) {
+      if (names.length === 0) {
         statusEl.innerText = '請輸入姓名';
         return;
       }
@@ -148,28 +126,25 @@
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
       const data = {
-        name: name,
+        names: names,
         cycle: cycle,
-        note: document.getElementById('note').value,
-        rows: matchedRows // 把查詢時記住的列號傳回去，後端會合併成一列
+        note: document.getElementById('note').value
       };
       statusEl.innerText = '送出中...';
       google.script.run
         .withSuccessHandler(function(res) {
-          if (res.status === 'updated') {
-            statusEl.innerText = res.mergedCount > 1
-              ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
-              : '已更新原紀錄！';
-          } else {
-            statusEl.innerText = '已新增資料！';
-          }
+          let msg = '';
+          if (res.created.length > 0) msg += '已新增：' + res.created.join('、') + '。';
+          if (res.skipped.length > 0) msg += '已有舊資料未變動：' + res.skipped.join('、') + '。';
+          if (!msg) msg = '沒有可新增的姓名。';
+          statusEl.innerText = msg;
           btn.disabled = false;
         })
         .withFailureHandler(function(err) {
           statusEl.innerText = '發生錯誤：' + err.message;
           btn.disabled = false;
         })
-        .submitForm(data);
+        .submitFormMulti(data);
     }
   </script>
 </body>
