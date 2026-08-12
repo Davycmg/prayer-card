@@ -482,7 +482,7 @@ async function loadInitData() {
   try {
     const data = await apiCall({ action: 'getInitData' });
     customTagsCache = data.custom || [];
-    itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入');
+    itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入' && item.tag !== 'A安祺禱告');
     cachePos = 0;
     renderFromCache(0);
   } catch (err) {
