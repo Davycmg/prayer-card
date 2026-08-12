@@ -475,14 +475,20 @@ function populateSelect(selectEl, map, placeholder) {
 // ===== 自訂標籤（永久存在 Google Sheet 後端，所有裝置共用，重新部署網頁也不會消失） =====
 let customTagsCache = []; // 從伺服器抓回來的自訂標籤清單，快取在記憶體裡
 
-// 開啟頁面時向伺服器抓一次目前完整的標籤清單
-async function loadTagList() {
+// 初次載入專用：一次 API 呼叫同時拿到「今日待辦清單」跟「標籤清單」，
+// 取代原本 loadTagList() + loadAllItems() 兩次序列呼叫，省下一趟 Apps Script 網路來回（通常是初次載入最慢的部分）。
+async function loadInitData() {
+  setLoading(true);
   try {
-    const data = await apiCall({ action: 'getTagList' });
+    const data = await apiCall({ action: 'getInitData' });
     customTagsCache = data.custom || [];
+    itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入');
+    cachePos = 0;
+    renderFromCache(0);
   } catch (err) {
-    showStatus('讀取標籤清單失敗：' + err.message);
-    customTagsCache = [];
+    showStatus('載入失敗：' + err.message);
+  } finally {
+    setLoading(false);
   }
 }
 
@@ -567,27 +573,11 @@ function renderEmptyState() {
   updateTagWarning();
 }
 
-// 初始載入：一次抓好整份今日待辦清單
-async function loadAllItems() {
-  setLoading(true);
-  try {
-    const data = await apiCall({ action: 'getAllItems' });
-    itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入');
-    cachePos = 0;
-    renderFromCache(0);
-  } catch (err) {
-    showStatus('載入失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
-}
-
 async function init() {
   populateSelect(el.cycleSelect, CYCLE_MAP, '選擇週期');
   populateSelect(el.weekdaySelect, WEEKDAY_MAP, '選擇星期標籤');
-  await loadTagList();
+  await loadInitData();
   populateTagSelect();
-  await loadAllItems();
 }
 
 el.addTagBtn.addEventListener('click', async () => {

@@ -940,6 +940,9 @@ function doGet(e) {
       case 'getAllItems':
         result = getAllItems();
         break;
+      case 'getInitData':
+        result = getInitData();
+        break;
       case 'completeByRow':
         result = completeByRow(parseInt(e.parameter.row, 10));
         break;
@@ -1035,6 +1038,21 @@ function saveCustomTags_(tags) {
  */
 function getTagList() {
   return { builtIn: Object.values(TAG_MAP), custom: getCustomTags_() };
+}
+
+/**
+ * index.html 開啟頁面時用：把「今日待辦清單」跟「標籤清單」合併成一次 API 呼叫，
+ * 省掉一趟 Apps Script 網路來回（loadTagList + loadAllItems 分兩次打API是頁面初次載入變慢的主因）。
+ */
+function getInitData() {
+  const itemsResult = getAllItems();
+  const tagListResult = getTagList();
+  return {
+    items: itemsResult.items,
+    total: itemsResult.total,
+    builtIn: tagListResult.builtIn,
+    custom: tagListResult.custom
+  };
 }
 
 /**
