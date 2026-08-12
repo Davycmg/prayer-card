@@ -134,6 +134,13 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed4 → 中午RPG3（中午RPG 的副本，換一份固定名單：郭大衛、顏志龍）
+  if (e.parameter.form === 'fixed4') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG3')
+      .setTitle('中午RPG3')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
