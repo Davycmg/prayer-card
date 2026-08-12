@@ -127,6 +127,13 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed3 → 中午RPG2（中午RPG 的副本，換一份固定名單：黃姿驊、郭大衛、楊采綸）
+  if (e.parameter.form === 'fixed3') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG2')
+      .setTitle('中午RPG2')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
