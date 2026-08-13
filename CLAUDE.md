@@ -1,5 +1,9 @@
 # prayer-card
 
+## PR 自動 merge 規則
+
+在這個 repo 開的 PR，預設**不用每次先問過使用者，開完就直接 merge**。例外：CI 沒過（紅字）或 PR 有 merge conflict 時，維持原本規則，先跟使用者確認再處理，不要自動 merge。
+
 Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workflows/deploy.yml` 讓 merge 進 `main` 後自動 `clasp push` 到 Apps Script（不含 deploy，發布新版本仍需手動，因為 API 建立的 web app 部署對 `executeAs: USER_DEPLOYING` 有已知的授權限制）。
 
 ## 正確的 Apps Script scriptId
