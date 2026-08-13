@@ -38,7 +38,7 @@ const COL = {
 
 // 代禱卡片工作表（Google Sheet 內操作）快速輸入用的簡碼對照
 const CYCLE_MAP = {
-  'D': '每天', '2': '每兩天', '3': '每三天', 'W': '每週', 'DW': '每兩週',
+  'D': '每天', '2': '每兩天', '3': '每三天', '4': '每四天', '5': '每五天', 'W': '每週', 'DW': '每兩週',
   'M': '每月', '2M': '每兩個月', 'S': '每季', 'HY': '每半年', 'Y': '每年'
 };
 
@@ -59,6 +59,8 @@ function computeNextDate_(baseDate, cycle) {
     case '每天': d.setDate(d.getDate() + 1); break;
     case '每兩天': d.setDate(d.getDate() + 2); break;
     case '每三天': d.setDate(d.getDate() + 3); break;
+    case '每四天': d.setDate(d.getDate() + 4); break;
+    case '每五天': d.setDate(d.getDate() + 5); break;
     case '每週': d.setDate(d.getDate() + 7); break;
     case '每兩週': d.setDate(d.getDate() + 14); break;
     case '每月': d.setMonth(d.getMonth() + 1); break;
@@ -541,7 +543,7 @@ function onOpen() {
 
 // 週期換算約略天數，用來在週期不一致時判斷「最短週期」
 const CYCLE_DAYS_ = {
-  '每天': 1, '每兩天': 2, '每三天': 3, '每週': 7, '每兩週': 14,
+  '每天': 1, '每兩天': 2, '每三天': 3, '每四天': 4, '每五天': 5, '每週': 7, '每兩週': 14,
   '每月': 30, '每兩個月': 60, '每季': 90, '每半年': 182, '每年': 365
 };
 

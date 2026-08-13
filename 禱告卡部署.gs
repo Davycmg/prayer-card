@@ -20,7 +20,8 @@ const COL = {
 };
 
 const CYCLE_MAP = {
-  'D': 'D每天', '2': '2每兩天', '3': '3每三天', 'W': 'W每週', 'DW': 'DW每兩週',
+  'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
+  'W': 'W每週', 'DW': 'DW每兩週',
   'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
 };
 
@@ -33,6 +34,8 @@ const CYCLE_PERIOD_DAYS = {
   'D每天': 1,
   '2每兩天': 2,
   '3每三天': 3,
+  '4每四天': 4,
+  '5每五天': 5,
   'W每週': 7,
   'DW每兩週': 14,
   'M每月': 30,
@@ -1131,6 +1134,8 @@ const CALENDAR_CYCLE_RRULE_MAP_ = {
   'D每天': 'RRULE:FREQ=DAILY',
   '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
   '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  '4每四天': 'RRULE:FREQ=DAILY;INTERVAL=4',
+  '5每五天': 'RRULE:FREQ=DAILY;INTERVAL=5',
   'W每週': 'RRULE:FREQ=WEEKLY',
   'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
   'M每月': 'RRULE:FREQ=MONTHLY',
@@ -1312,6 +1317,8 @@ function parseRRuleLabel_(rrule) {
     if (interval === 1) return 'D每天';
     if (interval === 2) return '2每兩天';
     if (interval === 3) return '3每三天';
+    if (interval === 4) return '4每四天';
+    if (interval === 5) return '5每五天';
     return '每' + interval + '天';
   }
   if (freq === 'WEEKLY') {
