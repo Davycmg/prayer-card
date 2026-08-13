@@ -188,7 +188,15 @@ function showStatus(msg) {
 async function apiCall(params) {
   const url = API_URL + '?' + new URLSearchParams(params).toString();
   const res = await fetch(url);
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (parseErr) {
+    // 伺服器沒有回傳JSON（通常是Google登入逾時或暫時性錯誤，回傳了HTML頁面），
+    // 直接顯示原始parse錯誤對使用者沒有意義，改成可理解、可行動的訊息
+    throw new Error('伺服器回應異常，可能是登入逾時，請重新整理頁面再試一次');
+  }
   if (data.error) throw new Error(data.error);
   return data;
 }
