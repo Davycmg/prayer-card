@@ -45,6 +45,8 @@ function onFormSubmit(e) {
       case "每天": nextDate.setDate(nextDate.getDate() + 1); break;
       case "每兩天": nextDate.setDate(nextDate.getDate() + 2); break;
       case "每三天": nextDate.setDate(nextDate.getDate() + 3); break;
+      case "每四天": nextDate.setDate(nextDate.getDate() + 4); break;
+      case "每五天": nextDate.setDate(nextDate.getDate() + 5); break;
       case "每週": nextDate.setDate(nextDate.getDate() + 7); break;
       case "每兩週": nextDate.setDate(nextDate.getDate() + 14); break;
       case "每月": nextDate.setMonth(nextDate.getMonth() + 1); break;
