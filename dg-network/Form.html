@@ -71,6 +71,22 @@
   <div id="status"></div>
 
   <script>
+    let matchedRows = []; // 單人查詢時記住抓到的同名列號，送出時要一併帶回去（供合併/更新）
+
+    // 確保 select 裡有這個值對應的 option，沒有的話動態補上（容錯：全形/半形括號、多餘空白等差異）
+    function ensureOptionExists(selectEl, value) {
+      if (!value) return;
+      const exists = Array.prototype.some.call(selectEl.options, function(opt) {
+        return opt.value === value;
+      });
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.text = value + '（原始資料，建議確認後改選標準選項）';
+        selectEl.appendChild(opt);
+      }
+    }
+
     // 把輸入框內容用半形逗點拆成姓名清單，去除空白與重複
     function parseNames() {
       const raw = document.getElementById('name').value;
@@ -86,10 +102,49 @@
       const names = parseNames();
       const hint = document.getElementById('hint');
       const cycleSelect = document.getElementById('cycle');
+      matchedRows = [];
 
       if (names.length === 0) { hint.innerText = ''; return; }
-      hint.innerText = '查詢中...';
 
+      // 只輸入一位姓名：查詢並帶出過去的代禱事項供編輯／合併
+      if (names.length === 1) {
+        hint.innerText = '查詢中...';
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res) {
+              matchedRows = res.rows;
+              document.getElementById('note').value = res.note;
+
+              const rowDetail = res.rowCycles
+                .map(function(c, idx) { return '第' + (idx + 1) + '筆：' + c; })
+                .join('｜');
+
+              if (res.cycles.length === 1) {
+                ensureOptionExists(cycleSelect, res.cycles[0]);
+                cycleSelect.value = res.cycles[0];
+                hint.innerText = '找到 ' + res.rows.length + ' 筆過去的代禱事項（' + rowDetail + '），已帶出舊備註，送出後將整併為 1 筆並更新';
+              } else if (res.cycles.length > 1) {
+                cycleSelect.value = '';
+                hint.innerText = '找到 ' + res.rows.length + ' 筆過去的代禱事項（' + rowDetail + '），週期不一致，請選擇正確週期後送出';
+              } else {
+                cycleSelect.value = '';
+                hint.innerText = '找到 ' + res.rows.length + ' 筆過去的代禱事項（' + rowDetail + '），尚未設定週期，請選擇';
+              }
+            } else {
+              cycleSelect.value = '每月';
+              document.getElementById('note').value = '';
+              hint.innerText = '查無舊資料，送出後將新增一筆';
+            }
+          })
+          .withFailureHandler(function(err) {
+            hint.innerText = '查詢失敗：' + err.message;
+          })
+          .lookupByName(names[0]);
+        return;
+      }
+
+      // 多人輸入：已有舊資料的人維持不變，只新增查無資料的人
+      hint.innerText = '查詢中...';
       google.script.run
         .withSuccessHandler(function(results) {
           const existingNames = results.filter(function(r) { return r.existing; }).map(function(r) { return r.name; });
@@ -127,12 +182,41 @@
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
+      statusEl.innerText = '送出中...';
+
+      // 單人：沿用舊資料合併／更新邏輯
+      if (names.length === 1) {
+        const data = {
+          name: names[0],
+          cycle: cycle,
+          note: document.getElementById('note').value,
+          rows: matchedRows
+        };
+        google.script.run
+          .withSuccessHandler(function(res) {
+            if (res.status === 'updated') {
+              statusEl.innerText = res.mergedCount > 1
+                ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
+                : '已更新原紀錄！';
+            } else {
+              statusEl.innerText = '已新增資料！';
+            }
+            btn.disabled = false;
+          })
+          .withFailureHandler(function(err) {
+            statusEl.innerText = '發生錯誤：' + err.message;
+            btn.disabled = false;
+          })
+          .submitForm(data);
+        return;
+      }
+
+      // 多人：已有舊資料的人不動，只新增查無資料的人
       const data = {
         names: names,
         cycle: cycle,
         note: document.getElementById('note').value
       };
-      statusEl.innerText = '送出中...';
       google.script.run
         .withSuccessHandler(function(res) {
           let msg = '';
