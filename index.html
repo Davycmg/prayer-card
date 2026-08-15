@@ -7,11 +7,19 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
 <style>
   :root {
+    /* 主色（品牌／流程導覽）：紫色系 */
     --purple: #674ea7;
+    --purple-dark: #4f3a86;
     --purple-light: #d9d2e9;
-    --green: #6aa84f;
-    --yellow: #fff2cc;
-    --blue: #cfe2f3;
+    --purple-pale: #efeaf7;
+    /* 強調色（完成／成功）：獨立的一個強調色相 */
+    --teal: #2e8b74;
+    --teal-dark: #236c5a;
+    /* 禱告強度控制：琥珀／赭色系，深淺代表「多／少」 */
+    --amber-dark: #b5651d;
+    --amber: #cc7a2e;
+    --amber-light: #f3ddb8;
+    --amber-text: #7a4712;
     --gray-bg: #f5f5f7;
     --text-main: #1a1a1a;
     --text-sub: #666666;
@@ -94,21 +102,21 @@
     font-size: 15px;
     background: white;
   }
-  .meta-field.cycle select { background: var(--yellow); }
+  .meta-field.cycle select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
   .meta-field.cycle select.cycle-empty {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.tag select { background: var(--blue); }
+  .meta-field.tag select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
   .meta-field.tag select.tag-highlight {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.weekday select { background: #d9ead3; }
+  .meta-field.weekday select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
   .note {
     margin-top: 14px;
     font-size: 13px;
@@ -181,10 +189,15 @@
     user-select: none;
   }
   .btn:active { opacity: 0.7; }
-  .btn.secondary { background: var(--green); }
-  .btn.complete { background: #2e8b74; }
-  .btn.pray-more { background: #cc5500; }
-  .btn.pray-less { background: #3c78d8; }
+  /* 導覽／流程控制：紫色系深淺變化 */
+  .btn.prev { background: var(--purple-light); color: var(--purple-dark); }
+  .btn.next { background: var(--purple); }
+  .btn.complete { background: var(--teal); }
+  /* 禱告控制：琥珀色系，深淺代表強度／主要動作 */
+  .btn.pray-more { background: var(--amber-dark); }
+  .btn.pray-less { background: var(--amber-light); color: var(--amber-text); }
+  .btn.random { background: var(--amber); }
+  .btn.speak { background: var(--amber-dark); }
   .controls.triple {
     gap: 6px;
   }
@@ -366,8 +379,8 @@
 </div>
 
 <div class="controls triple">
-  <button class="btn secondary" id="prevBtn">◀ 上一項</button>
-  <button class="btn" id="nextBtn">下一項 ▶</button>
+  <button class="btn prev" id="prevBtn">◀ 上一項</button>
+  <button class="btn next" id="nextBtn">下一項 ▶</button>
   <button class="btn complete" id="completeBtn">✅ 完成</button>
 </div>
 
@@ -377,8 +390,8 @@
 </div>
 
 <div class="controls">
-  <button class="btn secondary" id="randomBtn">🎲 隨機一項</button>
-  <button class="btn" id="speakBtn" style="background: var(--purple);">🔊 開始連禱</button>
+  <button class="btn random" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn speak" id="speakBtn">🔊 開始連禱</button>
 </div>
 
 <div class="repeat-row">
