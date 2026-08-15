@@ -7,24 +7,24 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
 <style>
   :root {
-    /* 主色（品牌／標題／流程導覽）：紫色系 */
-    --purple: #6a5896;
-    --purple-dark: #4f3f75;
-    --purple-light: #ddd6ea;
-    --purple-pale: #f1eef6;
-    /* 強調色（完成／成功）：與紫色同調性的低飽和 teal */
-    --teal: #4b8a7c;
-    --teal-dark: #386b60;
-    /* 禱告強度控制：與紫色同屬低飽和暖色調的赭棕色系，深淺代表「多／少」 */
-    --clay-dark: #a3714a;
-    --clay: #bc8a63;
-    --clay-light: #ecdfd0;
-    --clay-text: #6b4a2e;
-    /* 中性色：帶一點紫灰調，與主色呼應 */
-    --gray-bg: #f6f4f8;
-    --border-neutral: #ded9e5;
-    --text-main: #2a2531;
-    --text-sub: #726c7d;
+    /* 主色（暖赭 clay-brown）：標題、流程導覽、外部整合按鈕 */
+    --clay-900: #3a2e24;
+    --clay-700: #5a4230;
+    --clay-600: #7a5a3e;
+    --clay-500: #9a7350;
+    --clay-200: #e6dcd0;
+    --clay-100: #ede2d3;
+    /* 完成／橄欖綠 */
+    --olive-600: #4a5c3e;
+    --olive-on: #ffffff;
+    /* 中性／邊框／危險 */
+    --border: #ddd6cc;
+    --border-strong: #c9beb0;
+    --text-danger: #a3453b;
+    /* 頁面與文字 */
+    --gray-bg: #f5f1ec;
+    --text-main: var(--clay-900);
+    --text-sub: #726c60;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -46,7 +46,7 @@
   }
   .header h1 {
     font-size: 20px;
-    color: var(--purple);
+    color: var(--clay-600);
     margin: 0;
   }
   .progress {
@@ -77,7 +77,7 @@
     color: var(--text-main);
   }
   .prayer-text:focus {
-    background: var(--purple-pale);
+    background: var(--clay-100);
     border-radius: 8px;
   }
   .meta-row {
@@ -100,25 +100,25 @@
     width: 100%;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid var(--border-neutral);
+    border: 1px solid var(--border);
     font-size: 15px;
     background: white;
   }
-  .meta-field.cycle select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
+  .meta-field.cycle select { background: var(--clay-100); border: 1px solid var(--clay-200); }
   .meta-field.cycle select.cycle-empty {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.tag select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
+  .meta-field.tag select { background: var(--clay-100); border: 1px solid var(--clay-200); }
   .meta-field.tag select.tag-highlight {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.weekday select { background: var(--purple-pale); border: 1px solid var(--purple-light); }
+  .meta-field.weekday select { background: var(--clay-100); border: 1px solid var(--clay-200); }
   .note {
     margin-top: 14px;
     font-size: 13px;
@@ -137,7 +137,7 @@
     min-width: 100px;
     padding: 8px 10px;
     border-radius: 8px;
-    border: 1px solid var(--border-neutral);
+    border: 1px solid var(--border);
     font-size: 14px;
   }
   .add-tag-checkbox {
@@ -152,9 +152,9 @@
   .add-tag-row button {
     padding: 8px 14px;
     border-radius: 8px;
-    border: 1px solid var(--purple);
+    border: 1px solid var(--clay-600);
     background: white;
-    color: var(--purple);
+    color: var(--clay-600);
     font-size: 13px;
     white-space: nowrap;
   }
@@ -163,9 +163,9 @@
     width: 100%;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid var(--purple);
+    border: 1px solid var(--clay-600);
     background: white;
-    color: var(--purple);
+    color: var(--clay-600);
     font-size: 14px;
     cursor: pointer;
   }
@@ -185,21 +185,21 @@
     font-size: 17px;
     font-weight: bold;
     color: white;
-    background: var(--purple);
+    background: var(--clay-600);
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
   }
   .btn:active { opacity: 0.7; }
-  /* 導覽／流程控制：紫色系深淺變化 */
-  .btn.prev { background: var(--purple-light); color: var(--purple-dark); }
-  .btn.next { background: var(--purple); }
-  .btn.complete { background: var(--teal); }
-  /* 禱告控制：赭棕色系，深淺代表強度／主要動作 */
-  .btn.pray-more { background: var(--clay-dark); }
-  .btn.pray-less { background: var(--clay-light); color: var(--clay-text); }
-  .btn.random { background: var(--clay); }
-  .btn.speak { background: var(--clay-dark); }
+  /* 導覽／流程控制：暖赭色深淺變化 */
+  .btn.prev { background: var(--clay-200); color: var(--clay-700); }
+  .btn.next { background: var(--clay-600); }
+  .btn.complete { background: var(--olive-600); color: var(--olive-on); }
+  /* 禱告控制：同一暖赭色系，深淺代表強度／主要動作 */
+  .btn.pray-more { background: var(--clay-500); }
+  .btn.pray-less { background: var(--clay-100); color: #4a3626; }
+  .btn.random { background: var(--clay-600); }
+  .btn.speak { background: var(--clay-700); }
   .controls.triple {
     gap: 6px;
   }
@@ -221,15 +221,15 @@
     padding: 8px;
     text-align: center;
     border-radius: 8px;
-    border: 1px solid var(--border-neutral);
+    border: 1px solid var(--border);
     font-size: 15px;
   }
   .jump-row button {
     padding: 8px 14px;
     border-radius: 8px;
-    border: 1px solid var(--purple);
+    border: 1px solid var(--clay-600);
     background: white;
-    color: var(--purple);
+    color: var(--clay-600);
     font-size: 14px;
   }
   .toggle-row {
@@ -261,13 +261,13 @@
   .repeat-row button {
     padding: 6px 12px;
     border-radius: 8px;
-    border: 1px solid var(--purple);
+    border: 1px solid var(--clay-600);
     background: white;
-    color: var(--purple);
+    color: var(--clay-600);
     font-size: 14px;
   }
   .repeat-row button.active {
-    background: var(--purple);
+    background: var(--clay-600);
     color: white;
   }
   .switch {
@@ -295,7 +295,7 @@
     transition: .2s;
     border-radius: 50%;
   }
-  input:checked + .slider { background-color: var(--purple); }
+  input:checked + .slider { background-color: var(--clay-600); }
   input:checked + .slider:before { transform: translateX(20px); }
   .status {
     margin-top: 10px;
@@ -309,16 +309,16 @@
     max-width: 480px;
     margin-top: 48px;
     padding-top: 16px;
-    border-top: 1px solid var(--border-neutral);
+    border-top: 1px solid var(--border);
     display: flex;
     justify-content: center;
   }
   .danger-zone button {
     padding: 8px 18px;
     border-radius: 8px;
-    border: 1px solid var(--border-neutral);
+    border: 1px solid var(--border);
     background: transparent;
-    color: var(--clay-text);
+    color: var(--text-danger);
     font-size: 13px;
     opacity: 0.6;
   }
@@ -331,7 +331,7 @@
     align-items: center;
     justify-content: center;
     font-size: 15px;
-    color: var(--purple);
+    color: var(--clay-600);
     display: none;
   }
   .loading-overlay.show { display: flex; }
