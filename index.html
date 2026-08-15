@@ -7,24 +7,27 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
 <style>
   :root {
-    /* 主色（暖赭 clay-brown）：標題、流程導覽、外部整合按鈕 */
-    --clay-900: #3a2e24;
-    --clay-700: #5a4230;
-    --clay-600: #7a5a3e;
-    --clay-500: #9a7350;
-    --clay-200: #e6dcd0;
-    --clay-100: #ede2d3;
-    /* 完成／橄欖綠 */
-    --olive-600: #4a5c3e;
-    --olive-on: #ffffff;
-    /* 中性／邊框／危險 */
-    --border: #ddd6cc;
-    --border-strong: #c9beb0;
-    --text-danger: #a3453b;
-    /* 頁面與文字 */
-    --gray-bg: #f5f1ec;
-    --text-main: var(--clay-900);
-    --text-sub: #726c60;
+    /* 主色（深藍灰）：標題、流程導覽、外部整合按鈕 */
+    --main-primary: #3d4a5c;
+    --main-primary-light: #dde1e6;
+    --main-primary-light-text: #2c3644;
+    /* 文字色 */
+    --text-main: #2a2f36;
+    --text-sub: #6b7280;
+    /* 禱告控制按鈕：赭棕點綴 */
+    --clay: #8a6a4e;
+    --clay-light: #e6d9c8;
+    --clay-light-text: #4a3728;
+    /* 完成 */
+    --teal: #3d7a68;
+    /* 中性邊框 */
+    --border: #d9dce0;
+    --border-strong: #c2c6cc;
+    /* 危險／警示：獨立不隨整體降飽和度 */
+    --text-danger: #b0413e;
+    --danger-light: #f5e0df;
+    /* 背景層 */
+    --gray-bg: #f0f1f2;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -46,7 +49,7 @@
   }
   .header h1 {
     font-size: 20px;
-    color: var(--clay-600);
+    color: var(--main-primary);
     margin: 0;
   }
   .progress {
@@ -77,7 +80,7 @@
     color: var(--text-main);
   }
   .prayer-text:focus {
-    background: var(--clay-100);
+    background: var(--main-primary-light);
     border-radius: 8px;
   }
   .meta-row {
@@ -104,21 +107,21 @@
     font-size: 15px;
     background: white;
   }
-  .meta-field.cycle select { background: var(--clay-100); border: 1px solid var(--clay-200); }
+  .meta-field.cycle select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .meta-field.cycle select.cycle-empty {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.tag select { background: var(--clay-100); border: 1px solid var(--clay-200); }
+  .meta-field.tag select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .meta-field.tag select.tag-highlight {
     background: #ff8a80;
     border: 1px solid #d32f2f;
     color: #7a0000;
     font-weight: bold;
   }
-  .meta-field.weekday select { background: var(--clay-100); border: 1px solid var(--clay-200); }
+  .meta-field.weekday select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .note {
     margin-top: 14px;
     font-size: 13px;
@@ -152,9 +155,9 @@
   .add-tag-row button {
     padding: 8px 14px;
     border-radius: 8px;
-    border: 1px solid var(--clay-600);
+    border: 1px solid var(--main-primary);
     background: white;
-    color: var(--clay-600);
+    color: var(--main-primary);
     font-size: 13px;
     white-space: nowrap;
   }
@@ -163,9 +166,9 @@
     width: 100%;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid var(--clay-600);
+    border: 1px solid var(--main-primary);
     background: white;
-    color: var(--clay-600);
+    color: var(--main-primary);
     font-size: 14px;
     cursor: pointer;
   }
@@ -185,21 +188,21 @@
     font-size: 17px;
     font-weight: bold;
     color: white;
-    background: var(--clay-600);
+    background: var(--main-primary);
     cursor: pointer;
     -webkit-user-select: none;
     user-select: none;
   }
   .btn:active { opacity: 0.7; }
-  /* 導覽／流程控制：暖赭色深淺變化 */
-  .btn.prev { background: var(--clay-200); color: var(--clay-700); }
-  .btn.next { background: var(--clay-600); }
-  .btn.complete { background: var(--olive-600); color: var(--olive-on); }
-  /* 禱告控制：同一暖赭色系，深淺代表強度／主要動作 */
-  .btn.pray-more { background: var(--clay-500); }
-  .btn.pray-less { background: var(--clay-100); color: #4a3626; }
-  .btn.random { background: var(--clay-600); }
-  .btn.speak { background: var(--clay-700); }
+  /* 導覽／流程控制：深藍灰深淺變化 */
+  .btn.prev { background: var(--main-primary-light); color: var(--main-primary-light-text); }
+  .btn.next { background: var(--main-primary); }
+  .btn.complete { background: var(--teal); }
+  /* 禱告控制：赭棕點綴，統一色相區隔於導覽色系 */
+  .btn.pray-more { background: var(--clay); }
+  .btn.pray-less { background: var(--clay-light); color: var(--clay-light-text); }
+  .btn.random { background: var(--clay); }
+  .btn.speak { background: var(--clay); }
   .controls.triple {
     gap: 6px;
   }
@@ -227,9 +230,9 @@
   .jump-row button {
     padding: 8px 14px;
     border-radius: 8px;
-    border: 1px solid var(--clay-600);
+    border: 1px solid var(--main-primary);
     background: white;
-    color: var(--clay-600);
+    color: var(--main-primary);
     font-size: 14px;
   }
   .toggle-row {
@@ -261,13 +264,13 @@
   .repeat-row button {
     padding: 6px 12px;
     border-radius: 8px;
-    border: 1px solid var(--clay-600);
+    border: 1px solid var(--main-primary);
     background: white;
-    color: var(--clay-600);
+    color: var(--main-primary);
     font-size: 14px;
   }
   .repeat-row button.active {
-    background: var(--clay-600);
+    background: var(--main-primary);
     color: white;
   }
   .switch {
@@ -295,7 +298,7 @@
     transition: .2s;
     border-radius: 50%;
   }
-  input:checked + .slider { background-color: var(--clay-600); }
+  input:checked + .slider { background-color: var(--main-primary); }
   input:checked + .slider:before { transform: translateX(20px); }
   .status {
     margin-top: 10px;
@@ -331,7 +334,7 @@
     align-items: center;
     justify-content: center;
     font-size: 15px;
-    color: var(--clay-600);
+    color: var(--main-primary);
     display: none;
   }
   .loading-overlay.show { display: flex; }
