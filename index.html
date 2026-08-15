@@ -7,22 +7,24 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
 <style>
   :root {
-    /* 主色（品牌／流程導覽）：紫色系 */
-    --purple: #674ea7;
-    --purple-dark: #4f3a86;
-    --purple-light: #d9d2e9;
-    --purple-pale: #efeaf7;
-    /* 強調色（完成／成功）：獨立的一個強調色相 */
-    --teal: #2e8b74;
-    --teal-dark: #236c5a;
-    /* 禱告強度控制：琥珀／赭色系，深淺代表「多／少」 */
-    --amber-dark: #b5651d;
-    --amber: #cc7a2e;
-    --amber-light: #f3ddb8;
-    --amber-text: #7a4712;
-    --gray-bg: #f5f5f7;
-    --text-main: #1a1a1a;
-    --text-sub: #666666;
+    /* 主色（品牌／標題／流程導覽）：紫色系 */
+    --purple: #6a5896;
+    --purple-dark: #4f3f75;
+    --purple-light: #ddd6ea;
+    --purple-pale: #f1eef6;
+    /* 強調色（完成／成功）：與紫色同調性的低飽和 teal */
+    --teal: #4b8a7c;
+    --teal-dark: #386b60;
+    /* 禱告強度控制：與紫色同屬低飽和暖色調的赭棕色系，深淺代表「多／少」 */
+    --clay-dark: #a3714a;
+    --clay: #bc8a63;
+    --clay-light: #ecdfd0;
+    --clay-text: #6b4a2e;
+    /* 中性色：帶一點紫灰調，與主色呼應 */
+    --gray-bg: #f6f4f8;
+    --border-neutral: #ded9e5;
+    --text-main: #2a2531;
+    --text-sub: #726c7d;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   body {
@@ -75,7 +77,7 @@
     color: var(--text-main);
   }
   .prayer-text:focus {
-    background: #fafafa;
+    background: var(--purple-pale);
     border-radius: 8px;
   }
   .meta-row {
@@ -98,7 +100,7 @@
     width: 100%;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-neutral);
     font-size: 15px;
     background: white;
   }
@@ -135,7 +137,7 @@
     min-width: 100px;
     padding: 8px 10px;
     border-radius: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-neutral);
     font-size: 14px;
   }
   .add-tag-checkbox {
@@ -193,11 +195,11 @@
   .btn.prev { background: var(--purple-light); color: var(--purple-dark); }
   .btn.next { background: var(--purple); }
   .btn.complete { background: var(--teal); }
-  /* 禱告控制：琥珀色系，深淺代表強度／主要動作 */
-  .btn.pray-more { background: var(--amber-dark); }
-  .btn.pray-less { background: var(--amber-light); color: var(--amber-text); }
-  .btn.random { background: var(--amber); }
-  .btn.speak { background: var(--amber-dark); }
+  /* 禱告控制：赭棕色系，深淺代表強度／主要動作 */
+  .btn.pray-more { background: var(--clay-dark); }
+  .btn.pray-less { background: var(--clay-light); color: var(--clay-text); }
+  .btn.random { background: var(--clay); }
+  .btn.speak { background: var(--clay-dark); }
   .controls.triple {
     gap: 6px;
   }
@@ -219,7 +221,7 @@
     padding: 8px;
     text-align: center;
     border-radius: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-neutral);
     font-size: 15px;
   }
   .jump-row button {
@@ -307,16 +309,16 @@
     max-width: 480px;
     margin-top: 48px;
     padding-top: 16px;
-    border-top: 1px solid #e5e5e5;
+    border-top: 1px solid var(--border-neutral);
     display: flex;
     justify-content: center;
   }
   .danger-zone button {
     padding: 8px 18px;
     border-radius: 8px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--border-neutral);
     background: transparent;
-    color: #b0413e;
+    color: var(--clay-text);
     font-size: 13px;
     opacity: 0.6;
   }
