@@ -115,3 +115,22 @@ function setupDailyTrigger() {
     
   console.log("✅ 每日觸發條件已設定完成！系統將於每天 23:00~24:00 之間自動執行。");
 }
+
+// 一次性函式：移除 processAllExistingRows 的每日觸發條件。
+// 在 Apps Script 編輯器手動執行一次即可，執行完可以直接刪掉這個函式。
+function removeProcessAllExistingRowsTrigger() {
+  const functionName = 'processAllExistingRows';
+  const triggers = ScriptApp.getProjectTriggers();
+  let removed = 0;
+
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === functionName) {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  });
+
+  console.log(removed > 0
+    ? `✅ 已移除 ${removed} 個 processAllExistingRows 觸發條件。`
+    : "沒有找到 processAllExistingRows 的觸發條件，可能已經被移除過了。");
+}
