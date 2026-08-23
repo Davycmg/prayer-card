@@ -1476,12 +1476,17 @@ function searchItems(keyword) {
   for (let i = 0; i < allData.length; i++) {
     const text = (allData[i][COL.TEXT - 1] || '').toString();
     if (text.toLowerCase().indexOf(trimmedKeyword) === -1) continue;
+
+    const dateVal = allData[i][COL.DATE - 1];
+    const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
+
     items.push({
       row: i + 2,
       text: text,
       cycle: allData[i][COL.CYCLE - 1] || '',
       note: allData[i][COL.NOTE - 1] || '',
-      tag: allData[i][COL.TAG - 1] || ''
+      tag: allData[i][COL.TAG - 1] || '',
+      dateText: isValidDate ? Utilities.formatDate(dateVal, Session.getScriptTimeZone(), 'yyyy/MM/dd') : ''
     });
   }
 
