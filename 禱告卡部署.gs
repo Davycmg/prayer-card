@@ -1404,9 +1404,11 @@ function getAllItems() {
 }
 
 /**
- * 查詢頁面用：掃描「表單回覆1」全部資料（不受今日待辦日期篩選影響），
- * 回傳標籤（H欄）完全等於指定值的所有項目，依 E 欄「本次禱告時間」由舊到新排序
- * （E欄空白視為最早，排在最前面，代表還沒排定日期、最需要優先處理）。
+ * 查詢頁面用：掃描「表單回覆1」全部資料，回傳標籤（H欄）完全等於指定值、
+ * 且到期（E欄「本次禱告時間」空白，或日期為今天／已過期）的項目——
+ * 跟 getAllItems()（index.html 首頁）的到期判斷邏輯完全一致，
+ * 這樣標記完成、E 欄日期被推到未來後，重新查詢這個標籤就不會再看到剛完成的項目。
+ * 依 E 欄由舊到新排序（E欄空白視為最早，排在最前面）。
  */
 function getItemsByTag(tag) {
   const trimmedTag = (tag || '').toString().trim();
@@ -1419,6 +1421,9 @@ function getItemsByTag(tag) {
   const numRows = lastRow - 1;
   const allData = sheet.getRange(2, 1, numRows, 8).getValues();
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   const items = [];
   for (let i = 0; i < allData.length; i++) {
     const rowTag = (allData[i][COL.TAG - 1] || '').toString().trim();
@@ -1426,6 +1431,12 @@ function getItemsByTag(tag) {
 
     const dateVal = allData[i][COL.DATE - 1];
     const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
+
+    if (isValidDate) {
+      const d = new Date(dateVal);
+      d.setHours(0, 0, 0, 0);
+      if (d.getTime() > today.getTime()) continue; // 還沒到期，不顯示
+    }
 
     items.push({
       row: i + 2,
