@@ -971,7 +971,7 @@ function doGet(e) {
         result = copyCurrentRowToTasks(parseInt(e.parameter.row, 10));
         break;
       case 'getItemsByTag':
-        result = getItemsByTag(e.parameter.tag);
+        result = getItemsByTag(e.parameter.tag, e.parameter.all === 'true');
         break;
       case 'searchItems':
         result = searchItems(e.parameter.keyword);
@@ -1404,13 +1404,15 @@ function getAllItems() {
 }
 
 /**
- * 查詢頁面用：掃描「表單回覆1」全部資料，回傳標籤（H欄）完全等於指定值、
- * 且到期（E欄「本次禱告時間」空白，或日期為今天／已過期）的項目——
- * 跟 getAllItems()（index.html 首頁）的到期判斷邏輯完全一致，
+ * 查詢頁面用：掃描「表單回覆1」全部資料，回傳標籤（H欄）完全等於指定值的項目。
+ * 預設（includeAll 為假）只回傳到期的項目（E欄「本次禱告時間」空白，或日期為
+ * 今天／已過期）——跟 getAllItems()（index.html 首頁）的到期判斷邏輯完全一致，
  * 這樣標記完成、E 欄日期被推到未來後，重新查詢這個標籤就不會再看到剛完成的項目。
+ * includeAll 為真時（查詢頁「全部輸出」勾選框用）不套用到期篩選，回傳整個標籤的
+ * 全部成員，並附上 dateText（E欄日期文字，方便前端組成純文字輸出，空白代表未排定）。
  * 依 E 欄由舊到新排序（E欄空白視為最早，排在最前面）。
  */
-function getItemsByTag(tag) {
+function getItemsByTag(tag, includeAll) {
   const trimmedTag = (tag || '').toString().trim();
   if (!trimmedTag) return { items: [] };
 
@@ -1432,7 +1434,7 @@ function getItemsByTag(tag) {
     const dateVal = allData[i][COL.DATE - 1];
     const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
 
-    if (isValidDate) {
+    if (!includeAll && isValidDate) {
       const d = new Date(dateVal);
       d.setHours(0, 0, 0, 0);
       if (d.getTime() > today.getTime()) continue; // 還沒到期，不顯示
@@ -1444,6 +1446,7 @@ function getItemsByTag(tag) {
       cycle: allData[i][COL.CYCLE - 1] || '',
       note: allData[i][COL.NOTE - 1] || '',
       tag: allData[i][COL.TAG - 1] || '',
+      dateText: isValidDate ? Utilities.formatDate(dateVal, Session.getScriptTimeZone(), 'yyyy/MM/dd') : '',
       dateSortKey: isValidDate ? dateVal.getTime() : -1 // 空白日期排最前面
     });
   }
