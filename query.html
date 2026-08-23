@@ -80,6 +80,16 @@
     white-space: nowrap;
   }
   .query-row button:active { opacity: 0.7; }
+  .export-all-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-sub);
+    cursor: pointer;
+  }
+  .export-all-row input { width: 16px; height: 16px; flex-shrink: 0; }
   .result-count {
     margin-top: 10px;
     font-size: 12px;
@@ -436,6 +446,10 @@
     <select id="tagQuerySelect"></select>
     <button id="tagQueryBtn">查詢</button>
   </div>
+  <label class="export-all-row">
+    <input type="checkbox" id="tagQueryAllCheckbox">
+    <span>全部輸出（不管有沒有到期，直接複製成純文字到剪貼簿）</span>
+  </label>
 
   <h2 style="margin-top:24px;">關鍵字查詢</h2>
   <div class="query-row">
@@ -594,6 +608,7 @@ let saveTimer = null;
 const el = {
   tagQuerySelect: document.getElementById('tagQuerySelect'),
   tagQueryBtn: document.getElementById('tagQueryBtn'),
+  tagQueryAllCheckbox: document.getElementById('tagQueryAllCheckbox'),
   keywordInput: document.getElementById('keywordInput'),
   keywordQueryBtn: document.getElementById('keywordQueryBtn'),
   keywordResultCount: document.getElementById('keywordResultCount'),
@@ -729,6 +744,11 @@ el.tagQueryBtn.addEventListener('click', async () => {
   const tag = el.tagQuerySelect.value;
   if (!tag) { showStatus(el.status, '請先選擇標籤'); return; }
 
+  if (el.tagQueryAllCheckbox.checked) {
+    await exportTagAllAsText(tag);
+    return;
+  }
+
   setLoading(true);
   try {
     const data = await apiCall({ action: 'getItemsByTag', tag: tag }); // 後端已依E欄日期由舊到新排序
@@ -749,6 +769,33 @@ el.tagQueryBtn.addEventListener('click', async () => {
     setLoading(false);
   }
 });
+
+// 「全部輸出」勾選時：不管有沒有到期，把這個標籤全部成員組成純文字複製到剪貼簿
+async function exportTagAllAsText(tag) {
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'getItemsByTag', tag: tag, all: 'true' });
+    const items = data.items || [];
+
+    if (items.length === 0) {
+      showStatus(el.status, '沒有符合此標籤的項目');
+      return;
+    }
+
+    const lines = items.map((item, i) => {
+      const meta = [item.cycle, item.dateText].filter(Boolean).join('，');
+      return (i + 1) + '. ' + item.text + (meta ? '（' + meta + '）' : '');
+    });
+    const text = '【' + tag + '】共 ' + items.length + ' 筆\n\n' + lines.join('\n');
+
+    await navigator.clipboard.writeText(text);
+    showStatus(el.status, '已複製「' + tag + '」共 ' + items.length + ' 筆到剪貼簿');
+  } catch (err) {
+    showStatus(el.status, '匯出失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
 
 // ===== 關鍵字查詢：列出所有符合的項目，可點進去個別編輯 =====
 el.keywordQueryBtn.addEventListener('click', async () => {
