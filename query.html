@@ -12,6 +12,9 @@
     --green: #3d7a68;
     --yellow: #e6d9c8;
     --blue: #dde1e6;
+    --clay: #8a6a4e;
+    --clay-light: #e6d9c8;
+    --clay-light-text: #4a3728;
     --gray-bg: #f0f1f2;
     --text-main: #2a2f36;
     --text-sub: #6b7280;
@@ -301,6 +304,8 @@
   .btn:active { opacity: 0.7; }
   .btn.secondary { background: var(--green); }
   .btn.complete { background: #2e8b74; }
+  .btn.pray-more { background: var(--clay); }
+  .btn.pray-less { background: var(--clay-light); color: var(--clay-light-text); }
   .controls.triple {
     gap: 6px;
   }
@@ -490,6 +495,11 @@
   </div>
 
   <div class="controls">
+    <button class="btn pray-more" id="tcPrayMoreBtn">🔺 禱告更多</button>
+    <button class="btn pray-less" id="tcPrayLessBtn">🔻 禱告更少</button>
+  </div>
+
+  <div class="controls">
     <button class="btn secondary" id="tcRandomBtn">🎲 隨機一項</button>
     <button class="btn" id="tcSpeakBtn" style="background: var(--purple);">🔊 開始連禱</button>
   </div>
@@ -568,6 +578,8 @@ const CYCLE_MAP = {
   'W': 'W每週', 'DW': 'DW每兩週',
   'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
 };
+// 週期由密集到疏鬆的順序（跟 CYCLE_MAP 的 key 對應），「禱告更多／禱告更少」按鈕依這個順序調整週期
+const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y'];
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
 const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
@@ -602,6 +614,8 @@ const el = {
   tcPrevBtn: document.getElementById('tcPrevBtn'),
   tcNextBtn: document.getElementById('tcNextBtn'),
   tcCompleteBtn: document.getElementById('tcCompleteBtn'),
+  tcPrayMoreBtn: document.getElementById('tcPrayMoreBtn'),
+  tcPrayLessBtn: document.getElementById('tcPrayLessBtn'),
   tcRandomBtn: document.getElementById('tcRandomBtn'),
   tcSpeakBtn: document.getElementById('tcSpeakBtn'),
   tcRepeatOptions: document.getElementById('tcRepeatOptions'),
@@ -998,6 +1012,42 @@ el.tcCompleteBtn.addEventListener('click', () => {
     showStatus(el.tcStatus, '同步失敗，請檢查網路：' + err.message);
   });
 });
+
+// 「禱告更多」「禱告更少」= 把週期調整成更密集／更疏鬆的下一級，然後完成這項（跟「完成」按鈕一樣本地立刻移除、背景同步）
+// direction: -1 = 禱告更多（週期變短，例如 DW每兩週 → W每週），+1 = 禱告更少（週期變長，例如 W每週 → DW每兩週）
+function tcShiftCycleAndComplete(direction) {
+  if (tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+
+  const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+  if (idx === -1) { showStatus(el.tcStatus, '請先設定週期，才能用這個按鈕調整'); return; }
+
+  const newIdx = idx + direction;
+  if (newIdx < 0) { showStatus(el.tcStatus, '已經是最密集的週期了'); return; }
+  if (newIdx >= CYCLE_ORDER.length) { showStatus(el.tcStatus, '已經是最疏鬆的週期了'); return; }
+
+  const newCycle = CYCLE_MAP[CYCLE_ORDER[newIdx]];
+  const row = item.row;
+
+  tcStopSpeakingIfNeeded();
+  tcItemsCache.splice(tcCachePos, 1);
+
+  if (tcItemsCache.length === 0) {
+    tcRenderEmptyState();
+  } else {
+    tcRenderFromCache(tcCachePos);
+  }
+
+  // 先更新週期，再標記完成：完成時後端會依「新」週期往後推算下次禱告日期
+  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
+    .then(() => apiCall({ action: 'completeByRow', row: row }))
+    .catch(err => showStatus(el.tcStatus, '同步失敗，請檢查網路：' + err.message));
+
+  showStatus(el.tcStatus, '週期已調整為「' + newCycle + '」，已完成');
+}
+
+el.tcPrayMoreBtn.addEventListener('click', () => tcShiftCycleAndComplete(-1));
+el.tcPrayLessBtn.addEventListener('click', () => tcShiftCycleAndComplete(1));
 
 el.tcDeleteBtn.addEventListener('click', async () => {
   if (tcItemsCache.length === 0) return;
