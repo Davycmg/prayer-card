@@ -456,6 +456,10 @@
     <input type="text" id="keywordInput" placeholder="輸入關鍵字...">
     <button id="keywordQueryBtn">查詢</button>
   </div>
+  <label class="export-all-row">
+    <input type="checkbox" id="keywordQueryAllCheckbox">
+    <span>全部輸出（把查詢結果直接複製成純文字到剪貼簿）</span>
+  </label>
   <div class="result-count" id="keywordResultCount"></div>
   <div class="result-list" id="keywordResultList"></div>
 </div>
@@ -611,6 +615,7 @@ const el = {
   tagQueryAllCheckbox: document.getElementById('tagQueryAllCheckbox'),
   keywordInput: document.getElementById('keywordInput'),
   keywordQueryBtn: document.getElementById('keywordQueryBtn'),
+  keywordQueryAllCheckbox: document.getElementById('keywordQueryAllCheckbox'),
   keywordResultCount: document.getElementById('keywordResultCount'),
   keywordResultList: document.getElementById('keywordResultList'),
   listView: document.getElementById('listView'),
@@ -775,21 +780,7 @@ async function exportTagAllAsText(tag) {
   setLoading(true);
   try {
     const data = await apiCall({ action: 'getItemsByTag', tag: tag, all: 'true' });
-    const items = data.items || [];
-
-    if (items.length === 0) {
-      showStatus(el.status, '沒有符合此標籤的項目');
-      return;
-    }
-
-    const lines = items.map((item, i) => {
-      const meta = [item.cycle, item.dateText].filter(Boolean).join('，');
-      return (i + 1) + '. ' + item.text + (meta ? '（' + meta + '）' : '');
-    });
-    const text = '【' + tag + '】共 ' + items.length + ' 筆\n\n' + lines.join('\n');
-
-    await navigator.clipboard.writeText(text);
-    showStatus(el.status, '已複製「' + tag + '」共 ' + items.length + ' 筆到剪貼簿');
+    await exportItemsAsText(data.items || [], tag);
   } catch (err) {
     showStatus(el.status, '匯出失敗：' + err.message);
   } finally {
@@ -805,7 +796,14 @@ el.keywordQueryBtn.addEventListener('click', async () => {
   setLoading(true);
   try {
     const data = await apiCall({ action: 'searchItems', keyword: keyword });
-    currentKeywordResults = data.items || [];
+    const items = data.items || [];
+
+    if (el.keywordQueryAllCheckbox.checked) {
+      await exportItemsAsText(items, keyword);
+      return;
+    }
+
+    currentKeywordResults = items;
     renderKeywordResults();
   } catch (err) {
     showStatus(el.status, '查詢失敗：' + err.message);
@@ -813,6 +811,23 @@ el.keywordQueryBtn.addEventListener('click', async () => {
     setLoading(false);
   }
 });
+
+// 把查詢結果組成純文字複製到剪貼簿（標籤查詢的「全部輸出」跟關鍵字查詢共用）
+async function exportItemsAsText(items, label) {
+  if (items.length === 0) {
+    showStatus(el.status, '沒有符合的項目');
+    return;
+  }
+
+  const lines = items.map((item, i) => {
+    const meta = [item.cycle, item.dateText, item.tag].filter(Boolean).join('，');
+    return (i + 1) + '. ' + item.text + (meta ? '（' + meta + '）' : '');
+  });
+  const text = '【' + label + '】共 ' + items.length + ' 筆\n\n' + lines.join('\n');
+
+  await navigator.clipboard.writeText(text);
+  showStatus(el.status, '已複製「' + label + '」共 ' + items.length + ' 筆到剪貼簿');
+}
 
 function renderKeywordResults() {
   el.keywordResultList.innerHTML = '';
