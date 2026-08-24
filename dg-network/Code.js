@@ -157,6 +157,14 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed7 → 中午RPG6（中午RPG 的副本，換一份固定名單：郭大衛、許德輝、陳守愚、陳德智、林詩舜、
+  // 歐駿宏、林君樺、林倩妏、李佳玲、黃家豪、張欽漢、許棠為）
+  if (e.parameter.form === 'fixed7') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG6')
+      .setTitle('中午RPG6')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
