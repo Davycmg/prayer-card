@@ -8,6 +8,7 @@
 
 const SHEET_NAME = '表單回覆 1';
 const CARD_SHEET_NAME = '禱告卡片';
+const TRASH_SHEET_NAME = '垃圾桶';
 
 // 欄位對應（1-indexed，跟 getRange 的欄位編號一致）
 const COL = {
@@ -952,6 +953,18 @@ function doGet(e) {
       case 'deleteByRow':
         result = deleteByRow(parseInt(e.parameter.row, 10));
         break;
+      case 'getTrashList':
+        result = getTrashList();
+        break;
+      case 'restoreFromTrash':
+        result = restoreFromTrash(parseInt(e.parameter.trashRow, 10));
+        break;
+      case 'deleteTrashItem':
+        result = deleteTrashItem(parseInt(e.parameter.trashRow, 10));
+        break;
+      case 'emptyTrash':
+        result = emptyTrash();
+        break;
       case 'updateTextByRow':
         result = updateFieldByRow(parseInt(e.parameter.row, 10), COL.TEXT, e.parameter.value);
         break;
@@ -1504,13 +1517,106 @@ function completeByRow(row) {
 }
 
 /**
- * 用實際列號刪除該列資料。刪除後，該列以下所有列號會往前移一位，
- * 前端收到成功回應後，會自動校正本地暫存區裡所有列號 > 這個 row 的項目（各減1）。
+ * 用實際列號「軟刪除」該列資料：整列搬到「垃圾桶」分頁最後一列（附上刪除時間戳記），
+ * 再從主分頁移除，讓刪除可以即時執行、不用等使用者確認。
+ * 刪除後，該列以下所有列號會往前移一位，前端收到成功回應後，
+ * 會自動校正本地暫存區裡所有列號 > 這個 row 的項目（各減1）。
+ * 真的要永久刪除，要另外對垃圾桶呼叫 deleteTrashItem 或 emptyTrash。
  */
 function deleteByRow(row) {
   if (!row || row < 2) return { success: false };
-  getSheet_().deleteRow(row);
+  const sheet = getSheet_();
+  const lastCol = sheet.getLastColumn();
+  const rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
+
+  const trashSheet = getTrashSheet_();
+  const trashRow = trashSheet.getLastRow() + 1;
+  trashSheet.getRange(trashRow, 1, 1, lastCol).setValues([rowValues]);
+  trashSheet.getRange(trashRow, lastCol + 1).setValue(new Date());
+
+  sheet.deleteRow(row);
   return { success: true, deletedRow: row };
+}
+
+/**
+ * 取得（必要時建立）「垃圾桶」分頁：欄位結構跟主分頁一致，最後多一欄「刪除時間」。
+ */
+function getTrashSheet_() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(TRASH_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(TRASH_SHEET_NAME);
+    const mainSheet = getSheet_();
+    const headerRow = mainSheet.getRange(1, 1, 1, mainSheet.getLastColumn()).getValues()[0];
+    sheet.getRange(1, 1, 1, headerRow.length).setValues([headerRow]);
+    sheet.getRange(1, headerRow.length + 1).setValue('刪除時間');
+  }
+  return sheet;
+}
+
+/**
+ * 列出垃圾桶目前所有項目，給前端「批次查看垃圾桶」用。
+ */
+function getTrashList() {
+  const sheet = getTrashSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { items: [] };
+
+  const lastCol = sheet.getLastColumn();
+  const allData = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  const items = [];
+  for (let i = 0; i < allData.length; i++) {
+    const deletedAt = allData[i][lastCol - 1];
+    items.push({
+      trashRow: i + 2,
+      text: allData[i][COL.TEXT - 1] || '',
+      cycle: allData[i][COL.CYCLE - 1] || '',
+      note: allData[i][COL.NOTE - 1] || '',
+      tag: allData[i][COL.TAG - 1] || '',
+      deletedAt: deletedAt instanceof Date ? deletedAt.toISOString() : ''
+    });
+  }
+  // 最新丟進垃圾桶的排最前面
+  items.reverse();
+  return { items: items };
+}
+
+/**
+ * 把垃圾桶裡的一列還原回主分頁（附加到最後一列），並從垃圾桶移除。
+ */
+function restoreFromTrash(trashRow) {
+  if (!trashRow || trashRow < 2) return { success: false };
+  const trashSheet = getTrashSheet_();
+  const sheet = getSheet_();
+  const lastCol = sheet.getLastColumn();
+
+  const rowValues = trashSheet.getRange(trashRow, 1, 1, lastCol).getValues()[0];
+  const newRow = sheet.getLastRow() + 1;
+  sheet.getRange(newRow, 1, 1, lastCol).setValues([rowValues]);
+
+  trashSheet.deleteRow(trashRow);
+  return { success: true, row: newRow };
+}
+
+/**
+ * 永久刪除垃圾桶裡的單一項目，不可復原。
+ */
+function deleteTrashItem(trashRow) {
+  if (!trashRow || trashRow < 2) return { success: false };
+  getTrashSheet_().deleteRow(trashRow);
+  return { success: true };
+}
+
+/**
+ * 清空垃圾桶：永久刪除目前垃圾桶裡的所有項目，不可復原。
+ */
+function emptyTrash() {
+  const sheet = getTrashSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    sheet.deleteRows(2, lastRow - 1);
+  }
+  return { success: true };
 }
 
 /**
