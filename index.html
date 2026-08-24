@@ -315,6 +315,7 @@
     border-top: 1px solid var(--border);
     display: flex;
     justify-content: center;
+    gap: 10px;
   }
   .danger-zone button {
     padding: 8px 18px;
@@ -326,6 +327,117 @@
     opacity: 0.6;
   }
   .danger-zone button:active { opacity: 1; }
+  .danger-zone #openTrashBtn { color: var(--main-primary); }
+  .trash-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 20;
+  }
+  .trash-overlay.show { display: flex; }
+  .trash-panel {
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .trash-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .trash-panel-header h2 {
+    font-size: 17px;
+    margin: 0;
+    color: var(--main-primary);
+  }
+  .trash-close-btn {
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    color: var(--text-sub);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .trash-list {
+    overflow-y: auto;
+    padding: 8px 20px;
+    flex: 1;
+  }
+  .trash-empty-msg {
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 14px;
+    padding: 32px 0;
+  }
+  .trash-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .trash-item-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .trash-item-text {
+    font-size: 14px;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .trash-item-meta {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .trash-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .trash-item-actions button {
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .trash-restore-btn {
+    border: 1px solid var(--main-primary);
+    background: white;
+    color: var(--main-primary);
+  }
+  .trash-delete-btn {
+    border: 1px solid var(--border);
+    background: white;
+    color: var(--text-danger);
+  }
+  .trash-panel-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+  }
+  .trash-empty-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--text-danger);
+    background: white;
+    color: var(--text-danger);
+    font-size: 14px;
+    cursor: pointer;
+  }
   .loading-overlay {
     position: fixed;
     inset: 0;
@@ -425,9 +537,23 @@
 
 <div class="danger-zone">
   <button id="deleteBtn">🗑 刪除此項</button>
+  <button id="openTrashBtn">🗑 查看垃圾桶</button>
 </div>
 
 <div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<div class="trash-overlay" id="trashOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>垃圾桶</h2>
+      <button id="closeTrashBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="trash-list" id="trashList"></div>
+    <div class="trash-panel-footer">
+      <button id="emptyTrashBtn" class="trash-empty-btn">🗑 清空垃圾桶</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ⚠️ 部署 Apps Script 網頁應用程式後，把網址貼在這裡
@@ -491,7 +617,12 @@ const el = {
   deleteBtn: document.getElementById('deleteBtn'),
   pureReadToggle: document.getElementById('pureReadToggle'),
   status: document.getElementById('status'),
-  loadingOverlay: document.getElementById('loadingOverlay')
+  loadingOverlay: document.getElementById('loadingOverlay'),
+  openTrashBtn: document.getElementById('openTrashBtn'),
+  closeTrashBtn: document.getElementById('closeTrashBtn'),
+  trashOverlay: document.getElementById('trashOverlay'),
+  trashList: document.getElementById('trashList'),
+  emptyTrashBtn: document.getElementById('emptyTrashBtn')
 };
 
 function populateSelect(selectEl, map, placeholder) {
@@ -808,36 +939,143 @@ function shiftCycleAndComplete(direction) {
 el.prayMoreBtn.addEventListener('click', () => shiftCycleAndComplete(-1));
 el.prayLessBtn.addEventListener('click', () => shiftCycleAndComplete(1));
 
-// 刪除：需要等API確認成功（避免列號校正錯誤），但只有這個動作會等待
-el.deleteBtn.addEventListener('click', async () => {
+// 刪除＝丟進垃圾桶：不再跳確認對話框，本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新），
+// 背景才真的呼叫API把該列資料搬到「垃圾桶」分頁（軟刪除，可從垃圾桶還原）。
+el.deleteBtn.addEventListener('click', () => {
   if (itemsCache.length === 0) return;
-  const item = itemsCache[cachePos];
-  const preview = (item.text || '').slice(0, 20);
-  const confirmed = window.confirm(
-    '確定要刪除這一項嗎？\n\n「' + preview + ((item.text || '').length > 20 ? '...' : '') + '」\n\n這個動作無法復原。'
-  );
-  if (!confirmed) return;
-
   stopSpeakingIfNeeded();
-  setLoading(true);
+
+  const item = itemsCache[cachePos];
+  const deletedRow = item.row;
+  itemsCache.splice(cachePos, 1);
+  // 刪除後，伺服器上這一列之後的列號都會往前移一位，本地暫存區同步校正，避免後續操作對錯列
+  itemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
+
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromCache(cachePos); // 移除後原位置自然遞補成下一項
+  }
+  showStatus('已丟進垃圾桶');
+
+  apiCall({ action: 'deleteByRow', row: deletedRow }).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message);
+  });
+});
+
+// ===== 垃圾桶：批次查看／還原／永久刪除／清空 =====
+function formatTrashTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderTrashList(items) {
+  el.trashList.innerHTML = '';
+  if (!items || items.length === 0) {
+    el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    return;
+  }
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+
+    const main = document.createElement('div');
+    main.className = 'trash-item-main';
+    const text = document.createElement('div');
+    text.className = 'trash-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'trash-item-meta';
+    meta.textContent = formatTrashTime(item.deletedAt) + (item.cycle ? '・' + item.cycle : '');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'trash-item-actions';
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'trash-restore-btn';
+    restoreBtn.textContent = '↩️ 還原';
+    restoreBtn.addEventListener('click', () => restoreTrashItem(item.trashRow, row));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'trash-delete-btn';
+    delBtn.textContent = '永久刪除';
+    delBtn.addEventListener('click', () => permanentlyDeleteTrashItem(item.trashRow, row));
+
+    actions.appendChild(restoreBtn);
+    actions.appendChild(delBtn);
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.trashList.appendChild(row);
+  });
+}
+
+async function loadTrashList() {
+  el.trashList.innerHTML = '<div class="trash-empty-msg">載入中...</div>';
   try {
-    await apiCall({ action: 'deleteByRow', row: item.row });
-
-    const deletedRow = item.row;
-    itemsCache.splice(cachePos, 1);
-    // 刪除後，伺服器上這一列之後的列號都會往前移一位，本地暫存區同步校正，避免後續操作對錯列
-    itemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
-
-    if (itemsCache.length === 0) {
-      renderEmptyState();
-    } else {
-      renderFromCache(cachePos);
-    }
-    showStatus('已刪除');
+    const data = await apiCall({ action: 'getTrashList' });
+    renderTrashList(data.items || []);
   } catch (err) {
+    el.trashList.innerHTML = '<div class="trash-empty-msg">載入失敗：' + err.message + '</div>';
+  }
+}
+
+function openTrashPanel() {
+  el.trashOverlay.classList.add('show');
+  loadTrashList();
+}
+
+function closeTrashPanel() {
+  el.trashOverlay.classList.remove('show');
+}
+
+el.openTrashBtn.addEventListener('click', openTrashPanel);
+el.closeTrashBtn.addEventListener('click', closeTrashPanel);
+el.trashOverlay.addEventListener('click', (e) => {
+  if (e.target === el.trashOverlay) closeTrashPanel();
+});
+
+async function restoreTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall({ action: 'restoreFromTrash', trashRow: trashRow });
+    rowEl.remove();
+    showStatus('已還原，重新整理後會出現在清單中');
+    if (!el.trashList.querySelector('.trash-item')) {
+      el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
+    showStatus('還原失敗：' + err.message);
+  }
+}
+
+async function permanentlyDeleteTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall({ action: 'deleteTrashItem', trashRow: trashRow });
+    rowEl.remove();
+    if (!el.trashList.querySelector('.trash-item')) {
+      el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
     showStatus('刪除失敗：' + err.message);
-  } finally {
-    setLoading(false);
+  }
+}
+
+armConfirmButton(el.emptyTrashBtn, '再按一次確認清空（不可復原）', async () => {
+  try {
+    await apiCall({ action: 'emptyTrash' });
+    renderTrashList([]);
+    showStatus('垃圾桶已清空');
+  } catch (err) {
+    showStatus('清空失敗：' + err.message);
   }
 });
 
