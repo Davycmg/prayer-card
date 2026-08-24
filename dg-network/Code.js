@@ -143,6 +143,20 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=fixed5 → 中午RPG4（中午RPG 的副本，換一份固定名單：郭大衛、林仕明）
+  if (e.parameter.form === 'fixed5') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG4')
+      .setTitle('中午RPG4')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
+  // form=fixed6 → 中午RPG5（中午RPG 的副本，換一份固定名單：郭大衛、江吉昇、林湛、劉彥漢）
+  if (e.parameter.form === 'fixed6') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG5')
+      .setTitle('中午RPG5')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
