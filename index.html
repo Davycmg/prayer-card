@@ -589,6 +589,15 @@ const WEEKDAY_MAP = {
   '週五': '週五', '週六': '週六', '週日': '週日'
 };
 
+// 依週期長短排序：週期最長（如每年）排最前面，週期空白/無法辨識的排最後面
+function sortItemsByCycleDesc(items) {
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? -1 : idx;
+  };
+  items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
+}
+
 // ===== 本地暫存區：一次抓好今天的清單，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
 let itemsCache = [];   // [{row, text, cycle, note, tag}, ...]
 let cachePos = 0;      // 目前指到 itemsCache 的第幾個（0-based）
@@ -649,6 +658,7 @@ async function loadInitData() {
     const data = await apiCall({ action: 'getInitData' });
     customTagsCache = data.custom || [];
     itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入' && item.tag !== 'A安祺禱告');
+    sortItemsByCycleDesc(itemsCache);
     cachePos = 0;
     renderFromCache(0);
   } catch (err) {
