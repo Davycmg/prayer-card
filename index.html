@@ -1168,9 +1168,19 @@ updateRepeatButtons();
 
 function loadVoices() {
   const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-  zhVoice = voices.find(v => v.lang === 'zh-TW')
-        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
-        || null;
+  const zhVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('zh'));
+  // 優先挑選裝置上較自然的語音（Google／Microsoft 神經語音通常比系統預設好聽），
+  // 語系優先順序：zh-TW > zh-HK > zh-CN > 其他 zh
+  const byQuality = (v) => /google|microsoft|neural|premium|enhanced/i.test(v.name) ? 0 : 1;
+  const byLang = (v) => {
+    const lang = v.lang.toLowerCase();
+    if (lang === 'zh-tw') return 0;
+    if (lang === 'zh-hk') return 1;
+    if (lang === 'zh-cn') return 2;
+    return 3;
+  };
+  zhVoices.sort((a, b) => byQuality(a) - byQuality(b) || byLang(a) - byLang(b));
+  zhVoice = zhVoices[0] || null;
 }
 if (window.speechSynthesis) {
   loadVoices();
