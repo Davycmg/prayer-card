@@ -839,6 +839,7 @@ function armConfirmButton(btn, confirmText, onConfirmed) {
 
 // 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
 // 用來解決「標籤本來就已經是task預設清單、change事件不會觸發」的限制，可以隨時重複按。
+// 確認複製成功後，這項在這邊的任務就算完成了，直接丟進垃圾桶（跟「刪除此項」共用同一套邏輯）。
 armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
@@ -846,7 +847,8 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   apiCall({ action: 'copyToTasks', row: item.row })
     .then(data => {
       if (data && data.copied) {
-        showStatus('已複製到 Google Tasks 預設清單');
+        moveCurrentItemToTrash();
+        showStatus('已複製到 Google Tasks 預設清單，並丟進垃圾桶');
       } else {
         showStatus('複製失敗，請稍後再試');
       }
@@ -967,7 +969,8 @@ el.prayLessBtn.addEventListener('click', () => shiftCycleAndComplete(1));
 
 // 刪除＝丟進垃圾桶：不再跳確認對話框，本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新），
 // 背景才真的呼叫API把該列資料搬到「垃圾桶」分頁（軟刪除，可從垃圾桶還原）。
-el.deleteBtn.addEventListener('click', () => {
+// 跟「複製到 Google Tasks」成功後自動丟垃圾桶共用同一套邏輯。
+function moveCurrentItemToTrash() {
   if (itemsCache.length === 0) return;
   stopSpeakingIfNeeded();
 
@@ -982,11 +985,16 @@ el.deleteBtn.addEventListener('click', () => {
   } else {
     renderFromCache(cachePos); // 移除後原位置自然遞補成下一項
   }
-  showStatus('已丟進垃圾桶');
 
   apiCall({ action: 'deleteByRow', row: deletedRow }).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message);
   });
+}
+
+el.deleteBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  moveCurrentItemToTrash();
+  showStatus('已丟進垃圾桶');
 });
 
 // ===== 垃圾桶：批次查看／還原／永久刪除／清空 =====
