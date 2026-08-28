@@ -428,6 +428,66 @@
     padding: 12px 20px;
     border-top: 1px solid var(--border);
   }
+  .search-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-size: 15px;
+  }
+  .search-input-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--main-primary);
+    background: white;
+    color: var(--main-primary);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .search-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .search-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .search-item-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .search-item-text {
+    font-size: 14px;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .search-item-meta {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .search-merge-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--main-primary);
+    color: white;
+    font-size: 15px;
+  }
   .trash-empty-btn {
     width: 100%;
     padding: 10px;
@@ -534,6 +594,7 @@
 </div>
 
 <button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出所有到期項目</button>
+<button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋</button>
 
 <div class="status" id="status"></div>
 
@@ -553,6 +614,23 @@
     <div class="trash-list" id="trashList"></div>
     <div class="trash-panel-footer">
       <button id="emptyTrashBtn" class="trash-empty-btn">🗑 清空垃圾桶</button>
+    </div>
+  </div>
+</div>
+
+<div class="trash-overlay" id="searchOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>關鍵字搜尋</h2>
+      <button id="closeSearchBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="search-input-row">
+      <input type="text" id="searchKeywordInput" placeholder="輸入關鍵字">
+      <button id="searchKeywordBtn">搜尋</button>
+    </div>
+    <div class="trash-list" id="searchResultList"></div>
+    <div class="trash-panel-footer">
+      <button id="mergeSearchBtn" class="search-merge-btn">🔗 合併所選項目</button>
     </div>
   </div>
 </div>
@@ -626,6 +704,13 @@ const el = {
   jumpInput: document.getElementById('jumpInput'),
   jumpBtn: document.getElementById('jumpBtn'),
   exportAllBtn: document.getElementById('exportAllBtn'),
+  openSearchBtn: document.getElementById('openSearchBtn'),
+  closeSearchBtn: document.getElementById('closeSearchBtn'),
+  searchOverlay: document.getElementById('searchOverlay'),
+  searchKeywordInput: document.getElementById('searchKeywordInput'),
+  searchKeywordBtn: document.getElementById('searchKeywordBtn'),
+  searchResultList: document.getElementById('searchResultList'),
+  mergeSearchBtn: document.getElementById('mergeSearchBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
   pureReadToggle: document.getElementById('pureReadToggle'),
   status: document.getElementById('status'),
@@ -1110,6 +1195,109 @@ armConfirmButton(el.emptyTrashBtn, '再按一次確認清空（不可復原）',
     showStatus('垃圾桶已清空');
   } catch (err) {
     showStatus('清空失敗：' + err.message);
+  }
+});
+
+// ===== 關鍵字搜尋 + 合併：搜尋不限「今天到期」，全部項目都找；
+// 勾選多項後可以合併成一條（文字用換行接起來，寫回第一項，其餘項目丟進垃圾桶）=====
+let searchResultsCache = []; // 目前搜尋結果，[{row, text, cycle, note, tag, dateText}, ...]
+
+function renderSearchResults(items) {
+  searchResultsCache = items || [];
+  el.searchResultList.innerHTML = '';
+
+  if (searchResultsCache.length === 0) {
+    el.searchResultList.innerHTML = '<div class="trash-empty-msg">沒有符合的項目</div>';
+    return;
+  }
+
+  searchResultsCache.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'search-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.row = String(item.row);
+
+    const main = document.createElement('div');
+    main.className = 'search-item-main';
+    const text = document.createElement('div');
+    text.className = 'search-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'search-item-meta';
+    meta.textContent = [item.cycle, item.tag, item.dateText].filter(Boolean).join('・');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    row.appendChild(checkbox);
+    row.appendChild(main);
+    el.searchResultList.appendChild(row);
+  });
+}
+
+async function performSearch() {
+  const keyword = el.searchKeywordInput.value.trim();
+  if (!keyword) { showStatus('請輸入關鍵字'); return; }
+
+  el.searchResultList.innerHTML = '<div class="trash-empty-msg">搜尋中...</div>';
+  try {
+    const data = await apiCall({ action: 'searchItems', keyword: keyword });
+    renderSearchResults(data.items || []);
+  } catch (err) {
+    el.searchResultList.innerHTML = '<div class="trash-empty-msg">搜尋失敗：' + err.message + '</div>';
+  }
+}
+
+function openSearchPanel() {
+  el.searchOverlay.classList.add('show');
+  el.searchResultList.innerHTML = '';
+  searchResultsCache = [];
+}
+
+function closeSearchPanel() {
+  el.searchOverlay.classList.remove('show');
+}
+
+el.openSearchBtn.addEventListener('click', openSearchPanel);
+el.closeSearchBtn.addEventListener('click', closeSearchPanel);
+el.searchOverlay.addEventListener('click', (e) => {
+  if (e.target === el.searchOverlay) closeSearchPanel();
+});
+el.searchKeywordBtn.addEventListener('click', performSearch);
+el.searchKeywordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') performSearch();
+});
+
+// 把勾選的多個項目合併成一項：文字依勾選順序（列號由小到大）用換行接起來，
+// 寫回列號最小的那一項，其餘項目丟進垃圾桶（跟「刪除此項」一樣可從垃圾桶還原）。
+armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
+  const checkedRows = Array.from(el.searchResultList.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb => parseInt(cb.dataset.row, 10));
+  if (checkedRows.length < 2) { showStatus('請至少勾選兩項才能合併'); return; }
+
+  const selected = searchResultsCache
+    .filter(item => checkedRows.includes(item.row))
+    .sort((a, b) => a.row - b.row);
+  const target = selected[0];
+  const others = selected.slice(1);
+  const mergedText = selected.map(item => item.text).join('\n');
+
+  setLoading(true);
+  try {
+    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText });
+    // 從列號大到小依序丟進垃圾桶，避免刪除造成的列號位移影響到還沒處理的項目
+    const toTrash = others.slice().sort((a, b) => b.row - a.row);
+    for (const item of toTrash) {
+      await apiCall({ action: 'deleteByRow', row: item.row });
+    }
+    showStatus('已合併 ' + selected.length + ' 項為一項');
+    await performSearch();
+    await loadInitData(); // 首頁到期清單的列號/內容可能已變動，重新整理
+  } catch (err) {
+    showStatus('合併失敗：' + err.message);
+  } finally {
+    setLoading(false);
   }
 });
 
