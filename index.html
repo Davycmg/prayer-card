@@ -533,6 +533,8 @@
   <button id="jumpBtn">跳到</button>
 </div>
 
+<button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出所有到期項目</button>
+
 <div class="status" id="status"></div>
 
 <div class="danger-zone">
@@ -614,6 +616,7 @@ const el = {
   repeatOptions: document.getElementById('repeatOptions'),
   jumpInput: document.getElementById('jumpInput'),
   jumpBtn: document.getElementById('jumpBtn'),
+  exportAllBtn: document.getElementById('exportAllBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
   pureReadToggle: document.getElementById('pureReadToggle'),
   status: document.getElementById('status'),
@@ -685,6 +688,19 @@ function updateCycleWarning() {
 function updateTagWarning() {
   el.tagSelect.classList.toggle('tag-highlight', el.tagSelect.value === TAG_MAP['A']);
 }
+
+// 一鍵輸出：把目前所有到期項目的標題（不含週期等其他屬性）組成純文字複製到剪貼簿
+el.exportAllBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) { showStatus('目前沒有待禱告的項目'); return; }
+  const lines = itemsCache.map((item, i) => (i + 1) + '. ' + item.text);
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus('已複製共 ' + itemsCache.length + ' 項到剪貼簿');
+  } catch (err) {
+    showStatus('複製失敗：' + err.message);
+  }
+});
 
 function setLoading(show) {
   el.loadingOverlay.classList.toggle('show', show);
@@ -1168,9 +1184,19 @@ updateRepeatButtons();
 
 function loadVoices() {
   const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
-  zhVoice = voices.find(v => v.lang === 'zh-TW')
-        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
-        || null;
+  const zhVoices = voices.filter(v => v.lang && v.lang.toLowerCase().startsWith('zh'));
+  // 優先挑選裝置上較自然的語音（Google／Microsoft 神經語音通常比系統預設好聽），
+  // 語系優先順序：zh-TW > zh-HK > zh-CN > 其他 zh
+  const byQuality = (v) => /google|microsoft|neural|premium|enhanced/i.test(v.name) ? 0 : 1;
+  const byLang = (v) => {
+    const lang = v.lang.toLowerCase();
+    if (lang === 'zh-tw') return 0;
+    if (lang === 'zh-hk') return 1;
+    if (lang === 'zh-cn') return 2;
+    return 3;
+  };
+  zhVoices.sort((a, b) => byQuality(a) - byQuality(b) || byLang(a) - byLang(b));
+  zhVoice = zhVoices[0] || null;
 }
 if (window.speechSynthesis) {
   loadVoices();
