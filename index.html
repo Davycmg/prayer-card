@@ -1269,8 +1269,8 @@ el.searchKeywordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') performSearch();
 });
 
-// 把勾選的多個項目合併成一項：文字依勾選順序（列號由小到大）用換行接起來，
-// 寫回列號最小的那一項，其餘項目丟進垃圾桶（跟「刪除此項」一樣可從垃圾桶還原）。
+// 把勾選的多個項目合併成一項：文字依列號由小到大用換行接起來，
+// 寫回「週期最短」的那一項（保留它原本的週期跟到期日），其餘項目丟進垃圾桶（跟「刪除此項」一樣可從垃圾桶還原）。
 armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
   const checkedRows = Array.from(el.searchResultList.querySelectorAll('input[type="checkbox"]:checked'))
     .map(cb => parseInt(cb.dataset.row, 10));
@@ -1279,8 +1279,14 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
   const selected = searchResultsCache
     .filter(item => checkedRows.includes(item.row))
     .sort((a, b) => a.row - b.row);
-  const target = selected[0];
-  const others = selected.slice(1);
+
+  // 保留「週期最短」那一項的週期跟到期日；週期無法辨識（含空白）的視為最長，不會被選為保留項
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? Infinity : idx;
+  };
+  const target = selected.slice().sort((a, b) => cycleIndex(a) - cycleIndex(b) || a.row - b.row)[0];
+  const others = selected.filter(item => item.row !== target.row);
   const mergedText = selected.map(item => item.text).join('\n');
 
   setLoading(true);
