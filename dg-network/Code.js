@@ -482,7 +482,49 @@ function getAllItems_() {
     }
   }
 
-  return { items: items, total: items.length };
+  const deduped = dedupeItemsByName_(items);
+  return { items: deduped, total: deduped.length };
+}
+
+/**
+ * 同一個姓名可能因為表單重複提交，在「表單回覆 1」裡有好幾列都符合「今天要代禱」，
+ * 導致同一個人在代禱卡片上出現好幾次（例如週期是「每週」但已經好幾週沒標記完成，
+ * 若剛好又有多筆同名資料，每一筆都各自算「逾期」而各自被列入）。
+ * 這裡統一在組清單時依姓名去重複：只保留最早的那一列（用來定位「完成／刪除」操作），
+ * 備註合併去重複、週期不一致則採用最短的（跟 mergeDuplicateNames() 的合併規則一致），
+ * 確保同一個人在畫面上只會出現一次。
+ */
+function dedupeItemsByName_(items) {
+  const order = [];
+  const byName = {};
+
+  items.forEach(item => {
+    const name = String(item.name || '').trim();
+    if (!name) {
+      order.push(item);
+      return;
+    }
+    if (!byName[name]) {
+      const merged = { row: item.row, name: item.name, cycle: item.cycle, note: item.note, _notes: [], _cycles: [] };
+      byName[name] = merged;
+      order.push(merged);
+    }
+    const merged = byName[name];
+    const note = String(item.note || '').trim();
+    if (note && merged._notes.indexOf(note) === -1) merged._notes.push(note);
+    const cycle = String(item.cycle || '').trim();
+    if (cycle && merged._cycles.indexOf(cycle) === -1) merged._cycles.push(cycle);
+  });
+
+  return order.map(item => {
+    if (!item._cycles) return item; // 沒有姓名的項目，原樣保留
+    return {
+      row: item.row,
+      name: item.name,
+      cycle: item._cycles.length > 1 ? pickShortestCycle_(item._cycles) : (item._cycles[0] || item.cycle),
+      note: item._notes.join('\n')
+    };
+  });
 }
 
 // 固定名單：CardIndexFixed.html 專用，不受今天待代禱日期篩選影響，永遠依這個順序顯示這幾位
