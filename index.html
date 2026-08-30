@@ -1015,9 +1015,11 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
 });
 
-// 「平日禱告／週末禱告」：把目前這項的到期日（E欄）改到最近的平日／週末（今天符合的話就用今天），
-// 跟「完成」按鈕一樣走本地樂觀更新（不等API、不跳「處理中」）：先在前端算出新日期，
-// 如果新日期還是「今天或更早」就留著，否則本地立刻移除，背景才真的呼叫API同步。
+// 「平日禱告／週末禱告」：把目前這項的到期日（E欄）改到最近的平日／週末（今天符合的話就用今天）。
+// 跟「完成」按鈕一樣不跳「處理中」：前端先算出新日期，如果還是「今天或更早」就留著清單裡，
+// 否則本地立刻移除、畫面瞬間更新；但「已改到...」的成功訊息一定要等 API 真的回應成功才顯示——
+// 不然 API 失敗時（例如還沒發布新版本、網路不穩）畫面卻顯示成功，試算表其實沒改到，
+// 重新整理後這項又跑回來，會誤以為出了怪異的 bug。API 失敗時也要把本地移除的項目放回去。
 function nearestWeekdayLocal(fromDate) {
   const d = new Date(fromDate);
   const day = d.getDay(); // 0=週日...6=週六
@@ -1037,6 +1039,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
   stopSpeakingIfNeeded();
 
   const item = itemsCache[cachePos];
+  const removedAt = cachePos;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const newDate = computeNewDate(today);
@@ -1050,11 +1053,16 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
       renderFromCache(cachePos);
     }
   }
-  showStatus(doneMsg);
 
-  apiCall({ action: action, row: item.row }).catch(err => {
-    showStatus('同步失敗，請檢查網路：' + err.message);
-  });
+  apiCall({ action: action, row: item.row })
+    .then(() => showStatus(doneMsg))
+    .catch(err => {
+      showStatus('同步失敗，請重新再按一次：' + err.message);
+      if (!staysDue) {
+        itemsCache.splice(removedAt, 0, item); // 同步失敗，放回本地暫存區，不要讓項目憑空消失
+        renderFromCache(removedAt);
+      }
+    });
 }
 
 armConfirmButton(el.setWeekdayBtn, '再按一次確認改到最近平日', () => {
