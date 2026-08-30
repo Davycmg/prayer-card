@@ -321,7 +321,8 @@
   input:checked + .slider { background-color: var(--main-primary); }
   input:checked + .slider:before { transform: translateX(20px); }
   .status {
-    margin-top: 10px;
+    margin-top: 6px;
+    margin-bottom: 4px;
     font-size: 12px;
     color: var(--text-sub);
     height: 16px;
@@ -556,6 +557,8 @@
   <div class="progress" id="progress">載入中...</div>
 </div>
 
+<div class="status" id="status"></div>
+
 <div class="card">
   <textarea class="prayer-text" id="prayerText" placeholder="禱告事項內容..."></textarea>
 
@@ -640,8 +643,6 @@
 
 <button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出所有到期項目</button>
 <button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋</button>
-
-<div class="status" id="status"></div>
 
 <div class="danger-zone">
   <button id="openTrashBtn">🗑 查看垃圾桶</button>
