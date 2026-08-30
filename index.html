@@ -173,6 +173,26 @@
     cursor: pointer;
   }
   .copy-tasks-btn:active { opacity: 0.7; }
+  .quad-actions {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .quad-btn {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 2px;
+    border-radius: 8px;
+    border: 1px solid var(--main-primary);
+    background: white;
+    color: var(--main-primary);
+    font-size: 11px;
+    line-height: 1.3;
+    cursor: pointer;
+  }
+  .quad-btn:active { opacity: 0.7; }
   .controls {
     width: 100%;
     max-width: 480px;
@@ -566,10 +586,12 @@
     <button id="addTagBtn">套用</button>
   </div>
 
-  <button class="copy-tasks-btn" id="copyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
-  <button class="copy-tasks-btn" id="addToCalendarBtn">📅 新增到日曆（依週期重複）</button>
-  <button class="copy-tasks-btn" id="setWeekdayBtn">📅 平日禱告（改到最近平日）</button>
-  <button class="copy-tasks-btn" id="setWeekendBtn">📅 週末禱告（改到最近週末）</button>
+  <div class="quad-actions">
+    <button class="quad-btn" id="copyToTasksBtn">📋 複製到 Tasks</button>
+    <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
+    <button class="quad-btn" id="setWeekdayBtn">📅 平日禱告</button>
+    <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
+  </div>
 
   <div class="note" id="noteText"></div>
 </div>
