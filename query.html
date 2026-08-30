@@ -421,6 +421,7 @@
     border-top: 1px solid #e5e5e5;
     display: flex;
     justify-content: center;
+    gap: 10px;
   }
   .danger-zone button {
     padding: 8px 18px;
@@ -432,6 +433,177 @@
     opacity: 0.6;
   }
   .danger-zone button:active { opacity: 1; }
+  .danger-zone #tcOpenTrashBtn { color: var(--purple); }
+  .trash-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 20;
+  }
+  .trash-overlay.show { display: flex; }
+  .trash-panel {
+    width: 100%;
+    max-width: 480px;
+    max-height: 80vh;
+    background: white;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .trash-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid #ddd;
+  }
+  .trash-panel-header h2 {
+    font-size: 17px;
+    margin: 0;
+    color: var(--purple);
+  }
+  .trash-close-btn {
+    border: none;
+    background: transparent;
+    font-size: 18px;
+    color: var(--text-sub);
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .trash-list {
+    overflow-y: auto;
+    padding: 8px 20px;
+    flex: 1;
+  }
+  .trash-empty-msg {
+    text-align: center;
+    color: var(--text-sub);
+    font-size: 14px;
+    padding: 32px 0;
+  }
+  .trash-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid #ddd;
+  }
+  .trash-item-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .trash-item-text {
+    font-size: 14px;
+    color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .trash-item-meta {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .trash-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .trash-item-actions button {
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .trash-restore-btn {
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+  }
+  .trash-delete-btn {
+    border: 1px solid #ddd;
+    background: white;
+    color: #b0413e;
+  }
+  .trash-panel-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #ddd;
+  }
+  .search-input-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid #ddd;
+  }
+  .search-input-row input {
+    flex: 1;
+    min-width: 0;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+  }
+  .search-input-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  .search-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 0;
+    border-bottom: 1px solid #ddd;
+  }
+  .search-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .search-item-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .search-item-text {
+    font-size: 14px;
+    color: var(--text-main);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .search-item-meta {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 2px;
+  }
+  .search-merge-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--purple);
+    color: white;
+    font-size: 15px;
+  }
+  .trash-empty-btn {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #b0413e;
+    background: white;
+    color: #b0413e;
+    font-size: 14px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -502,6 +674,7 @@
     </div>
 
     <button class="copy-tasks-btn" id="tcCopyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
+    <button class="copy-tasks-btn" id="tcAddToCalendarBtn">📅 新增到日曆（依週期重複）</button>
 
     <div class="note" id="tcNoteText"></div>
   </div>
@@ -544,10 +717,44 @@
     <button id="tcJumpBtn">跳到</button>
   </div>
 
+  <button class="copy-tasks-btn" id="tcExportAllBtn">📤 一鍵輸出所有到期項目</button>
+  <button class="copy-tasks-btn" id="tcOpenSearchBtn">🔍 關鍵字搜尋</button>
+
   <div class="status" id="tcStatus"></div>
 
   <div class="danger-zone">
     <button id="tcDeleteBtn">🗑 刪除此項</button>
+    <button id="tcOpenTrashBtn">🗑 查看垃圾桶</button>
+  </div>
+</div>
+
+<div class="trash-overlay" id="tcTrashOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>垃圾桶</h2>
+      <button id="tcCloseTrashBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="trash-list" id="tcTrashList"></div>
+    <div class="trash-panel-footer">
+      <button id="tcEmptyTrashBtn" class="trash-empty-btn">🗑 清空垃圾桶</button>
+    </div>
+  </div>
+</div>
+
+<div class="trash-overlay" id="tcSearchOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>關鍵字搜尋</h2>
+      <button id="tcCloseSearchBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="search-input-row">
+      <input type="text" id="tcSearchKeywordInput" placeholder="輸入關鍵字">
+      <button id="tcSearchKeywordBtn">搜尋</button>
+    </div>
+    <div class="trash-list" id="tcSearchResultList"></div>
+    <div class="trash-panel-footer">
+      <button id="tcMergeSearchBtn" class="search-merge-btn">🔗 合併所選項目</button>
+    </div>
   </div>
 </div>
 
@@ -603,6 +810,21 @@ const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
   '週五': '週五', '週六': '週六', '週日': '週日'
 };
+// 週期文字（跟 CYCLE_MAP 的值一致）對應 Google 日曆的 RRULE 重複規則
+const CYCLE_RRULE_MAP = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  '4每四天': 'RRULE:FREQ=DAILY;INTERVAL=4',
+  '5每五天': 'RRULE:FREQ=DAILY;INTERVAL=5',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
+};
 
 let customTagsCache = [];
 let currentKeywordResults = []; // 目前關鍵字查詢的結果，點進去編輯時用來對照
@@ -630,6 +852,7 @@ const el = {
   tcSaveTagCheckbox: document.getElementById('tcSaveTagCheckbox'),
   tcAddTagBtn: document.getElementById('tcAddTagBtn'),
   tcCopyToTasksBtn: document.getElementById('tcCopyToTasksBtn'),
+  tcAddToCalendarBtn: document.getElementById('tcAddToCalendarBtn'),
   tcNoteText: document.getElementById('tcNoteText'),
   tcPrevBtn: document.getElementById('tcPrevBtn'),
   tcNextBtn: document.getElementById('tcNextBtn'),
@@ -642,8 +865,21 @@ const el = {
   tcPureReadToggle: document.getElementById('tcPureReadToggle'),
   tcJumpInput: document.getElementById('tcJumpInput'),
   tcJumpBtn: document.getElementById('tcJumpBtn'),
+  tcExportAllBtn: document.getElementById('tcExportAllBtn'),
+  tcOpenSearchBtn: document.getElementById('tcOpenSearchBtn'),
+  tcCloseSearchBtn: document.getElementById('tcCloseSearchBtn'),
+  tcSearchOverlay: document.getElementById('tcSearchOverlay'),
+  tcSearchKeywordInput: document.getElementById('tcSearchKeywordInput'),
+  tcSearchKeywordBtn: document.getElementById('tcSearchKeywordBtn'),
+  tcSearchResultList: document.getElementById('tcSearchResultList'),
+  tcMergeSearchBtn: document.getElementById('tcMergeSearchBtn'),
   tcStatus: document.getElementById('tcStatus'),
   tcDeleteBtn: document.getElementById('tcDeleteBtn'),
+  tcOpenTrashBtn: document.getElementById('tcOpenTrashBtn'),
+  tcCloseTrashBtn: document.getElementById('tcCloseTrashBtn'),
+  tcTrashOverlay: document.getElementById('tcTrashOverlay'),
+  tcTrashList: document.getElementById('tcTrashList'),
+  tcEmptyTrashBtn: document.getElementById('tcEmptyTrashBtn'),
   editPanel: document.getElementById('editPanel'),
   backBtn: document.getElementById('backBtn'),
   editText: document.getElementById('editText'),
@@ -1016,19 +1252,90 @@ el.tcAddTagBtn.addEventListener('click', async () => {
   el.tcNewTagInput.value = '';
 });
 
-el.tcCopyToTasksBtn.addEventListener('click', () => {
+// 需要點兩下才會真的觸發，避免手機上滑動、誤觸就直接複製/開日曆：
+// 第一下只是進入「待確認」狀態（按鈕文字換成提示），CONFIRM_TIMEOUT_MS 內點第二下才會真的執行，
+// 逾時或點其他按鈕就自動還原，不會誤觸發。
+const CONFIRM_TIMEOUT_MS = 1000;
+
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+
+  function reset() {
+    confirming = false;
+    clearTimeout(resetTimer);
+    btn.textContent = originalText;
+  }
+
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+
+// 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
+// 確認複製成功後，這項在這邊的任務就算完成了，直接丟進垃圾桶（跟「刪除此項」共用同一套邏輯）。
+armConfirmButton(el.tcCopyToTasksBtn, '再按一次確認複製', () => {
   if (tcItemsCache.length === 0) return;
   const item = tcItemsCache[tcCachePos];
 
   apiCall({ action: 'copyToTasks', row: item.row })
     .then(data => {
       if (data && data.copied) {
-        showStatus(el.tcStatus, '已複製到 Google Tasks 預設清單');
+        tcMoveCurrentItemToTrash();
+        showStatus(el.tcStatus, '已複製到 Google Tasks 預設清單，並丟進垃圾桶');
       } else {
         showStatus(el.tcStatus, '複製失敗，請稍後再試');
       }
     })
     .catch(err => showStatus(el.tcStatus, '複製失敗：' + err.message));
+});
+
+// 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+armConfirmButton(el.tcAddToCalendarBtn, '再按一次確認加入日曆', () => {
+  if (tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+
+  const rrule = CYCLE_RRULE_MAP[item.cycle];
+  if (!rrule) { showStatus(el.tcStatus, '請先設定週期才能加入日曆'); return; }
+
+  const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: item.text || '',
+    recur: rrule
+  });
+
+  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+});
+
+// 一鍵輸出：把目前這個標籤所有項目的標題（不含週期等其他屬性）組成純文字複製到剪貼簿
+el.tcExportAllBtn.addEventListener('click', async () => {
+  if (tcItemsCache.length === 0) { showStatus(el.tcStatus, '目前沒有項目'); return; }
+  const lines = tcItemsCache.map((item, i) => (i + 1) + '. ' + item.text);
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus(el.tcStatus, '已複製共 ' + tcItemsCache.length + ' 項到剪貼簿');
+  } catch (err) {
+    showStatus(el.tcStatus, '複製失敗：' + err.message);
+  }
 });
 
 el.tcPrevBtn.addEventListener('click', () => {
@@ -1111,32 +1418,261 @@ function tcShiftCycleAndComplete(direction) {
 el.tcPrayMoreBtn.addEventListener('click', () => tcShiftCycleAndComplete(-1));
 el.tcPrayLessBtn.addEventListener('click', () => tcShiftCycleAndComplete(1));
 
-el.tcDeleteBtn.addEventListener('click', async () => {
+// 刪除＝丟進垃圾桶：不再跳確認對話框，本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新），
+// 背景才真的呼叫API把該列資料搬到「垃圾桶」分頁（軟刪除，可從垃圾桶還原）。
+// 跟「複製到 Google Tasks」成功後自動丟垃圾桶共用同一套邏輯。
+function tcMoveCurrentItemToTrash() {
   if (tcItemsCache.length === 0) return;
-  const item = tcItemsCache[tcCachePos];
-  const preview = (item.text || '').slice(0, 20);
-  const confirmed = window.confirm(
-    '確定要刪除這一項嗎？\n\n「' + preview + ((item.text || '').length > 20 ? '...' : '') + '」\n\n這個動作無法復原。'
-  );
-  if (!confirmed) return;
-
   tcStopSpeakingIfNeeded();
+
+  const item = tcItemsCache[tcCachePos];
+  const deletedRow = item.row;
+  tcItemsCache.splice(tcCachePos, 1);
+  // 刪除後，伺服器上這一列之後的列號都會往前移一位，本地暫存區同步校正，避免後續操作對錯列
+  tcItemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
+
+  if (tcItemsCache.length === 0) {
+    tcRenderEmptyState();
+  } else {
+    tcRenderFromCache(tcCachePos);
+  }
+
+  apiCall({ action: 'deleteByRow', row: deletedRow }).catch(err => {
+    showStatus(el.tcStatus, '同步失敗，請檢查網路：' + err.message);
+  });
+}
+
+el.tcDeleteBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  tcMoveCurrentItemToTrash();
+  showStatus(el.tcStatus, '已丟進垃圾桶');
+});
+
+// ===== 垃圾桶：批次查看／還原／永久刪除／清空 =====
+function tcFormatTrashTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function tcRenderTrashList(items) {
+  el.tcTrashList.innerHTML = '';
+  if (!items || items.length === 0) {
+    el.tcTrashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    return;
+  }
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+
+    const main = document.createElement('div');
+    main.className = 'trash-item-main';
+    const text = document.createElement('div');
+    text.className = 'trash-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'trash-item-meta';
+    meta.textContent = tcFormatTrashTime(item.deletedAt) + (item.cycle ? '・' + item.cycle : '');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'trash-item-actions';
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'trash-restore-btn';
+    restoreBtn.textContent = '↩️ 還原';
+    restoreBtn.addEventListener('click', () => tcRestoreTrashItem(item.trashRow, row));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'trash-delete-btn';
+    delBtn.textContent = '永久刪除';
+    delBtn.addEventListener('click', () => tcPermanentlyDeleteTrashItem(item.trashRow, row));
+
+    actions.appendChild(restoreBtn);
+    actions.appendChild(delBtn);
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.tcTrashList.appendChild(row);
+  });
+}
+
+async function tcLoadTrashList() {
+  el.tcTrashList.innerHTML = '<div class="trash-empty-msg">載入中...</div>';
+  try {
+    const data = await apiCall({ action: 'getTrashList' });
+    tcRenderTrashList(data.items || []);
+  } catch (err) {
+    el.tcTrashList.innerHTML = '<div class="trash-empty-msg">載入失敗：' + err.message + '</div>';
+  }
+}
+
+function tcOpenTrashPanel() {
+  el.tcTrashOverlay.classList.add('show');
+  tcLoadTrashList();
+}
+
+function tcCloseTrashPanel() {
+  el.tcTrashOverlay.classList.remove('show');
+}
+
+el.tcOpenTrashBtn.addEventListener('click', tcOpenTrashPanel);
+el.tcCloseTrashBtn.addEventListener('click', tcCloseTrashPanel);
+el.tcTrashOverlay.addEventListener('click', (e) => {
+  if (e.target === el.tcTrashOverlay) tcCloseTrashPanel();
+});
+
+async function tcRestoreTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall({ action: 'restoreFromTrash', trashRow: trashRow });
+    rowEl.remove();
+    showStatus(el.tcStatus, '已還原，重新整理後會出現在清單中');
+    if (!el.tcTrashList.querySelector('.trash-item')) {
+      el.tcTrashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
+    showStatus(el.tcStatus, '還原失敗：' + err.message);
+  }
+}
+
+async function tcPermanentlyDeleteTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall({ action: 'deleteTrashItem', trashRow: trashRow });
+    rowEl.remove();
+    if (!el.tcTrashList.querySelector('.trash-item')) {
+      el.tcTrashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
+    showStatus(el.tcStatus, '刪除失敗：' + err.message);
+  }
+}
+
+armConfirmButton(el.tcEmptyTrashBtn, '再按一次確認清空（不可復原）', async () => {
+  try {
+    await apiCall({ action: 'emptyTrash' });
+    tcRenderTrashList([]);
+    showStatus(el.tcStatus, '垃圾桶已清空');
+  } catch (err) {
+    showStatus(el.tcStatus, '清空失敗：' + err.message);
+  }
+});
+
+// ===== 關鍵字搜尋 + 合併：搜尋不限「目前標籤」，全部項目都找；
+// 勾選多項後可以合併成一條（文字用換行接起來，寫回第一項，其餘項目丟進垃圾桶）=====
+let tcSearchResultsCache = []; // 目前搜尋結果，[{row, text, cycle, note, tag, dateText}, ...]
+
+function tcRenderSearchResults(items) {
+  tcSearchResultsCache = items || [];
+  el.tcSearchResultList.innerHTML = '';
+
+  if (tcSearchResultsCache.length === 0) {
+    el.tcSearchResultList.innerHTML = '<div class="trash-empty-msg">沒有符合的項目</div>';
+    return;
+  }
+
+  tcSearchResultsCache.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'search-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.row = String(item.row);
+
+    const main = document.createElement('div');
+    main.className = 'search-item-main';
+    const text = document.createElement('div');
+    text.className = 'search-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'search-item-meta';
+    meta.textContent = [item.cycle, item.tag, item.dateText].filter(Boolean).join('・');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    row.appendChild(checkbox);
+    row.appendChild(main);
+    el.tcSearchResultList.appendChild(row);
+  });
+}
+
+async function tcPerformSearch() {
+  const keyword = el.tcSearchKeywordInput.value.trim();
+  if (!keyword) { showStatus(el.tcStatus, '請輸入關鍵字'); return; }
+
+  el.tcSearchResultList.innerHTML = '<div class="trash-empty-msg">搜尋中...</div>';
+  try {
+    const data = await apiCall({ action: 'searchItems', keyword: keyword });
+    tcRenderSearchResults(data.items || []);
+  } catch (err) {
+    el.tcSearchResultList.innerHTML = '<div class="trash-empty-msg">搜尋失敗：' + err.message + '</div>';
+  }
+}
+
+function tcOpenSearchPanel() {
+  el.tcSearchOverlay.classList.add('show');
+  el.tcSearchResultList.innerHTML = '';
+  tcSearchResultsCache = [];
+}
+
+function tcCloseSearchPanel() {
+  el.tcSearchOverlay.classList.remove('show');
+}
+
+el.tcOpenSearchBtn.addEventListener('click', tcOpenSearchPanel);
+el.tcCloseSearchBtn.addEventListener('click', tcCloseSearchPanel);
+el.tcSearchOverlay.addEventListener('click', (e) => {
+  if (e.target === el.tcSearchOverlay) tcCloseSearchPanel();
+});
+el.tcSearchKeywordBtn.addEventListener('click', tcPerformSearch);
+el.tcSearchKeywordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') tcPerformSearch();
+});
+
+// 把勾選的多個項目合併成一項：文字依列號由小到大用換行接起來，
+// 寫回「週期最短」的那一項（保留它原本的週期跟到期日），其餘項目丟進垃圾桶（跟「刪除此項」一樣可從垃圾桶還原）。
+armConfirmButton(el.tcMergeSearchBtn, '再按一次確認合併', async () => {
+  const checkedRows = Array.from(el.tcSearchResultList.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb => parseInt(cb.dataset.row, 10));
+  if (checkedRows.length < 2) { showStatus(el.tcStatus, '請至少勾選兩項才能合併'); return; }
+
+  const selected = tcSearchResultsCache
+    .filter(item => checkedRows.includes(item.row))
+    .sort((a, b) => a.row - b.row);
+
+  // 保留「週期最短」那一項的週期跟到期日；週期無法辨識（含空白）的視為最長，不會被選為保留項
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? Infinity : idx;
+  };
+  const target = selected.slice().sort((a, b) => cycleIndex(a) - cycleIndex(b) || a.row - b.row)[0];
+  const others = selected.filter(item => item.row !== target.row);
+  const mergedText = selected.map(item => item.text).join('\n');
+
   setLoading(true);
   try {
-    await apiCall({ action: 'deleteByRow', row: item.row });
-
-    const deletedRow = item.row;
-    tcItemsCache.splice(tcCachePos, 1);
-    tcItemsCache.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
-
-    if (tcItemsCache.length === 0) {
-      tcRenderEmptyState();
-    } else {
+    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText });
+    // 從列號大到小依序丟進垃圾桶，避免刪除造成的列號位移影響到還沒處理的項目
+    const toTrash = others.slice().sort((a, b) => b.row - a.row);
+    for (const item of toTrash) {
+      await apiCall({ action: 'deleteByRow', row: item.row });
+    }
+    showStatus(el.tcStatus, '已合併 ' + selected.length + ' 項為一項');
+    await tcPerformSearch();
+    if (el.tagQuerySelect.value) {
+      // 目前標籤瀏覽清單的列號/內容可能已變動，重新查詢一次
+      const data = await apiCall({ action: 'getItemsByTag', tag: el.tagQuerySelect.value });
+      tcItemsCache = data.items || [];
       tcRenderFromCache(tcCachePos);
     }
-    showStatus(el.tcStatus, '已刪除');
   } catch (err) {
-    showStatus(el.tcStatus, '刪除失敗：' + err.message);
+    showStatus(el.tcStatus, '合併失敗：' + err.message);
   } finally {
     setLoading(false);
   }
