@@ -1800,6 +1800,7 @@ function testImportGoogleTasksNow() {
  * 事項自動合併 v2
  *
  * 判重：整段字元 bigram 相似度（multiset 計數）＋ 片段涵蓋率雙路徑
+ *       ＋ 開頭核心句比對（剝掉週幾代號等前綴後，只比對第一句）
  * 合併：LCS 對齊，共同內容只留一次，各版本獨有片段保留在原本位置
  * 分組：every（避免模糊比對造成的鏈式併吞）
  *
@@ -1821,6 +1822,10 @@ const MERGE_CONFIG = {
   DUP_MIN_LENGTH: 20,             // 正規化後短於此長度就不做模糊比對，避免短句誤判
   DUP_COVERAGE_THRESHOLD: 0.70,   // 較短那筆的片段被較長那筆涵蓋的比例
   DUP_COVERAGE_MIN_SEGMENTS: 3,   // 涵蓋率這條路徑至少要有幾個片段才生效
+
+  // ── 開頭核心句判重（剝掉週幾代號等前綴後，只比對第一句） ──
+  CORE_MIN_LENGTH: 8,             // 核心句正規化後短於此長度就不比對，避免「禱告」這種泛用開頭誤判
+  CORE_DICE_THRESHOLD: 0.85,      // 核心句本身內容較短，門檻拉高避免不同問題被誤併
 
   // ── 片段層級的去重 ──
   SEGMENT_SIMILARITY: 0.80,       // 片段間 bigram 相似度，≥ 此值視為同一句
@@ -2001,7 +2006,7 @@ function runMergeDuplicateItems_(dryRun) {
 
 /**
  * 兩段文字是否為同一事項的不同版本。
- * 依序走四條路徑：完全相同 → 互為子字串 → 字元 bigram 相似度 → 片段涵蓋率。
+ * 依序走五條路徑：完全相同 → 互為子字串 → 字元 bigram 相似度 → 片段涵蓋率 → 開頭核心句比對。
  */
 function isDuplicateText_(a, b) {
   const na = normalizeText_(a);
@@ -2014,17 +2019,51 @@ function isDuplicateText_(a, b) {
   // 2. 其中一段完整包含另一段
   if (na.includes(nb) || nb.includes(na)) return true;
 
-  // 3. 太短的文字不做模糊比對，避免「開會」「買菜」這種誤判
-  if (Math.min(na.length, nb.length) < MERGE_CONFIG.DUP_MIN_LENGTH) return false;
+  // 3~5：整段太短就不做整段層級的模糊比對，避免「開會」「買菜」這種誤判，
+  //       但仍會往下走到第 6 條「開頭核心句比對」。
+  if (Math.min(na.length, nb.length) >= MERGE_CONFIG.DUP_MIN_LENGTH) {
+    // 4. 整段字元相似度：對語音轉文字的斷句差異免疫
+    if (bigramDice_(na, nb) >= MERGE_CONFIG.DUP_DICE_THRESHOLD) return true;
 
-  // 4. 整段字元相似度：對語音轉文字的斷句差異免疫
-  if (bigramDice_(na, nb) >= MERGE_CONFIG.DUP_DICE_THRESHOLD) return true;
+    // 5. 片段涵蓋率：接住「舊短筆記 vs 後來的完整版」這種長度懸殊、
+    //    整段相似度會被稀釋、又不構成連續子字串的情況
+    const cov = segmentCoverage_(a, b);
+    if (cov.coverage >= MERGE_CONFIG.DUP_COVERAGE_THRESHOLD
+        && cov.minSize >= MERGE_CONFIG.DUP_COVERAGE_MIN_SEGMENTS) return true;
+  }
 
-  // 5. 片段涵蓋率：接住「舊短筆記 vs 後來的完整版」這種長度懸殊、
-  //    整段相似度會被稀釋、又不構成連續子字串的情況
-  const cov = segmentCoverage_(a, b);
-  return cov.coverage >= MERGE_CONFIG.DUP_COVERAGE_THRESHOLD
-      && cov.minSize >= MERGE_CONFIG.DUP_COVERAGE_MIN_SEGMENTS;
+  // 6. 開頭核心句比對：接住「同一件事，但前面掛了不同的週幾代號／驚嘆號前綴，
+  //    後面又各自接了不同備註」這種情況——整段相似度會被前後不同的部分稀釋，
+  //    導致 4、5 都判不出來。這裡先剝掉常見前綴，只比對第一句到問號／驚嘆號
+  //    為止的核心內容，忽略後面接的備註文字。門檻拉高（CORE_DICE_THRESHOLD）
+  //    且要求核心句本身有一定長度（CORE_MIN_LENGTH），避免不同問題被誤併。
+  return isCoreSentenceDuplicate_(a, b);
+}
+
+/** 剝掉常見的前綴標記：開頭的驚嘆號、以及「1週六-」「E週六-」這類週幾代號前綴 */
+function stripKnownPrefix_(text) {
+  let t = (text === null || text === undefined ? '' : text).toString().trim();
+  t = t.replace(/^[!！]+/, '');
+  t = t.replace(/^[0-9A-Za-z]{0,3}週[一二三四五六日末][-－:：]?/, '');
+  t = t.replace(/^[-－:：]+/, '');
+  return t;
+}
+
+/** 剝掉前綴後，取第一句（到第一個問號／驚嘆號為止，沒有的話就整段） */
+function extractCoreSentence_(text) {
+  const stripped = stripKnownPrefix_(text);
+  const m = stripped.match(/^[^？?！!]*[？?！!]/);
+  return m ? m[0] : stripped;
+}
+
+/** 兩段文字的開頭核心句是否視為同一句 */
+function isCoreSentenceDuplicate_(a, b) {
+  const ca = normalizeText_(extractCoreSentence_(a));
+  const cb = normalizeText_(extractCoreSentence_(b));
+  if (!ca || !cb) return false;
+  if (Math.min(ca.length, cb.length) < MERGE_CONFIG.CORE_MIN_LENGTH) return false;
+  if (ca === cb) return true;
+  return bigramDice_(ca, cb) >= MERGE_CONFIG.CORE_DICE_THRESHOLD;
 }
 
 /**
@@ -2037,7 +2076,16 @@ function similarityScore_(a, b) {
   if (!na || !nb) return 0;
   if (na === nb) return 1;
   if (na.includes(nb) || nb.includes(na)) return 1;
-  return Math.max(bigramDice_(na, nb), segmentCoverage_(a, b).coverage);
+
+  let score = Math.max(bigramDice_(na, nb), segmentCoverage_(a, b).coverage);
+
+  const ca = normalizeText_(extractCoreSentence_(a));
+  const cb = normalizeText_(extractCoreSentence_(b));
+  if (ca && cb && Math.min(ca.length, cb.length) >= MERGE_CONFIG.CORE_MIN_LENGTH) {
+    score = Math.max(score, ca === cb ? 1 : bigramDice_(ca, cb));
+  }
+
+  return score;
 }
 
 /** 去空白、去常見標點、統一大小寫，只留下用來比對的骨架 */
