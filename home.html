@@ -158,6 +158,7 @@
 <div class="query-row">
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="add-item.html">➕ 新增禱告事項</a>
+  <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
 </div>
 
 <script>
@@ -179,6 +180,29 @@ async function loadProgress(apiUrl, elId) {
 
 loadProgress(NETWORK_API_URL, 'networkProgress');
 loadProgress(MULTI_API_URL, 'multiProgress');
+
+const TASKS_API_URL = MULTI_API_URL;
+
+document.getElementById('exportTasksBtn').addEventListener('click', async function (e) {
+  e.preventDefault();
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  btn.textContent = '匯出中...';
+  try {
+    const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'getTodayTasksList', _t: Date.now() }).toString();
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const items = data.items || [];
+    const text = items.map(function (t) { return t.text; }).join('\n');
+    await navigator.clipboard.writeText(text);
+    btn.textContent = `已複製 ${items.length} 筆到剪貼簿 ✓`;
+  } catch (err) {
+    btn.textContent = '匯出失敗';
+  } finally {
+    setTimeout(function () { btn.textContent = originalText; }, 2000);
+  }
+});
 </script>
 
 </body>
