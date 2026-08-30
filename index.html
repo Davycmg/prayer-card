@@ -971,7 +971,8 @@ function armConfirmButton(btn, confirmText, onConfirmed) {
 
 // 不管H欄標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單。
 // 用來解決「標籤本來就已經是task預設清單、change事件不會觸發」的限制，可以隨時重複按。
-// 確認複製成功後，這項在這邊的任務就算完成了，直接丟進垃圾桶（跟「刪除此項」共用同一套邏輯）。
+// 確認複製成功後，這項在這邊的任務就算完成了：一般項目直接丟進垃圾桶（跟「刪除此項」共用同一套邏輯），
+// 但文字開頭是 S 的項目改成只標記完成（跟「完成」按鈕一樣，會推進週期），不丟垃圾桶。
 armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
@@ -979,8 +980,13 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   apiCall({ action: 'copyToTasks', row: item.row })
     .then(data => {
       if (data && data.copied) {
-        moveCurrentItemToTrash();
-        showStatus('已複製到 Google Tasks 預設清單，並丟進垃圾桶');
+        if ((item.text || '').trim().startsWith('S')) {
+          moveCurrentItemToComplete();
+          showStatus('已複製到 Google Tasks 預設清單，並標記完成（S開頭不丟垃圾桶）');
+        } else {
+          moveCurrentItemToTrash();
+          showStatus('已複製到 Google Tasks 預設清單，並丟進垃圾桶');
+        }
       } else {
         showStatus('複製失敗，請稍後再試');
       }
@@ -1186,6 +1192,26 @@ el.deleteBtn.addEventListener('click', () => {
   moveCurrentItemToTrash();
   showStatus('已丟進垃圾桶');
 });
+
+// 跟「完成」按鈕一樣的本地樂觀更新，但呼叫 completeByRow（標記完成、推進週期），不是丟垃圾桶。
+// 「複製到 Tasks」按鈕遇到 S 開頭的項目時用這個，而不是 moveCurrentItemToTrash()。
+function moveCurrentItemToComplete() {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+
+  const item = itemsCache[cachePos];
+  itemsCache.splice(cachePos, 1);
+
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromCache(cachePos);
+  }
+
+  apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message);
+  });
+}
 
 // ===== 垃圾桶：批次查看／還原／永久刪除／清空 =====
 function formatTrashTime(iso) {
