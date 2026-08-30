@@ -1015,33 +1015,54 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
 });
 
-// 「平日禱告／週末禱告」：把目前這項的到期日（E欄）改到最近的平日／週末（今天符合的話就用今天）。
-// 改完日期後這項有可能不再到期（例如今天是平日、按了週末禱告會把日期推到未來），
-// 所以呼叫成功後直接重新整理首頁清單，不用自己猜要不要從本地暫存區移除。
-armConfirmButton(el.setWeekdayBtn, '再按一次確認改到最近平日', () => {
+// 「平日禱告／週末禱告」：把目前這項的到期日（E欄）改到最近的平日／週末（今天符合的話就用今天），
+// 跟「完成」按鈕一樣走本地樂觀更新（不等API、不跳「處理中」）：先在前端算出新日期，
+// 如果新日期還是「今天或更早」就留著，否則本地立刻移除，背景才真的呼叫API同步。
+function nearestWeekdayLocal(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay(); // 0=週日...6=週六
+  if (day >= 1 && day <= 5) return d;
+  d.setDate(d.getDate() + (day === 6 ? 2 : 1));
+  return d;
+}
+function nearestWeekendLocal(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay();
+  if (day === 0 || day === 6) return d;
+  d.setDate(d.getDate() + (6 - day));
+  return d;
+}
+function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
   if (itemsCache.length === 0) return;
-  const item = itemsCache[cachePos];
   stopSpeakingIfNeeded();
 
-  apiCall({ action: 'setDateToNearestWeekday', row: item.row })
-    .then(async () => {
-      showStatus('已改到最近的平日');
-      await loadInitData();
-    })
-    .catch(err => showStatus('修改失敗：' + err.message));
+  const item = itemsCache[cachePos];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const newDate = computeNewDate(today);
+  const staysDue = newDate.getTime() <= today.getTime();
+
+  if (!staysDue) {
+    itemsCache.splice(cachePos, 1);
+    if (itemsCache.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromCache(cachePos);
+    }
+  }
+  showStatus(doneMsg);
+
+  apiCall({ action: action, row: item.row }).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message);
+  });
+}
+
+armConfirmButton(el.setWeekdayBtn, '再按一次確認改到最近平日', () => {
+  setDueDateAndMaybeRemove('setDateToNearestWeekday', nearestWeekdayLocal, '已改到最近的平日');
 });
 
 armConfirmButton(el.setWeekendBtn, '再按一次確認改到最近週末', () => {
-  if (itemsCache.length === 0) return;
-  const item = itemsCache[cachePos];
-  stopSpeakingIfNeeded();
-
-  apiCall({ action: 'setDateToNearestWeekend', row: item.row })
-    .then(async () => {
-      showStatus('已改到最近的週末');
-      await loadInitData();
-    })
-    .catch(err => showStatus('修改失敗：' + err.message));
+  setDueDateAndMaybeRemove('setDateToNearestWeekend', nearestWeekendLocal, '已改到最近的週末');
 });
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
