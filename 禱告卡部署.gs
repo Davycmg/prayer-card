@@ -974,6 +974,12 @@ function doGet(e) {
       case 'updateTagByRow':
         result = updateFieldByRow(parseInt(e.parameter.row, 10), COL.TAG, normalizeCode(e.parameter.value, TAG_MAP));
         break;
+      case 'setDateToNearestWeekday':
+        result = setDateToNearestWeekday(parseInt(e.parameter.row, 10));
+        break;
+      case 'setDateToNearestWeekend':
+        result = setDateToNearestWeekend(parseInt(e.parameter.row, 10));
+        break;
       case 'getTagList':
         result = getTagList();
         break;
@@ -1660,6 +1666,47 @@ function updateFieldByRow(row, col, value) {
     }
   }
 
+  return { success: true, row: row };
+}
+
+/**
+ * 「平日禱告／週末禱告」按鈕用：把 E 欄（本次禱告時間）改成最近的平日或週末，
+ * 今天本身如果已經符合就直接用今天，不然往後找最近一天。
+ */
+function setDateToNearestWeekday(row) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return setDateByRow_(row, nearestWeekday_(today));
+}
+
+function setDateToNearestWeekend(row) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return setDateByRow_(row, nearestWeekend_(today));
+}
+
+function nearestWeekday_(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay(); // 0=週日...6=週六
+  if (day >= 1 && day <= 5) return d;
+  d.setDate(d.getDate() + (day === 6 ? 2 : 1)); // 週六 +2 天、週日 +1 天，都是下一個週一
+  return d;
+}
+
+function nearestWeekend_(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay();
+  if (day === 0 || day === 6) return d;
+  d.setDate(d.getDate() + (6 - day)); // 週一～週五往後推到下一個週六
+  return d;
+}
+
+function setDateByRow_(row, dateObj) {
+  if (!row || row < 2) return { success: false };
+  const sheet = getSheet_();
+  const cell = sheet.getRange(row, COL.DATE);
+  cell.setValue(dateObj);
+  cell.setNumberFormat('yyyy/MM/dd');
   return { success: true, row: row };
 }
 
