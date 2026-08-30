@@ -328,6 +328,23 @@
   }
   .danger-zone button:active { opacity: 1; }
   .danger-zone #openTrashBtn { color: var(--main-primary); }
+  .delete-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+  }
+  .delete-row button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-danger);
+    font-size: 13px;
+    opacity: 0.6;
+  }
+  .delete-row button:active { opacity: 1; }
   .trash-overlay {
     display: none;
     position: fixed;
@@ -563,6 +580,10 @@
   <button class="btn complete" id="completeBtn">✅ 完成</button>
 </div>
 
+<div class="delete-row">
+  <button id="deleteBtn">🗑 刪除此項</button>
+</div>
+
 <div class="controls">
   <button class="btn pray-more" id="prayMoreBtn">🔺 禱告更多</button>
   <button class="btn pray-less" id="prayLessBtn">🔻 禱告更少</button>
@@ -601,7 +622,6 @@
 <div class="status" id="status"></div>
 
 <div class="danger-zone">
-  <button id="deleteBtn">🗑 刪除此項</button>
   <button id="openTrashBtn">🗑 查看垃圾桶</button>
 </div>
 
