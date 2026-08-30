@@ -551,6 +551,8 @@
 
   <button class="copy-tasks-btn" id="copyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
   <button class="copy-tasks-btn" id="addToCalendarBtn">📅 新增到日曆（依週期重複）</button>
+  <button class="copy-tasks-btn" id="setWeekdayBtn">📅 平日禱告（改到最近平日）</button>
+  <button class="copy-tasks-btn" id="setWeekendBtn">📅 週末禱告（改到最近週末）</button>
 
   <div class="note" id="noteText"></div>
 </div>
@@ -692,6 +694,8 @@ const el = {
   addTagBtn: document.getElementById('addTagBtn'),
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
   addToCalendarBtn: document.getElementById('addToCalendarBtn'),
+  setWeekdayBtn: document.getElementById('setWeekdayBtn'),
+  setWeekendBtn: document.getElementById('setWeekendBtn'),
   noteText: document.getElementById('noteText'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
@@ -967,6 +971,35 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   });
 
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+});
+
+// 「平日禱告／週末禱告」：把目前這項的到期日（E欄）改到最近的平日／週末（今天符合的話就用今天）。
+// 改完日期後這項有可能不再到期（例如今天是平日、按了週末禱告會把日期推到未來），
+// 所以呼叫成功後直接重新整理首頁清單，不用自己猜要不要從本地暫存區移除。
+armConfirmButton(el.setWeekdayBtn, '再按一次確認改到最近平日', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  stopSpeakingIfNeeded();
+
+  apiCall({ action: 'setDateToNearestWeekday', row: item.row })
+    .then(async () => {
+      showStatus('已改到最近的平日');
+      await loadInitData();
+    })
+    .catch(err => showStatus('修改失敗：' + err.message));
+});
+
+armConfirmButton(el.setWeekendBtn, '再按一次確認改到最近週末', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  stopSpeakingIfNeeded();
+
+  apiCall({ action: 'setDateToNearestWeekend', row: item.row })
+    .then(async () => {
+      showStatus('已改到最近的週末');
+      await loadInitData();
+    })
+    .catch(err => showStatus('修改失敗：' + err.message));
 });
 
 // ===== 翻頁：純本地操作，不打API，瞬間完成 =====
