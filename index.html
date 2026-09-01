@@ -712,11 +712,11 @@ const WEEKDAY_MAP = {
   '週五': '週五', '週六': '週六', '週日': '週日'
 };
 
-// 依週期長短排序：週期最長（如每年）排最前面，週期空白/無法辨識的排最後面
+// 依週期長短排序：週期空白/無法辨識的排最前面，接著是週期最長（如每年）排到最短（如每天）
 function sortItemsByCycleDesc(items) {
   const cycleIndex = (item) => {
     const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
-    return idx === -1 ? -1 : idx;
+    return idx === -1 ? Infinity : idx;
   };
   items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
 }
