@@ -1451,14 +1451,29 @@ el.prayerText.addEventListener('input', () => {
   }, 1000);
 });
 
+// 手動改週期下拉選單，跟「禱告更多／禱告更少」一樣：改完週期同時算完成這次禱告，
+// 本地立刻移除（樂觀更新），背景先更新週期、再標記完成（完成時依「新」週期推算下次禱告日期）。
 el.cycleSelect.addEventListener('change', () => {
   if (!el.cycleSelect.value || itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+
   const item = itemsCache[cachePos];
-  item.cycle = el.cycleSelect.value;
+  const row = item.row;
+  const newCycle = el.cycleSelect.value;
   updateCycleWarning();
-  apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
-    .then(() => showStatus('週期已更新'))
-    .catch(err => showStatus('更新失敗：' + err.message));
+
+  itemsCache.splice(cachePos, 1);
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromCache(cachePos);
+  }
+
+  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
+    .then(() => apiCall({ action: 'completeByRow', row: row }))
+    .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
+
+  showStatus('週期已更新為「' + newCycle + '」，已完成');
 });
 
 // 設定標籤後端會回報 exported=true，代表這個標籤剛好是「星期標籤」，已經同步複製到
