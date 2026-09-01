@@ -49,6 +49,32 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
   - `.../exec?action=xxx` → 代禱卡片專用資料 API（前端 fetch 用）
 - 也內建 Google Sheet 內操作版的代禱卡片（`onOpen` 選單「🙏 代禱卡片」），含自動合併同名重複資料、朗讀連禱等功能。
 
+### dg-network 頁面遷移到 GitHub Pages（2026-09-01）
+
+跟根目錄 `home.html`／`calendar.html`／`today.html` 同樣的理由（Apps Script `script.google.com` 網址外層是 Google 自己的 SPA 外框，頁面自訂的 `<link rel="icon">` 不會顯示，瀏覽器分頁看到的永遠是 Apps Script 的預設圖示），以下這些頁面已經改成純靜態 HTML＋前端 `fetch` 打 `action=` API，直接放 GitHub Pages 服務，不再由 Apps Script `doGet` 直接輸出：
+
+| 舊路由（exec 網址參數） | 檔案 | 新的 GitHub Pages 網址 |
+| --- | --- | --- |
+| `.../exec`（預設，不帶參數） | `Form.html` | `https://davycmg.github.io/prayer-card/dg-network/Form.html` |
+| `.../exec?form=simple` | `FormNoCycle.html` | `https://davycmg.github.io/prayer-card/dg-network/FormNoCycle.html` |
+| `.../exec?form=fixed2` | `FormFixedRoster2.html` | `https://davycmg.github.io/prayer-card/dg-network/FormFixedRoster2.html` |
+| `.../exec?form=fixed` | `中午RPG.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG.html` |
+| `.../exec?form=fixed3` | `中午RPG2.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG2.html` |
+| `.../exec?form=fixed4` | `中午RPG3.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG3.html` |
+| `.../exec?form=fixed5` | `中午RPG4.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG4.html` |
+| `.../exec?form=fixed6` | `中午RPG5.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG5.html` |
+| `.../exec?form=fixed7` | `中午RPG6.html` | `https://davycmg.github.io/prayer-card/dg-network/中午RPG6.html` |
+| `.../exec?view=card` | `CardIndex.html` | `https://davycmg.github.io/prayer-card/dg-network/CardIndex.html` |
+| `.../exec?view=card-fixed` | `CardIndexFixed.html` | `https://davycmg.github.io/prayer-card/dg-network/CardIndexFixed.html` |
+
+這些頁面本身不含資料，開啟後純用 JS `fetch` 打上面那個部署網址（`API_URL` 常數，寫死在每個檔案裡）當後端 API，做法跟根目錄 `calendar.html` 一致：讀取／寫入都是 `doGet` 帶 `action=` 參數（GET，避免 Apps Script Web App 對 POST 不送 CORS header 的問題），沒有用 `google.script.run`。
+
+- `Code.js` 的 `handleCardApi_` 新增了 4 個 action 給這些表單頁用：`lookupByName`（單人查詢舊資料）、`lookupByNames`（多人批次查詢，`names` 參數是 JSON 陣列字串）、`submitForm`（新增/更新一筆，`rows` 參數是 JSON 陣列字串）、`submitFormMulti`（多人新增，`names` 同上）——底層邏輯完全沿用原本的 `lookupByName`／`lookupByNames`／`submitForm`／`submitFormMulti` 函式，只是多包一層 API 入口。
+- `doGet` 裡對應這些路由的 `createHtmlOutputFromFile`／`createTemplateFromFile` 分支都已移除，但**沒有直接讓舊 exec 網址變成空白或報錯**：改成回傳一個「這個頁面已搬家」的輕量重新導向頁（`redirectStub_`，用 `<meta refresh>` 導去上表對應的 GitHub Pages 網址），避免舊書籤、舊聊天室分享連結直接失效。這是刻意的取捨——多一個轉址頁比起直接讓連結死掉，對已經分享出去的舊連結比較友善。
+- `CardIndex.html`／`CardIndexFixed.html` 原本用 `ScriptApp.getService().getUrl()` 由伺服器端範本注入 `apiUrl`（`<?= apiUrl ?>`），現在改成寫死在檔案裡的 `const API_URL`，跟其他頁面做法一致。
+- `action=` 資料 API（`.../exec?action=xxx`）完全沒動，還是走 Apps Script，因為這是純 JSON 回應、不需要瀏覽器分頁本身跑在 Apps Script 網域下。
+- 這些檔案雖然物理上還是放在 `dg-network/` 目錄、還是會被 `clasp push` 推到 dg-network 的 Apps Script 專案（推上去的副本目前用不到，因為 `doGet` 不再引用它們，但留著也無妨，方便日後需要時能對照），實際被瀏覽的方式是 GitHub Pages（merge 進 `main` 就會自動更新，不需要額外部署步驟）。
+
 ## 一次性匯入腳本（不在這個 repo 版本控制內）
 
 `importReminders()`（匯入「提醒事項」PDF 內容到「表單回覆 1」，327 筆資料以 Base64 內嵌）這類一次性用途的 Apps Script 程式碼，**不會**存在這個 GitHub repo 裡（`git grep` 全歷史都找不到），因為是直接在 Apps Script 編輯器貼上執行一次、沒有透過 `clasp push` 推回 repo。

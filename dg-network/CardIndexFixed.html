@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>代禱卡片（固定名單）</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📌</text></svg>">
 <style>
   :root {
     --purple: #3d4a5c;
@@ -135,8 +136,8 @@
 <div class="loading-overlay" id="loadingOverlay">處理中...</div>
 
 <script>
-// 這個網頁是透過 Apps Script doGet 直接送出的，API 打回自己這個部署網址即可
-const API_URL = '<?= apiUrl ?>';
+// 這個頁面是透過 GitHub Pages 服務的靜態頁面，API 打回 dg-network 的 Apps Script 部署網址
+const API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
 
 const CYCLE_LIST = ['每天','每兩天','每三天','每四天','每五天','每週','每兩週','每月','每兩個月','每季','每半年','每年'];
 const CYCLE_MAP = {

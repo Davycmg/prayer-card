@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>代禱表單（簡易）</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
   <style>
     body {
       font-family: 'Roboto', 'Noto Sans TC', sans-serif;
@@ -57,6 +60,18 @@
   <div id="status"></div>
 
   <script>
+    // ⚠️ 沿用 dg-network 代禱卡片同一個 Apps Script 部署網址（同一個後端）
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+
+    async function apiCall(params) {
+      params._t = Date.now(); // 加時間戳記，繞過瀏覽器快取
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    }
+
     let matchedRows = []; // 記住查詢時抓到的同名列號，送出時要一併帶回去
     const DEFAULT_CYCLE = '每月';
 
@@ -69,8 +84,8 @@
       if (!name) { hint.innerText = ''; return; }
       hint.innerText = '查詢中...';
 
-      google.script.run
-        .withSuccessHandler(function(res) {
+      apiCall({ action: 'lookupByName', name: name })
+        .then(function(res) {
           if (res) {
             matchedRows = res.rows;
             document.getElementById('note').value = res.note;
@@ -90,10 +105,9 @@
             hint.innerText = '查無舊資料，送出後將新增一筆';
           }
         })
-        .withFailureHandler(function(err) {
+        .catch(function(err) {
           hint.innerText = '查詢失敗：' + err.message;
-        })
-        .lookupByName(name);
+        });
     }
 
     function submitForm() {
@@ -109,15 +123,15 @@
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
-      const data = {
+      statusEl.innerText = '送出中...';
+      apiCall({
+        action: 'submitForm',
         name: name,
         cycle: cycleField.value,
         note: document.getElementById('note').value,
-        rows: matchedRows // 把查詢時記住的列號傳回去，後端會合併成一列
-      };
-      statusEl.innerText = '送出中...';
-      google.script.run
-        .withSuccessHandler(function(res) {
+        rows: JSON.stringify(matchedRows) // 把查詢時記住的列號傳回去，後端會合併成一列
+      })
+        .then(function(res) {
           if (res.status === 'updated') {
             statusEl.innerText = res.mergedCount > 1
               ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
@@ -127,11 +141,10 @@
           }
           btn.disabled = false;
         })
-        .withFailureHandler(function(err) {
+        .catch(function(err) {
           statusEl.innerText = '發生錯誤：' + err.message;
           btn.disabled = false;
-        })
-        .submitForm(data);
+        });
     }
   </script>
 </body>

@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>代禱表單</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
   <style>
     body {
       font-family: 'Roboto', 'Noto Sans TC', sans-serif;
@@ -71,6 +74,18 @@
   <div id="status"></div>
 
   <script>
+    // ⚠️ 沿用 dg-network 代禱卡片同一個 Apps Script 部署網址（同一個後端）
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+
+    async function apiCall(params) {
+      params._t = Date.now(); // 加時間戳記，繞過瀏覽器快取
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    }
+
     let matchedRows = []; // 單人查詢時記住抓到的同名列號，送出時要一併帶回去（供合併/更新）
 
     // 確保 select 裡有這個值對應的 option，沒有的話動態補上（容錯：全形/半形括號、多餘空白等差異）
@@ -109,8 +124,8 @@
       // 只輸入一位姓名：查詢並帶出過去的代禱事項供編輯／合併
       if (names.length === 1) {
         hint.innerText = '查詢中...';
-        google.script.run
-          .withSuccessHandler(function(res) {
+        apiCall({ action: 'lookupByName', name: names[0] })
+          .then(function(res) {
             if (res) {
               matchedRows = res.rows;
               document.getElementById('note').value = res.note;
@@ -136,17 +151,16 @@
               hint.innerText = '查無舊資料，送出後將新增一筆';
             }
           })
-          .withFailureHandler(function(err) {
+          .catch(function(err) {
             hint.innerText = '查詢失敗：' + err.message;
-          })
-          .lookupByName(names[0]);
+          });
         return;
       }
 
       // 多人輸入：已有舊資料的人維持不變，只新增查無資料的人
       hint.innerText = '查詢中...';
-      google.script.run
-        .withSuccessHandler(function(results) {
+      apiCall({ action: 'lookupByNames', names: JSON.stringify(names) })
+        .then(function(results) {
           const existingNames = results.filter(function(r) { return r.existing; }).map(function(r) { return r.name; });
           const newNames = results.filter(function(r) { return !r.existing; }).map(function(r) { return r.name; });
 
@@ -160,10 +174,9 @@
 
           if (!cycleSelect.value) cycleSelect.value = '每月';
         })
-        .withFailureHandler(function(err) {
+        .catch(function(err) {
           hint.innerText = '查詢失敗：' + err.message;
-        })
-        .lookupByNames(names);
+        });
     }
 
     function submitForm() {
@@ -186,14 +199,14 @@
 
       // 單人：沿用舊資料合併／更新邏輯
       if (names.length === 1) {
-        const data = {
+        apiCall({
+          action: 'submitForm',
           name: names[0],
           cycle: cycle,
           note: document.getElementById('note').value,
-          rows: matchedRows
-        };
-        google.script.run
-          .withSuccessHandler(function(res) {
+          rows: JSON.stringify(matchedRows)
+        })
+          .then(function(res) {
             if (res.status === 'updated') {
               statusEl.innerText = res.mergedCount > 1
                 ? '已將 ' + res.mergedCount + ' 筆資料整併為 1 筆並更新！'
@@ -203,22 +216,21 @@
             }
             btn.disabled = false;
           })
-          .withFailureHandler(function(err) {
+          .catch(function(err) {
             statusEl.innerText = '發生錯誤：' + err.message;
             btn.disabled = false;
-          })
-          .submitForm(data);
+          });
         return;
       }
 
       // 多人：已有舊資料的人不動，只新增查無資料的人
-      const data = {
-        names: names,
+      apiCall({
+        action: 'submitFormMulti',
+        names: JSON.stringify(names),
         cycle: cycle,
         note: document.getElementById('note').value
-      };
-      google.script.run
-        .withSuccessHandler(function(res) {
+      })
+        .then(function(res) {
           let msg = '';
           if (res.created.length > 0) msg += '已新增：' + res.created.join('、') + '。';
           if (res.skipped.length > 0) msg += '已有舊資料未變動：' + res.skipped.join('、') + '。';
@@ -226,11 +238,10 @@
           statusEl.innerText = msg;
           btn.disabled = false;
         })
-        .withFailureHandler(function(err) {
+        .catch(function(err) {
           statusEl.innerText = '發生錯誤：' + err.message;
           btn.disabled = false;
-        })
-        .submitFormMulti(data);
+        });
     }
   </script>
 </body>

@@ -79,96 +79,65 @@ function computeNextDate_(baseDate, cycle) {
 
 // ========== 網頁 / API 總入口 ==========
 
+// 2026-09-01 遷移到 GitHub Pages 後，這幾個舊路由對應的 GitHub Pages 網址
+// （doGet 只留這個對照表 + 一個共用的重新導向頁，原本的 createHtmlOutputFromFile／
+// createTemplateFromFile 分支都移除了，只保留 action= 資料 API 與尚未遷移的路由）
+const MIGRATED_PAGES_ = {
+  '': 'Form.html',
+  'simple': 'FormNoCycle.html',
+  'fixed2': 'FormFixedRoster2.html',
+  'fixed': '中午RPG.html',
+  'fixed3': '中午RPG2.html',
+  'fixed4': '中午RPG3.html',
+  'fixed5': '中午RPG4.html',
+  'fixed6': '中午RPG5.html',
+  'fixed7': '中午RPG6.html'
+};
+const MIGRATED_VIEWS_ = {
+  'card': 'CardIndex.html',
+  'card-fixed': 'CardIndexFixed.html'
+};
+const GITHUB_PAGES_BASE_ = 'https://davycmg.github.io/prayer-card/dg-network/';
+
 function doGet(e) {
   const action = e.parameter.action;
   const view = e.parameter.view;
 
-  // 帶 action 參數 → 代禱卡片專用的資料 API（回傳 JSON）
+  // 帶 action 參數 → 代禱卡片專用的資料 API（回傳 JSON），這是唯一還留在 Apps Script 側的路由
   if (action) {
     return handleCardApi_(e, action);
   }
 
-  // view=card → 代禱卡片網頁
-  if (view === 'card') {
-    const tmpl = HtmlService.createTemplateFromFile('CardIndex');
-    tmpl.apiUrl = ScriptApp.getService().getUrl();
-    return tmpl.evaluate()
-      .setTitle('代禱卡片')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  // view=card / view=card-fixed → 已遷移到 GitHub Pages，這裡只回傳一個會自動導向新網址的輕量提示頁
+  // （舊書籤、舊訊息連結還是能打開，不會直接變 404，但留在 Apps Script 側的頁面已經不會再更新）
+  if (view !== undefined && MIGRATED_VIEWS_[view]) {
+    return redirectStub_(GITHUB_PAGES_BASE_ + MIGRATED_VIEWS_[view]);
   }
 
-  // view=card-fixed → 代禱卡片網頁（固定名單版，只顯示 FIXED_ROSTER_NAMES 那幾位，依指定順序）
-  if (view === 'card-fixed') {
-    const tmpl = HtmlService.createTemplateFromFile('CardIndexFixed');
-    tmpl.apiUrl = ScriptApp.getService().getUrl();
-    return tmpl.evaluate()
-      .setTitle('代禱卡片（固定名單）')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  // form=xxx（含預設不帶 form 參數）→ 已遷移到 GitHub Pages，同樣回傳導向提示頁
+  const formParam = e.parameter.form || '';
+  if (MIGRATED_PAGES_[formParam]) {
+    return redirectStub_(GITHUB_PAGES_BASE_ + MIGRATED_PAGES_[formParam]);
   }
 
-  // form=simple → 代禱表單（不顯示 DG 週期欄位的簡化版，跟 Form.html 其他部分一樣）
-  if (e.parameter.form === 'simple') {
-    return HtmlService.createHtmlOutputFromFile('FormNoCycle')
-      .setTitle('代禱表單')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
+  // 不認得的 form 參數：一律導去預設表單，避免顯示空白頁
+  return redirectStub_(GITHUB_PAGES_BASE_ + 'Form.html');
+}
 
-  // form=fixed → 中午RPG（固定名單版，一次列出 FIXED_ROSTER_NAMES 那幾位，不顯示 DG 週期欄位，
-  // 每人各自姓名+備註，統一「全部送出」）
-  if (e.parameter.form === 'fixed') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG')
-      .setTitle('中午RPG')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed2 → 代禱表單（另一組固定名單：吳安祺、郭大衛），跟 form=fixed（中午RPG）同一份程式邏輯，
-  // 只是換一份名單的獨立副本（FormFixedRoster2.html）
-  if (e.parameter.form === 'fixed2') {
-    return HtmlService.createHtmlOutputFromFile('FormFixedRoster2')
-      .setTitle('代禱表單（固定名單 2）')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed3 → 中午RPG2（中午RPG 的副本，換一份固定名單：黃姿驊、郭大衛、楊采綸）
-  if (e.parameter.form === 'fixed3') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG2')
-      .setTitle('中午RPG2')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed4 → 中午RPG3（中午RPG 的副本，換一份固定名單：郭大衛、顏志龍）
-  if (e.parameter.form === 'fixed4') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG3')
-      .setTitle('中午RPG3')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed5 → 中午RPG4（中午RPG 的副本，換一份固定名單：郭大衛、林仕明）
-  if (e.parameter.form === 'fixed5') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG4')
-      .setTitle('中午RPG4')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed6 → 中午RPG5（中午RPG 的副本，換一份固定名單：郭大衛、江吉昇、林湛、劉彥漢）
-  if (e.parameter.form === 'fixed6') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG5')
-      .setTitle('中午RPG5')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // form=fixed7 → 中午RPG6（中午RPG 的副本，換一份固定名單：郭大衛、許德輝、陳守愚、陳德智、林詩舜、
-  // 歐駿宏、林君樺、林倩妏、李佳玲、黃家豪、張欽漢、許棠為）
-  if (e.parameter.form === 'fixed7') {
-    return HtmlService.createHtmlOutputFromFile('中午RPG6')
-      .setTitle('中午RPG6')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
-  }
-
-  // 預設 → 代禱表單
-  return HtmlService.createTemplateFromFile('Form')
-    .evaluate()
-    .setTitle('代禱表單')
+/**
+ * 產生一個「這個頁面已搬家」的輕量重新導向頁：
+ * 用 <meta refresh> + JS 導向新的 GitHub Pages 網址，同時附上手動點擊的連結（自動導向失敗時可用）。
+ * 選擇留一個提示頁而不是直接 404，是因為這幾個 exec 網址可能已經被使用者加到書籤或分享出去。
+ */
+function redirectStub_(targetUrl) {
+  const html = '<!DOCTYPE html><html><head><meta charset="UTF-8">' +
+    '<meta http-equiv="refresh" content="0; url=' + targetUrl + '">' +
+    '<title>頁面已搬家</title></head><body style="font-family:sans-serif;padding:24px;text-align:center;">' +
+    '<p>這個頁面已經搬到新網址，正在為你導向...</p>' +
+    '<p><a href="' + targetUrl + '">' + targetUrl + '</a></p>' +
+    '</body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle('頁面已搬家')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
@@ -431,6 +400,35 @@ function handleCardApi_(e, action) {
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
+      case 'lookupByName':
+        result = lookupByName(e.parameter.name);
+        break;
+      case 'lookupByNames': {
+        const names = JSON.parse(e.parameter.names || '[]');
+        result = lookupByNames(names);
+        break;
+      }
+      case 'submitForm': {
+        const rows = JSON.parse(e.parameter.rows || '[]');
+        result = submitForm({
+          name: e.parameter.name,
+          cycle: e.parameter.cycle,
+          note: e.parameter.note || '',
+          email: e.parameter.email || '',
+          rows: rows
+        });
+        break;
+      }
+      case 'submitFormMulti': {
+        const namesMulti = JSON.parse(e.parameter.names || '[]');
+        result = submitFormMulti({
+          names: namesMulti,
+          cycle: e.parameter.cycle,
+          note: e.parameter.note || '',
+          email: e.parameter.email || ''
+        });
+        break;
+      }
       default:
         result = { error: 'unknown action: ' + action };
     }

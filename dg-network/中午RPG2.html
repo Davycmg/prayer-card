@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>中午RPG2</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍱</text></svg>">
   <style>
     body {
       font-family: 'Roboto', 'Noto Sans TC', sans-serif;
@@ -79,6 +82,18 @@
   <div id="status"></div>
 
   <script>
+    // ⚠️ 沿用 dg-network 代禱卡片同一個 Apps Script 部署網址（同一個後端）
+    const API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+
+    async function apiCall(params) {
+      params._t = Date.now(); // 加時間戳記，繞過瀏覽器快取
+      const url = API_URL + '?' + new URLSearchParams(params).toString();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      return data;
+    }
+
     // 跟後端 Code.js 的 FIXED_ROSTER_NAMES 保持一致，顯示順序以這裡為準
     const FIXED_NAMES = ['黃姿驊', '郭大衛', '楊采綸'];
     const DEFAULT_CYCLE = '每月';
@@ -106,8 +121,8 @@
     function lookupOne(idx) {
       const name = FIXED_NAMES[idx];
       return new Promise(function (resolve) {
-        google.script.run
-          .withSuccessHandler(function (res) {
+        apiCall({ action: 'lookupByName', name: name })
+          .then(function (res) {
             const hint = document.getElementById('hint-' + idx);
 
             if (res) {
@@ -123,18 +138,17 @@
             }
             resolve();
           })
-          .withFailureHandler(function (err) {
+          .catch(function (err) {
             document.getElementById('hint-' + idx).innerText = '查詢失敗：' + err.message;
             state[idx].cycle = DEFAULT_CYCLE;
             resolve();
-          })
-          .lookupByName(name);
+          });
       });
     }
 
     async function init() {
       renderList();
-      // 依序查詢（不用 Promise.all 平行送出，避免同時打太多 google.script.run 造成不穩定）
+      // 依序查詢（不用 Promise.all 平行送出，避免同時打太多 API 請求造成不穩定）
       for (let i = 0; i < FIXED_NAMES.length; i++) {
         await lookupOne(i);
       }
@@ -155,10 +169,9 @@
       const cycle = state[idx].cycle || DEFAULT_CYCLE;
 
       return new Promise(function (resolve) {
-        google.script.run
-          .withSuccessHandler(function () { resolve({ name: name, ok: true }); })
-          .withFailureHandler(function (err) { resolve({ name: name, ok: false, error: err.message }); })
-          .submitForm({ name: name, cycle: cycle, note: note, rows: state[idx].rows });
+        apiCall({ action: 'submitForm', name: name, cycle: cycle, note: note, rows: JSON.stringify(state[idx].rows) })
+          .then(function () { resolve({ name: name, ok: true }); })
+          .catch(function (err) { resolve({ name: name, ok: false, error: err.message }); });
       });
     }
 
