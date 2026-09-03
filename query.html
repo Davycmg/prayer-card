@@ -805,6 +805,15 @@ const CYCLE_MAP = {
 };
 // 週期由密集到疏鬆的順序（跟 CYCLE_MAP 的 key 對應），「禱告更多／禱告更少」按鈕依這個順序調整週期
 const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y'];
+// 依週期長短排序：週期空白/無法辨識的排最前面，接著是週期最長（如每年）排到最短（如每天）
+// 跟 index.html 的 sortItemsByCycleDesc 完全一致，標籤卡片瀏覽的排序要對齊首頁
+function sortItemsByCycleDesc(items) {
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? Infinity : idx;
+  };
+  items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
+}
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
 const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
@@ -992,8 +1001,9 @@ el.tagQueryBtn.addEventListener('click', async () => {
 
   setLoading(true);
   try {
-    const data = await apiCall({ action: 'getItemsByTag', tag: tag }); // 後端已依E欄日期由舊到新排序
+    const data = await apiCall({ action: 'getItemsByTag', tag: tag });
     tcItemsCache = data.items || [];
+    sortItemsByCycleDesc(tcItemsCache); // 跟 index.html 一致：沒有週期的最先，接著週期長到短
     tcCachePos = 0;
 
     if (tcItemsCache.length === 0) {
@@ -1669,6 +1679,7 @@ armConfirmButton(el.tcMergeSearchBtn, '再按一次確認合併', async () => {
       // 目前標籤瀏覽清單的列號/內容可能已變動，重新查詢一次
       const data = await apiCall({ action: 'getItemsByTag', tag: el.tagQuerySelect.value });
       tcItemsCache = data.items || [];
+      sortItemsByCycleDesc(tcItemsCache);
       tcRenderFromCache(tcCachePos);
     }
   } catch (err) {
