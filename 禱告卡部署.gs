@@ -1022,6 +1022,9 @@ function doGet(e) {
       case 'completeTaskItem':
         result = completeTaskItem(e.parameter.taskId);
         break;
+      case 'drawRandomTask':
+        result = drawRandomTask();
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1288,6 +1291,59 @@ function completeTaskItem(taskId) {
   const defaultListId = taskLists.items[0].id;
   Tasks.Tasks.patch({ status: 'completed' }, defaultListId, taskId);
   return { success: true };
+}
+
+// 禱告首頁「隨機抽任務」用：已抽過的 Task ID 清單，存在 PropertiesService（跟這份試算表綁定）
+const DRAWN_TASK_IDS_PROP_KEY = 'drawnTaskIds';
+
+/**
+ * 從 Google Tasks 預設清單的未完成項目裡隨機抽一筆，抽過的記住（存在 PropertiesService），
+ * 下次抽選會排除已抽過的，直到全部都抽完才自動重新開始一輪。
+ */
+function drawRandomTask() {
+  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
+  if (!taskLists.items || taskLists.items.length === 0) {
+    return { task: null, remaining: 0, total: 0 };
+  }
+  const defaultListId = taskLists.items[0].id;
+
+  const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
+  const items = (tasksResult.items || []).map(function (t) {
+    return { id: t.id, text: t.title || '(無標題)', note: t.notes || '' };
+  });
+
+  if (items.length === 0) {
+    return { task: null, remaining: 0, total: 0 };
+  }
+
+  const props = PropertiesService.getDocumentProperties();
+  let drawnIds = [];
+  try {
+    drawnIds = JSON.parse(props.getProperty(DRAWN_TASK_IDS_PROP_KEY) || '[]');
+  } catch (err) {
+    drawnIds = [];
+  }
+
+  const currentIds = items.map(function (t) { return t.id; });
+  // 只保留仍然存在於目前清單裡的已抽 ID，避免任務被刪除後永遠佔著「已抽過」的名額
+  drawnIds = drawnIds.filter(function (id) { return currentIds.indexOf(id) !== -1; });
+
+  let candidates = items.filter(function (t) { return drawnIds.indexOf(t.id) === -1; });
+  if (candidates.length === 0) {
+    // 全部都抽過了，重新開始一輪
+    drawnIds = [];
+    candidates = items;
+  }
+
+  const picked = candidates[Math.floor(Math.random() * candidates.length)];
+  drawnIds.push(picked.id);
+  props.setProperty(DRAWN_TASK_IDS_PROP_KEY, JSON.stringify(drawnIds));
+
+  return {
+    task: picked,
+    remaining: items.length - drawnIds.length,
+    total: items.length
+  };
 }
 
 /**
