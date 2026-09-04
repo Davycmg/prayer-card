@@ -159,6 +159,13 @@
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="add-item.html">➕ 新增禱告事項</a>
   <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
+  <a class="btn" href="#" id="drawTaskBtn">🎲 隨機抽一個待辦任務</a>
+</div>
+
+<div id="drawTaskResult" style="display:none; width:100%; max-width:960px; margin-top:16px; background:white; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); padding:20px; text-align:center;">
+  <div id="drawTaskText" style="font-size:18px; font-weight:bold; color:var(--text-main); margin-bottom:6px;"></div>
+  <div id="drawTaskNote" style="font-size:13px; color:var(--text-sub); margin-bottom:6px;"></div>
+  <div id="drawTaskProgress" style="font-size:12px; color:var(--text-sub);"></div>
 </div>
 
 <script>
@@ -182,6 +189,37 @@ loadProgress(NETWORK_API_URL, 'networkProgress');
 loadProgress(MULTI_API_URL, 'multiProgress');
 
 const TASKS_API_URL = MULTI_API_URL;
+
+document.getElementById('drawTaskBtn').addEventListener('click', async function (e) {
+  e.preventDefault();
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  btn.textContent = '抽選中...';
+  try {
+    const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'drawRandomTask', _t: Date.now() }).toString();
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    const resultBox = document.getElementById('drawTaskResult');
+    const textEl = document.getElementById('drawTaskText');
+    const noteEl = document.getElementById('drawTaskNote');
+    const progressEl = document.getElementById('drawTaskProgress');
+    if (!data.task) {
+      textEl.textContent = '目前沒有待辦任務';
+      noteEl.textContent = '';
+      progressEl.textContent = '';
+    } else {
+      textEl.textContent = '🎯 ' + data.task.text;
+      noteEl.textContent = data.task.note || '';
+      progressEl.textContent = `已抽 ${data.total - data.remaining}/${data.total}，剩 ${data.remaining} 個未抽`;
+    }
+    resultBox.style.display = 'block';
+  } catch (err) {
+    alert('抽選失敗：' + err.message);
+  } finally {
+    btn.textContent = originalText;
+  }
+});
 
 document.getElementById('exportTasksBtn').addEventListener('click', async function (e) {
   e.preventDefault();
