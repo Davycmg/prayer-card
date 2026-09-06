@@ -681,6 +681,7 @@
       <button id="tcAddTagBtn">套用</button>
     </div>
 
+    <button class="copy-tasks-btn" id="tcRemoveTagBtn">🏷️ 移除標籤</button>
     <button class="copy-tasks-btn" id="tcCopyToTasksBtn">📋 複製到 Google Tasks 預設清單</button>
     <button class="copy-tasks-btn" id="tcAddToCalendarBtn">📅 新增到日曆（依週期重複）</button>
 
@@ -870,6 +871,7 @@ const el = {
   tcNewTagInput: document.getElementById('tcNewTagInput'),
   tcSaveTagCheckbox: document.getElementById('tcSaveTagCheckbox'),
   tcAddTagBtn: document.getElementById('tcAddTagBtn'),
+  tcRemoveTagBtn: document.getElementById('tcRemoveTagBtn'),
   tcCopyToTasksBtn: document.getElementById('tcCopyToTasksBtn'),
   tcAddToCalendarBtn: document.getElementById('tcAddToCalendarBtn'),
   tcNoteText: document.getElementById('tcNoteText'),
@@ -1019,6 +1021,7 @@ el.tagQueryBtn.addEventListener('click', async () => {
     tcItemsCache = data.items || [];
     sortItemsByCycleDesc(tcItemsCache); // 跟 index.html 一致：沒有週期的最先，接著週期長到短
     tcCachePos = 0;
+    tcFromTagQuery = true; // 這次卡片瀏覽是從「依標籤查詢」叫出來的，移除標籤後這張卡片要從清單消失
 
     if (tcItemsCache.length === 0) {
       showStatus(el.status, '沒有符合此標籤的項目');
@@ -1068,6 +1071,7 @@ el.keywordQueryBtn.addEventListener('click', async () => {
       if (items.length === 0) { showStatus(el.status, '沒有符合的項目'); return; }
       tcItemsCache = items;
       tcCachePos = 0;
+      tcFromTagQuery = false; // 關鍵字查詢叫出的卡片瀏覽，移除標籤只是清空欄位，卡片不會消失
       el.listView.style.display = 'none';
       el.tagCardView.style.display = 'flex';
       tcRenderFromCache(0);
@@ -1208,6 +1212,7 @@ el.editDeleteBtn.addEventListener('click', async () => {
 // ===== 標籤卡片瀏覽：跟 index.html 完全一樣的介面與功能 =====
 let tcItemsCache = [];   // 目前這次標籤查詢的結果（後端已依E欄日期由舊到新排序）
 let tcCachePos = 0;
+let tcFromTagQuery = false; // 目前卡片瀏覽是否是從「依標籤查詢」叫出來的（移除標籤時卡片要不要跟著消失）
 let tcSaveTimer = null;
 
 function tcUpdateCycleWarning() {
@@ -1285,6 +1290,34 @@ el.tcAddTagBtn.addEventListener('click', async () => {
   }
 
   el.tcNewTagInput.value = '';
+});
+
+// 移除標籤：把H欄清空。如果目前這批卡片是從「依標籤查詢」叫出來的，
+// 這張卡片已經不屬於這個標籤了，本地立刻從清單移除（跟「完成」按鈕一樣的樂觀更新）；
+// 如果是關鍵字查詢叫出來的卡片瀏覽，只是清空標籤欄位，卡片本身不會消失。
+el.tcRemoveTagBtn.addEventListener('click', () => {
+  if (tcItemsCache.length === 0) return;
+  const item = tcItemsCache[tcCachePos];
+  const rowRef = item.row;
+
+  if (tcFromTagQuery) {
+    tcStopSpeakingIfNeeded();
+    tcItemsCache.splice(tcCachePos, 1);
+
+    if (tcItemsCache.length === 0) {
+      tcRenderEmptyState();
+    } else {
+      tcRenderFromCache(tcCachePos);
+    }
+  } else {
+    item.tag = '';
+    el.tcTagSelect.value = '';
+    el.tcWeekdaySelect.value = '';
+  }
+
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: '' })
+    .then(() => showStatus(el.tcStatus, '標籤已移除'))
+    .catch(err => showStatus(el.tcStatus, '移除失敗：' + err.message));
 });
 
 // 需要點兩下才會真的觸發，避免手機上滑動、誤觸就直接複製/開日曆：
