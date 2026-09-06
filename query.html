@@ -632,6 +632,10 @@
     <input type="checkbox" id="keywordQueryAllCheckbox">
     <span>全部輸出（把查詢結果直接複製成純文字到剪貼簿）</span>
   </label>
+  <label class="export-all-row">
+    <input type="checkbox" id="keywordCardViewCheckbox">
+    <span>全部查詢（把查詢結果用卡片形式瀏覽，可翻頁／編輯／完成）</span>
+  </label>
   <div class="result-count" id="keywordResultCount"></div>
   <div class="result-list" id="keywordResultList"></div>
 </div>
@@ -847,6 +851,7 @@ const el = {
   keywordInput: document.getElementById('keywordInput'),
   keywordQueryBtn: document.getElementById('keywordQueryBtn'),
   keywordQueryAllCheckbox: document.getElementById('keywordQueryAllCheckbox'),
+  keywordCardViewCheckbox: document.getElementById('keywordCardViewCheckbox'),
   keywordResultCount: document.getElementById('keywordResultCount'),
   keywordResultList: document.getElementById('keywordResultList'),
   listView: document.getElementById('listView'),
@@ -1041,11 +1046,22 @@ el.keywordQueryBtn.addEventListener('click', async () => {
 
   setLoading(true);
   try {
+    // searchItems 本來就掃描全部資料、不受到期日篩選，未到期的項目也會一併回傳
     const data = await apiCall({ action: 'searchItems', keyword: keyword });
     const items = data.items || [];
 
     if (el.keywordQueryAllCheckbox.checked) {
       await exportItemsAsText(items, keyword);
+      return;
+    }
+
+    if (el.keywordCardViewCheckbox.checked) {
+      if (items.length === 0) { showStatus(el.status, '沒有符合的項目'); return; }
+      tcItemsCache = items;
+      tcCachePos = 0;
+      el.listView.style.display = 'none';
+      el.tagCardView.style.display = 'flex';
+      tcRenderFromCache(0);
       return;
     }
 
