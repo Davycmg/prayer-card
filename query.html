@@ -111,7 +111,7 @@
     border: 1px solid transparent;
   }
   .result-item:active { opacity: 0.7; }
-  .result-item .tag-badge {
+  .tag-badge {
     display: inline-block;
     margin-top: 6px;
     font-size: 11px;
@@ -119,6 +119,10 @@
     background: var(--purple-light);
     padding: 2px 8px;
     border-radius: 10px;
+  }
+  .tag-badge.tag-badge-tasks {
+    color: #8a6a4e;
+    background: #e6d9c8;
   }
   .edit-panel {
     display: none;
@@ -770,9 +774,11 @@
 <div class="card edit-panel" id="editPanel">
   <button class="back-btn" id="backBtn">← 返回查詢結果</button>
 
+  <div class="tag-badge" id="editSourceBadge" style="display:none; margin-bottom:10px;"></div>
+
   <textarea class="prayer-text" id="editText" placeholder="禱告事項內容..."></textarea>
 
-  <div class="meta-row">
+  <div class="meta-row" id="editMetaRow1">
     <div class="meta-field cycle">
       <label>DG 週期</label>
       <select id="editCycleSelect"></select>
@@ -783,7 +789,7 @@
     </div>
   </div>
 
-  <div class="meta-row">
+  <div class="meta-row" id="editMetaRow2">
     <div class="meta-field weekday">
       <label>星期標籤</label>
       <select id="editWeekdaySelect"></select>
@@ -902,6 +908,9 @@ const el = {
   tcTrashList: document.getElementById('tcTrashList'),
   tcEmptyTrashBtn: document.getElementById('tcEmptyTrashBtn'),
   editPanel: document.getElementById('editPanel'),
+  editSourceBadge: document.getElementById('editSourceBadge'),
+  editMetaRow1: document.getElementById('editMetaRow1'),
+  editMetaRow2: document.getElementById('editMetaRow2'),
   backBtn: document.getElementById('backBtn'),
   editText: document.getElementById('editText'),
   editCycleSelect: document.getElementById('editCycleSelect'),
@@ -1052,15 +1061,23 @@ async function exportTagAllAsText(tag) {
 }
 
 // ===== 關鍵字查詢：列出所有符合的項目，可點進去個別編輯 =====
+// 查詢範圍同時涵蓋「表單回覆 1」跟使用者所有 Google Tasks 清單，
+// 但 Google Tasks 找到的項目只是「查出來給你看」，不會寫回表單回覆1，也不會建立新的一列。
 el.keywordQueryBtn.addEventListener('click', async () => {
   const keyword = el.keywordInput.value.trim();
   if (!keyword) { showStatus(el.status, '請輸入關鍵字'); return; }
 
   setLoading(true);
   try {
-    // searchItems 本來就掃描全部資料、不受到期日篩選，未到期的項目也會一併回傳
-    const data = await apiCall({ action: 'searchItems', keyword: keyword });
-    const items = data.items || [];
+    // searchItems 本來就掃描全部資料、不受到期日篩選，未到期的項目也會一併回傳；
+    // searchGoogleTasks 失敗（例如沒授權 Tasks API）不影響表單回覆1的查詢結果，安靜略過就好
+    const [sheetData, tasksData] = await Promise.all([
+      apiCall({ action: 'searchItems', keyword: keyword }),
+      apiCall({ action: 'searchGoogleTasks', keyword: keyword }).catch(() => ({ items: [] }))
+    ]);
+    const sheetItems = (sheetData.items || []).map(it => Object.assign({ source: 'sheet' }, it));
+    const taskItems = tasksData.items || []; // 後端已標記 source: 'googleTasks'
+    const items = sheetItems.concat(taskItems);
 
     if (el.keywordQueryAllCheckbox.checked) {
       await exportItemsAsText(items, keyword);
@@ -1068,13 +1085,17 @@ el.keywordQueryBtn.addEventListener('click', async () => {
     }
 
     if (el.keywordCardViewCheckbox.checked) {
-      if (items.length === 0) { showStatus(el.status, '沒有符合的項目'); return; }
-      tcItemsCache = items;
+      // 卡片瀏覽需要試算表的列號（row）才能翻頁/編輯/完成，Google Tasks 項目沒有列號，卡片模式只收表單回覆1的結果
+      if (sheetItems.length === 0) { showStatus(el.status, '沒有符合的項目（Google Tasks 的結果不支援卡片瀏覽，請改用清單模式）'); return; }
+      tcItemsCache = sheetItems;
       tcCachePos = 0;
       tcFromTagQuery = false; // 關鍵字查詢叫出的卡片瀏覽，移除標籤只是清空欄位，卡片不會消失
       el.listView.style.display = 'none';
       el.tagCardView.style.display = 'flex';
       tcRenderFromCache(0);
+      if (taskItems.length > 0) {
+        showStatus(el.status, '有 ' + taskItems.length + ' 筆 Google Tasks 結果不支援卡片瀏覽，已略過');
+      }
       return;
     }
 
@@ -1095,7 +1116,9 @@ async function exportItemsAsText(items, label) {
   }
 
   const lines = items.map((item, i) => {
-    const meta = [item.cycle, item.dateText, item.tag].filter(Boolean).join('，');
+    const meta = item.source === 'googleTasks'
+      ? ['Google Tasks', item.listTitle].filter(Boolean).join('・')
+      : [item.cycle, item.dateText, item.tag].filter(Boolean).join('，');
     return (i + 1) + '. ' + item.text + (meta ? '（' + meta + '）' : '');
   });
   const text = '【' + label + '】共 ' + items.length + ' 筆\n\n' + lines.join('\n');
@@ -1118,7 +1141,12 @@ function renderKeywordResults() {
     const div = document.createElement('div');
     div.className = 'result-item';
     div.textContent = item.text;
-    if (item.tag) {
+    if (item.source === 'googleTasks') {
+      const badge = document.createElement('div');
+      badge.className = 'tag-badge tag-badge-tasks';
+      badge.textContent = '📋 Google Tasks' + (item.listTitle ? '・' + item.listTitle : '');
+      div.appendChild(badge);
+    } else if (item.tag) {
       const badge = document.createElement('div');
       badge.className = 'tag-badge';
       badge.textContent = item.tag;
@@ -1130,13 +1158,28 @@ function renderKeywordResults() {
 }
 
 // ===== 編輯面板 =====
+// Google Tasks 找到的項目沒有列號、也沒有週期/標籤這些表單回覆1才有的欄位，
+// 編輯面板只讓改標題（同步回 Google Tasks），隱藏週期/標籤/星期標籤，刪除鈕改成「標記完成」。
 function openEditPanel(idx) {
   editingItem = currentKeywordResults[idx];
+  const isTask = editingItem.source === 'googleTasks';
+
   el.editText.value = editingItem.text || '';
-  el.editCycleSelect.value = editingItem.cycle || '';
-  el.editTagSelect.value = WEEKDAY_MAP[editingItem.tag] ? '' : (editingItem.tag || '');
-  el.editWeekdaySelect.value = WEEKDAY_MAP[editingItem.tag] ? editingItem.tag : '';
   el.editNoteText.textContent = editingItem.note ? ('備註：' + editingItem.note) : '';
+
+  el.editMetaRow1.style.display = isTask ? 'none' : '';
+  el.editMetaRow2.style.display = isTask ? 'none' : '';
+  el.editSourceBadge.style.display = isTask ? '' : 'none';
+  if (isTask) {
+    el.editSourceBadge.className = 'tag-badge tag-badge-tasks';
+    el.editSourceBadge.textContent = '📋 Google Tasks' + (editingItem.listTitle ? '・' + editingItem.listTitle : '');
+    el.editDeleteBtn.textContent = '✅ 標記完成';
+  } else {
+    el.editCycleSelect.value = editingItem.cycle || '';
+    el.editTagSelect.value = WEEKDAY_MAP[editingItem.tag] ? '' : (editingItem.tag || '');
+    el.editWeekdaySelect.value = WEEKDAY_MAP[editingItem.tag] ? editingItem.tag : '';
+    el.editDeleteBtn.textContent = '🗑 刪除此項';
+  }
 
   el.listView.style.display = 'none';
   el.editPanel.classList.add('show');
@@ -1155,7 +1198,12 @@ el.editText.addEventListener('input', () => {
   saveTimer = setTimeout(() => {
     if (!editingItem) return;
     editingItem.text = el.editText.value;
-    apiCall({ action: 'updateTextByRow', row: editingItem.row, value: editingItem.text })
+
+    const action = editingItem.source === 'googleTasks'
+      ? apiCall({ action: 'updateTaskTitle', taskId: editingItem.taskId, listId: editingItem.listId, value: editingItem.text })
+      : apiCall({ action: 'updateTextByRow', row: editingItem.row, value: editingItem.text });
+
+    action
       .then(() => showStatus(el.editStatus, '已同步'))
       .catch(err => showStatus(el.editStatus, '同步失敗：' + err.message));
   }, 1000);
@@ -1189,6 +1237,24 @@ el.editWeekdaySelect.addEventListener('change', () => {
 
 el.editDeleteBtn.addEventListener('click', async () => {
   if (!editingItem) return;
+
+  if (editingItem.source === 'googleTasks') {
+    // Google Tasks 項目：標記完成即可，不用二次確認（Tasks 裡還留著完成紀錄，不是真的刪除）
+    setLoading(true);
+    try {
+      await apiCall({ action: 'completeTaskItem', taskId: editingItem.taskId, listId: editingItem.listId });
+      currentKeywordResults = currentKeywordResults.filter(it => it !== editingItem);
+      renderKeywordResults();
+      closeEditPanel();
+      showStatus(el.status, '已標記完成');
+    } catch (err) {
+      showStatus(el.editStatus, '標記完成失敗：' + err.message);
+    } finally {
+      setLoading(false);
+    }
+    return;
+  }
+
   const preview = (editingItem.text || '').slice(0, 20);
   const confirmed = window.confirm(
     '確定要刪除這一項嗎？\n\n「' + preview + ((editingItem.text || '').length > 20 ? '...' : '') + '」\n\n這個動作無法復原。'
