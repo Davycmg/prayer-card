@@ -1017,10 +1017,13 @@ function doGet(e) {
         result = getTodayTasksList();
         break;
       case 'updateTaskTitle':
-        result = updateTaskTitle(e.parameter.taskId, e.parameter.value);
+        result = updateTaskTitle(e.parameter.taskId, e.parameter.value, e.parameter.listId);
         break;
       case 'completeTaskItem':
-        result = completeTaskItem(e.parameter.taskId);
+        result = completeTaskItem(e.parameter.taskId, e.parameter.listId);
+        break;
+      case 'searchGoogleTasks':
+        result = searchGoogleTasks(e.parameter.keyword);
         break;
       case 'drawRandomTask':
         result = drawRandomTask();
@@ -1295,28 +1298,63 @@ function getTodayTasksList() {
 }
 
 /**
- * 修改 Google Tasks 預設清單裡一個項目的標題。
+ * 修改 Google Tasks 裡一個項目的標題。
+ * listId 不指定的話預設用第一個清單（跟 today.html 抓的清單一致），
+ * 但關鍵字查詢找到的任務可能在其他清單，所以需要能指定 listId。
  */
-function updateTaskTitle(taskId, value) {
+function updateTaskTitle(taskId, value, listId) {
   if (!taskId) throw new Error('缺少 Task ID');
-  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
-  if (!taskLists.items || taskLists.items.length === 0) throw new Error('找不到 Google Tasks 清單');
-  const defaultListId = taskLists.items[0].id;
-  Tasks.Tasks.patch({ title: value }, defaultListId, taskId);
+  const targetListId = listId || getDefaultTaskListId_();
+  Tasks.Tasks.patch({ title: value }, targetListId, taskId);
   return { success: true };
 }
 
 /**
- * 把 Google Tasks 預設清單裡的一個項目標記為完成，讓它從 today.html 的清單消失
- * （不是真的刪除，Tasks 裡還留著已完成的紀錄）。
+ * 把 Google Tasks 裡的一個項目標記為完成（不是真的刪除，Tasks 裡還留著已完成的紀錄）。
+ * listId 不指定的話預設用第一個清單，理由同 updateTaskTitle。
  */
-function completeTaskItem(taskId) {
+function completeTaskItem(taskId, listId) {
   if (!taskId) throw new Error('缺少 Task ID');
+  const targetListId = listId || getDefaultTaskListId_();
+  Tasks.Tasks.patch({ status: 'completed' }, targetListId, taskId);
+  return { success: true };
+}
+
+function getDefaultTaskListId_() {
   const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
   if (!taskLists.items || taskLists.items.length === 0) throw new Error('找不到 Google Tasks 清單');
-  const defaultListId = taskLists.items[0].id;
-  Tasks.Tasks.patch({ status: 'completed' }, defaultListId, taskId);
-  return { success: true };
+  return taskLists.items[0].id;
+}
+
+/**
+ * query.html 關鍵字查詢用：掃描使用者「所有」Google Tasks 清單（不只預設清單）裡還沒完成的項目，
+ * 標題包含指定關鍵字的都回傳（不分大小寫）。只用來查詢呈現，不會把這些任務寫回「表單回覆 1」，
+ * 也不會動 Google Tasks 本身的資料——單純多一個資料來源讓查詢結果一起顯示。
+ */
+function searchGoogleTasks(keyword) {
+  const trimmedKeyword = (keyword || '').toString().trim().toLowerCase();
+  if (!trimmedKeyword) return { items: [] };
+
+  const taskLists = Tasks.Tasklists.list({ maxResults: 100 });
+  const items = [];
+
+  (taskLists.items || []).forEach(list => {
+    const tasksResult = Tasks.Tasks.list(list.id, { showCompleted: false, maxResults: 100 });
+    (tasksResult.items || []).forEach(t => {
+      const title = t.title || '';
+      if (title.toLowerCase().indexOf(trimmedKeyword) === -1) return;
+      items.push({
+        source: 'googleTasks',
+        listId: list.id,
+        listTitle: list.title || '',
+        taskId: t.id,
+        text: title,
+        note: t.notes || ''
+      });
+    });
+  });
+
+  return { items: items };
 }
 
 // 禱告首頁「隨機抽任務」用：已抽過的 Task ID 清單，存在 PropertiesService（跟這份試算表綁定）
