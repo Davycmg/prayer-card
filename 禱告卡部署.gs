@@ -1059,10 +1059,36 @@ function saveCustomTags_(tags) {
 }
 
 /**
- * 回傳完整標籤清單：內建（TAG_MAP）+ 自訂（永久儲存的）。
+ * 自動剔除機制：掃描「表單回覆 1」H欄目前實際使用中的標籤，
+ * 把自訂標籤清單裡「沒有任何一列在用」的項目移除並存回去。
+ * 每次讀標籤清單（getTagList，也就是每次開 index.html／query.html）都會順便清一次，
+ * 不需要另外手動維護——標籤只要曾經被移到最後一列用完/清空，下次載入頁面就會自動從清單消失。
+ */
+function pruneUnusedCustomTags_() {
+  const tags = getCustomTags_();
+  if (tags.length === 0) return tags;
+
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  const usedTags = new Set();
+  if (lastRow >= 2) {
+    const hValues = sheet.getRange(2, COL.TAG, lastRow - 1, 1).getValues();
+    hValues.forEach(row => {
+      const tagVal = (row[0] || '').toString().trim();
+      if (tagVal) usedTags.add(tagVal);
+    });
+  }
+
+  const kept = tags.filter(t => usedTags.has(t));
+  if (kept.length !== tags.length) saveCustomTags_(kept);
+  return kept;
+}
+
+/**
+ * 回傳完整標籤清單：內建（TAG_MAP）+ 自訂（永久儲存的，且已剔除沒有任何項目在用的舊標籤）。
  */
 function getTagList() {
-  return { builtIn: Object.values(TAG_MAP), custom: getCustomTags_() };
+  return { builtIn: Object.values(TAG_MAP), custom: pruneUnusedCustomTags_() };
 }
 
 /**
