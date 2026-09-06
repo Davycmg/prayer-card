@@ -622,6 +622,10 @@
     <input type="checkbox" id="tagQueryAllCheckbox">
     <span>全部輸出（不管有沒有到期，直接複製成純文字到剪貼簿）</span>
   </label>
+  <label class="export-all-row">
+    <input type="checkbox" id="tagQueryCardViewCheckbox">
+    <span>全部查詢（不管有沒有到期，用卡片形式瀏覽，可翻頁／編輯／完成）</span>
+  </label>
 
   <h2 style="margin-top:24px;">關鍵字查詢</h2>
   <div class="query-row">
@@ -848,6 +852,7 @@ const el = {
   tagQuerySelect: document.getElementById('tagQuerySelect'),
   tagQueryBtn: document.getElementById('tagQueryBtn'),
   tagQueryAllCheckbox: document.getElementById('tagQueryAllCheckbox'),
+  tagQueryCardViewCheckbox: document.getElementById('tagQueryCardViewCheckbox'),
   keywordInput: document.getElementById('keywordInput'),
   keywordQueryBtn: document.getElementById('keywordQueryBtn'),
   keywordQueryAllCheckbox: document.getElementById('keywordQueryAllCheckbox'),
@@ -1004,9 +1009,13 @@ el.tagQueryBtn.addEventListener('click', async () => {
     return;
   }
 
+  const showAll = el.tagQueryCardViewCheckbox.checked; // 勾選時不管有沒有到期，全部項目都用卡片瀏覽
+  const queryParams = { action: 'getItemsByTag', tag: tag };
+  if (showAll) queryParams.all = 'true';
+
   setLoading(true);
   try {
-    const data = await apiCall({ action: 'getItemsByTag', tag: tag });
+    const data = await apiCall(queryParams);
     tcItemsCache = data.items || [];
     sortItemsByCycleDesc(tcItemsCache); // 跟 index.html 一致：沒有週期的最先，接著週期長到短
     tcCachePos = 0;
