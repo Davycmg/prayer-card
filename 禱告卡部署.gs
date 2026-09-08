@@ -102,9 +102,11 @@ function advancePrayerDate_(sheet, row) {
   let newDate = new Date(baseDate);
   newDate.setDate(newDate.getDate() + period);
 
-  // 新日期不能還在過去：一直往後推，直到不早於今天為止（例如原日期拖了很久才按完成的情況）
+  // 新日期一定要嚴格晚於今天（不能等於今天）：因為「今天待辦」清單的篩選條件是「日期 <= 今天」，
+  // 如果推進後剛好等於今天，這項會立刻又被算成「今天待辦」，等於完成完全沒有效果
+  // （沒有週期、或週期是「每天」的項目最容易踩到這個狀況：原日期拖欠越久，加完週期天數越可能剛好落在今天）。
   let guard = 0;
-  while (newDate < today && guard < 1000) {
+  while (newDate <= today && guard < 1000) {
     newDate.setDate(newDate.getDate() + period);
     guard++;
   }
