@@ -636,6 +636,14 @@
   <span>純朗讀模式（不標記完成）</span>
 </div>
 
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="randomOrderToggle">
+    <span class="slider"></span>
+  </label>
+  <span>隨機排序</span>
+</div>
+
 <div class="jump-row">
   <input type="number" id="jumpInput" placeholder="第幾項" min="1">
   <button id="jumpBtn">跳到</button>
@@ -721,6 +729,25 @@ function sortItemsByCycleDesc(items) {
   items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
 }
 
+// 洗牌演算法（Fisher-Yates），打亂陣列順序
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+// 依照「隨機排序」勾選狀態重新排列 itemsCache，並從第一項開始顯示
+function applyOrderPreference() {
+  if (el.randomOrderToggle && el.randomOrderToggle.checked) {
+    shuffleItems(itemsCache);
+  } else {
+    sortItemsByCycleDesc(itemsCache);
+  }
+  cachePos = 0;
+  renderFromCache(0);
+}
+
 // ===== 本地暫存區：一次抓好今天的清單，之後翻頁/隨機/跳項都用這份資料，不用再打API =====
 let itemsCache = [];   // [{row, text, cycle, note, tag}, ...]
 let cachePos = 0;      // 目前指到 itemsCache 的第幾個（0-based）
@@ -760,6 +787,7 @@ const el = {
   mergeSearchBtn: document.getElementById('mergeSearchBtn'),
   deleteBtn: document.getElementById('deleteBtn'),
   pureReadToggle: document.getElementById('pureReadToggle'),
+  randomOrderToggle: document.getElementById('randomOrderToggle'),
   status: document.getElementById('status'),
   loadingOverlay: document.getElementById('loadingOverlay'),
   openTrashBtn: document.getElementById('openTrashBtn'),
@@ -790,9 +818,7 @@ async function loadInitData() {
     const data = await apiCall({ action: 'getInitData' });
     customTagsCache = data.custom || [];
     itemsCache = (data.items || []).filter(item => item.tag !== 'A安祺輸入' && item.tag !== 'A安祺禱告');
-    sortItemsByCycleDesc(itemsCache);
-    cachePos = 0;
-    renderFromCache(0);
+    applyOrderPreference();
   } catch (err) {
     showStatus('載入失敗：' + err.message);
   } finally {
@@ -1091,6 +1117,12 @@ el.randomBtn.addEventListener('click', () => {
   if (itemsCache.length === 0) return;
   stopSpeakingIfNeeded();
   renderFromCache(Math.floor(Math.random() * itemsCache.length));
+});
+
+el.randomOrderToggle.addEventListener('change', () => {
+  if (itemsCache.length === 0) return;
+  stopSpeakingIfNeeded();
+  applyOrderPreference();
 });
 
 el.jumpBtn.addEventListener('click', () => {
