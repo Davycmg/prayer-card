@@ -335,7 +335,9 @@ function findOrCreateTaskList_(name) {
  * 跟「手機版手動按鈕」（copyCurrentRowToTasks）兩種情境呼叫。
  */
 function copyRowToDefaultTaskList_(sheet, row) {
-  const title = sheet.getRange(row, COL.TEXT).getValue().toString();
+  const text = sheet.getRange(row, COL.TEXT).getValue().toString();
+  const cycle = sheet.getRange(row, COL.CYCLE).getValue().toString().trim();
+  const title = cycle ? (cycle + '-' + text) : text;
   const notes = sheet.getRange(row, COL.NOTE).getValue().toString();
   return copyTextToDefaultTaskList_(title, notes, '列 ' + row);
 }
