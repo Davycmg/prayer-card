@@ -1834,6 +1834,32 @@ function setDateByRow_(row, dateObj) {
   return { success: true, row: row };
 }
 
+// 把 CYCLE_MAP 的值（如 'S每季'）去掉開頭的代號，換成純中文（如 '每季'）當 key，
+// 用來比對 Google Tasks 標題前綴（例如「每季-同工會」）該對應哪個週期代碼。
+const CYCLE_PLAIN_LABEL_MAP_ = (function () {
+  const map = {};
+  Object.keys(CYCLE_MAP).forEach(code => {
+    const label = CYCLE_MAP[code];
+    const plain = label.replace(/^[A-Za-z0-9]+/, '');
+    if (plain) map[plain] = label;
+  });
+  return map;
+})();
+
+/**
+ * 解析 Google Tasks 標題開頭的「週期-」前綴（例如「每季-同工會：...」）。
+ * 有對應到週期就回傳 { cycle, text }（text 是去掉前綴後的標題)，沒有就回傳 null。
+ */
+function extractCyclePrefixFromTitle_(title) {
+  const match = title.match(/^([一-龥]+)-(.*)$/);
+  if (!match) return null;
+  const cycle = CYCLE_PLAIN_LABEL_MAP_[match[1]];
+  if (!cycle) return null;
+  const text = match[2].trim();
+  if (!text) return null;
+  return { cycle: cycle, text: text };
+}
+
 function importGoogleTasksToday_() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
@@ -1864,8 +1890,13 @@ function importGoogleTasksToday_() {
   let updatedCount = 0, addedCount = 0;
 
   tasks.forEach(task => {
-    const title = (task.title || '').trim();
-    if (!title) return;
+    const rawTitle = (task.title || '').trim();
+    if (!rawTitle) return;
+
+    // 標題若帶「週期-」前綴（例如「每季-同工會：...」），歸檔時拆掉前綴、
+    // 同步把週期欄設成對應代碼（例如 S每季），並用去掉前綴後的文字比對既有列
+    const prefixInfo = extractCyclePrefixFromTitle_(rawTitle);
+    const title = prefixInfo ? prefixInfo.text : rawTitle;
 
     if (existingMap[title]) {
       const row = existingMap[title];
@@ -1880,6 +1911,10 @@ function importGoogleTasksToday_() {
         tagCell.setValue(IMPORT_TAG);
       }
 
+      if (prefixInfo) {
+        sheet.getRange(row, COL.CYCLE).setValue(prefixInfo.cycle);
+      }
+
       updatedCount++;
     } else {
       const newRow = sheet.getLastRow() + 1;
@@ -1889,6 +1924,9 @@ function importGoogleTasksToday_() {
       dateCell.setValue(today);
       dateCell.setNumberFormat('yyyy/MM/dd');
       sheet.getRange(newRow, COL.TAG).setValue(IMPORT_TAG);   // 新增列一定是空白，直接打標籤
+      if (prefixInfo) {
+        sheet.getRange(newRow, COL.CYCLE).setValue(prefixInfo.cycle);
+      }
       existingMap[title] = newRow;
       addedCount++;
     }
