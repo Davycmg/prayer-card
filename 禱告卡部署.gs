@@ -1850,10 +1850,15 @@ const CYCLE_PLAIN_LABEL_MAP_ = (function () {
  * 解析 Google Tasks 標題開頭的「週期-」前綴（例如「每季-同工會：...」）。
  * 有對應到週期就回傳 { cycle, text }（text 是去掉前綴後的標題)，沒有就回傳 null。
  */
+// 常見異體字容錯：週/周、兩/二 視為同一個字，比對前綴時先正規化再查表
+function normalizeCyclePrefixText_(text) {
+  return text.replace(/周/g, '週').replace(/二/g, '兩');
+}
+
 function extractCyclePrefixFromTitle_(title) {
   const match = title.match(/^([一-龥]+)-(.*)$/);
   if (!match) return null;
-  const cycle = CYCLE_PLAIN_LABEL_MAP_[match[1]];
+  const cycle = CYCLE_PLAIN_LABEL_MAP_[normalizeCyclePrefixText_(match[1])];
   if (!cycle) return null;
   const text = match[2].trim();
   if (!text) return null;
