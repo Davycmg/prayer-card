@@ -169,6 +169,74 @@
     background: white; color: var(--main-primary); font-size: 14px;
   }
   .status { margin-top: 10px; font-size: 12px; color: var(--text-sub); height: 16px; text-align: center; }
+  .copy-tasks-btn {
+    margin-top: 10px; width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--main-primary); background: white; color: var(--main-primary);
+    font-size: 14px; cursor: pointer;
+  }
+  .copy-tasks-btn:active { opacity: 0.7; }
+  .danger-zone {
+    width: 100%; max-width: 480px; margin-top: 24px; padding-top: 16px;
+    border-top: 1px solid var(--border); display: flex; justify-content: center; gap: 10px;
+  }
+  .danger-zone button {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-danger); font-size: 13px; opacity: 0.6;
+  }
+  .danger-zone button:active { opacity: 1; }
+  .danger-zone #openTrashBtn { color: var(--main-primary); }
+  .trash-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: flex-end; justify-content: center; z-index: 20;
+  }
+  .trash-overlay.show { display: flex; }
+  .trash-panel {
+    width: 100%; max-width: 480px; max-height: 80vh; background: white;
+    border-radius: 16px 16px 0 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .trash-panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .trash-panel-header h2 { font-size: 17px; margin: 0; color: var(--main-primary); }
+  .trash-close-btn { border: none; background: transparent; font-size: 18px; color: var(--text-sub); padding: 4px 8px; cursor: pointer; }
+  .trash-list { overflow-y: auto; padding: 8px 20px; flex: 1; }
+  .trash-empty-msg { text-align: center; color: var(--text-sub); font-size: 14px; padding: 32px 0; }
+  .trash-item { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .trash-item-main { flex: 1; min-width: 0; }
+  .trash-item-text { font-size: 14px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trash-item-meta { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+  .trash-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .trash-item-actions button { padding: 6px 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+  .trash-restore-btn { border: 1px solid var(--main-primary); background: white; color: var(--main-primary); }
+  .trash-delete-btn { border: 1px solid var(--border); background: white; color: var(--text-danger); }
+  .trash-panel-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
+  .search-input-row { display: flex; gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  .search-input-row input { flex: 1; min-width: 0; padding: 8px; border-radius: 8px; border: 1px solid var(--border); font-size: 15px; }
+  .search-input-row button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary); background: white; color: var(--main-primary); font-size: 14px; white-space: nowrap; }
+  .search-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .search-item input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; }
+  .search-item-main { flex: 1; min-width: 0; }
+  .search-item-text { font-size: 14px; color: var(--text-main); white-space: pre-wrap; word-break: break-word; }
+  .search-item-meta { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+  .search-merge-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; background: var(--main-primary); color: white; font-size: 15px; }
+  .trash-empty-btn { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--text-danger); background: white; color: var(--text-danger); font-size: 14px; cursor: pointer; }
+  .toggle-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    justify-content: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
+  }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc; transition: .2s; border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background-color: white; transition: .2s; border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--main-primary); }
+  input:checked + .slider:before { transform: translateX(20px); }
   .loading-overlay {
     position: fixed; inset: 0; background: rgba(255,255,255,0.7);
     display: none; align-items: center; justify-content: center;
@@ -264,14 +332,67 @@
   </div>
 </div>
 
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="pureReadToggle" checked>
+    <span class="slider"></span>
+  </label>
+  <span>純朗讀模式（不標記完成）</span>
+</div>
+
+<div class="toggle-row" id="randomOrderRow" style="display:none;">
+  <label class="switch">
+    <input type="checkbox" id="randomOrderToggle">
+    <span class="slider"></span>
+  </label>
+  <span>隨機排序（多方禱告）</span>
+</div>
+
 <div class="jump-row">
   <input type="number" id="jumpInput" placeholder="第幾項" min="1">
   <button id="jumpBtn">跳到</button>
 </div>
 
+<button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出目前清單所有項目</button>
+<button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋（多方禱告）</button>
+
+<div class="danger-zone">
+  <button id="openTrashBtn">🗑 查看垃圾桶（多方禱告）</button>
+</div>
+
 <div class="status" id="status"></div>
 
 <div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<div class="trash-overlay" id="trashOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>垃圾桶（多方禱告）</h2>
+      <button id="closeTrashBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="trash-list" id="trashList"></div>
+    <div class="trash-panel-footer">
+      <button id="emptyTrashBtn" class="trash-empty-btn">🗑 清空垃圾桶</button>
+    </div>
+  </div>
+</div>
+
+<div class="trash-overlay" id="searchOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>關鍵字搜尋（多方禱告）</h2>
+      <button id="closeSearchBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="search-input-row">
+      <input type="text" id="searchKeywordInput" placeholder="輸入關鍵字">
+      <button id="searchKeywordBtn">搜尋</button>
+    </div>
+    <div class="trash-list" id="searchResultList"></div>
+    <div class="trash-panel-footer">
+      <button id="mergeSearchBtn" class="search-merge-btn">🔗 合併所選項目</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // 主要 prayer-card 專案（多方禱告 / 為習慣禱告 / 今日待辦禱告 共用同一個部署網址）
@@ -430,8 +551,24 @@ const el = {
   randomBtn: document.getElementById('randomBtn'),
   speakBtn: document.getElementById('speakBtn'),
   repeatOptions: document.getElementById('repeatOptions'),
+  pureReadToggle: document.getElementById('pureReadToggle'),
+  randomOrderRow: document.getElementById('randomOrderRow'),
+  randomOrderToggle: document.getElementById('randomOrderToggle'),
   jumpInput: document.getElementById('jumpInput'),
   jumpBtn: document.getElementById('jumpBtn'),
+  exportAllBtn: document.getElementById('exportAllBtn'),
+  openSearchBtn: document.getElementById('openSearchBtn'),
+  closeSearchBtn: document.getElementById('closeSearchBtn'),
+  searchOverlay: document.getElementById('searchOverlay'),
+  searchKeywordInput: document.getElementById('searchKeywordInput'),
+  searchKeywordBtn: document.getElementById('searchKeywordBtn'),
+  searchResultList: document.getElementById('searchResultList'),
+  mergeSearchBtn: document.getElementById('mergeSearchBtn'),
+  openTrashBtn: document.getElementById('openTrashBtn'),
+  closeTrashBtn: document.getElementById('closeTrashBtn'),
+  trashOverlay: document.getElementById('trashOverlay'),
+  trashList: document.getElementById('trashList'),
+  emptyTrashBtn: document.getElementById('emptyTrashBtn'),
   status: document.getElementById('status'),
   loadingOverlay: document.getElementById('loadingOverlay')
 };
@@ -531,13 +668,45 @@ async function loadAll() {
   setLoading(false);
 }
 
+// 跟 index.html 一致：依週期長短排序，週期空白/無法辨識的排最前面，最長排到最短
+function sortItemsByCycleDesc(items) {
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? Infinity : idx;
+  };
+  items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
+}
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
 function applyFilter(filter) {
   currentFilter = filter;
   viewItems = filter === 'all' ? allItems : allItems.filter(it => it.source === filter);
+
+  // 「隨機排序」跟排序規則只有多方禱告支援（跟 index.html 一致），其他來源/全部混合維持原本抓回來的順序
+  el.randomOrderRow.style.display = filter === 'multi' ? 'flex' : 'none';
+  if (filter === 'multi') {
+    if (el.randomOrderToggle.checked) {
+      shuffleItems(viewItems);
+    } else {
+      sortItemsByCycleDesc(viewItems);
+    }
+  }
+
   cachePos = 0;
   renderFromView(0);
   updateBreakdown();
 }
+
+el.randomOrderToggle.addEventListener('change', () => {
+  if (currentFilter !== 'multi') return;
+  stopSpeakingIfNeeded();
+  applyFilter(currentFilter);
+});
 
 function updateBreakdown() {
   const counts = { habit: 0, network: 0, multi: 0, task: 0 };
@@ -733,7 +902,23 @@ function applyTagChange(value) {
   item.tag = value;
   showStatus('標籤同步中...');
   config.tag.save(item, value)
-    .then(() => showStatus('標籤已更新'))
+    .then((data) => {
+      // 跟 index.html 一致：設定的標籤剛好是「星期標籤」時，後端會自動把它同步複製到對應的
+      // Google Tasks 星期清單（回傳 exported=true），複製完這項在這裡就算做完了，直接丟垃圾桶
+      if (data && data.exported) {
+        showStatus('已複製到對應 Google Tasks 清單，並丟進垃圾桶');
+        apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
+          .then(() => {
+            reindexRowsAfterDelete('multi', item.row);
+            removeItemFromLists(item);
+          })
+          .catch(err => showStatus('丟進垃圾桶失敗，請到 index.html 手動處理：' + err.message, true));
+      } else if (data && data.copied) {
+        showStatus('標籤已更新並複製到 Google Tasks');
+      } else {
+        showStatus('標籤已更新');
+      }
+    })
     .catch(err => {
       item.tag = oldTag;
       populateTagSelect(oldTag);
@@ -1056,7 +1241,10 @@ function speakOnePass(text) {
   });
 }
 
+// 跟 index.html 一致：「純朗讀模式」關掉時，連禱會邊唸邊標記完成（不是只翻頁）。
+// 只有這項的來源支援「完成」才會真的標記完成（habit 沒有完成概念，一律當純朗讀跳過）。
 async function runAutoPlay() {
+  const isPureMode = el.pureReadToggle.checked; // 記錄本次開始時的模式，中途切換不影響這次執行
   const totalAtStart = viewItems.length;
   let loopCount = 0;
 
@@ -1065,7 +1253,7 @@ async function runAutoPlay() {
       if (viewItems.length === 0) {
         autoPlayActive = false;
         el.speakBtn.textContent = '🔊 開始朗讀';
-        showStatus('目前沒有待代禱的項目 🎉');
+        showStatus('今天的禱告事項都完成了 🙏');
         return;
       }
 
@@ -1076,14 +1264,31 @@ async function runAutoPlay() {
       }
       if (!autoPlayActive) return;
 
-      loopCount++;
-      if (loopCount >= totalAtStart) {
+      const item = viewItems[cachePos];
+      const config = SOURCE_CONFIG[item.source];
+
+      if (isPureMode || !config.complete) {
+        // 純朗讀模式，或這個來源沒有「完成」概念（習慣禱告）：不打API、不移除，單純往下一項移動
+        loopCount++;
+        if (loopCount >= totalAtStart) {
+          autoPlayActive = false;
+          el.speakBtn.textContent = '🔊 開始朗讀';
+          showStatus('本輪已唸完一遍（未標記完成）🙏');
+          return;
+        }
+        renderFromView(cachePos + 1);
+        continue;
+      }
+
+      config.complete(item).catch(err => showStatus('同步失敗：' + err.message, true));
+      removeItemFromLists(item);
+
+      if (viewItems.length === 0) {
         autoPlayActive = false;
         el.speakBtn.textContent = '🔊 開始朗讀';
-        showStatus('本輪已唸完一遍 🙏');
+        showStatus('今天的禱告事項都完成了 🙏');
         return;
       }
-      renderFromView(cachePos + 1);
     }
   } finally {
     releaseWakeLock();
@@ -1136,6 +1341,237 @@ function stopSpeakingIfNeeded() {
     releaseWakeLock();
   }
 }
+
+// 一鍵輸出：把目前篩選出來的清單（可能是單一來源或全部混合）的標題組成純文字複製到剪貼簿
+el.exportAllBtn.addEventListener('click', async () => {
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  const lines = viewItems.map((item, i) => (i + 1) + '. ' + item.text);
+  const text = lines.join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    showStatus('已複製共 ' + viewItems.length + ' 項到剪貼簿');
+  } catch (err) {
+    showStatus('複製失敗：' + err.message, true);
+  }
+});
+
+// ===== 垃圾桶／關鍵字搜尋＋合併：兩個都只對「多方禱告」主表有效（其他來源後端沒有這兩組 action）=====
+function formatTrashTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function renderTrashList(items) {
+  el.trashList.innerHTML = '';
+  if (!items || items.length === 0) {
+    el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    return;
+  }
+  items.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+
+    const main = document.createElement('div');
+    main.className = 'trash-item-main';
+    const text = document.createElement('div');
+    text.className = 'trash-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'trash-item-meta';
+    meta.textContent = formatTrashTime(item.deletedAt) + (item.cycle ? '・' + item.cycle : '');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'trash-item-actions';
+
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'trash-restore-btn';
+    restoreBtn.textContent = '↩️ 還原';
+    restoreBtn.addEventListener('click', () => restoreTrashItem(item.trashRow, row));
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'trash-delete-btn';
+    delBtn.textContent = '永久刪除';
+    delBtn.addEventListener('click', () => permanentlyDeleteTrashItem(item.trashRow, row));
+
+    actions.appendChild(restoreBtn);
+    actions.appendChild(delBtn);
+
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.trashList.appendChild(row);
+  });
+}
+
+async function loadTrashList() {
+  el.trashList.innerHTML = '<div class="trash-empty-msg">載入中...</div>';
+  try {
+    const data = await apiCall(MULTI_API_URL, { action: 'getTrashList' });
+    renderTrashList(data.items || []);
+  } catch (err) {
+    el.trashList.innerHTML = '<div class="trash-empty-msg">載入失敗：' + err.message + '</div>';
+  }
+}
+
+function openTrashPanel() {
+  el.trashOverlay.classList.add('show');
+  loadTrashList();
+}
+function closeTrashPanel() {
+  el.trashOverlay.classList.remove('show');
+}
+el.openTrashBtn.addEventListener('click', openTrashPanel);
+el.closeTrashBtn.addEventListener('click', closeTrashPanel);
+el.trashOverlay.addEventListener('click', (e) => {
+  if (e.target === el.trashOverlay) closeTrashPanel();
+});
+
+async function restoreTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall(MULTI_API_URL, { action: 'restoreFromTrash', trashRow: trashRow });
+    rowEl.remove();
+    showStatus('已還原，重新整理頁面後會出現在清單中');
+    if (!el.trashList.querySelector('.trash-item')) {
+      el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
+    showStatus('還原失敗：' + err.message, true);
+  }
+}
+
+async function permanentlyDeleteTrashItem(trashRow, rowEl) {
+  rowEl.style.opacity = '0.4';
+  try {
+    await apiCall(MULTI_API_URL, { action: 'deleteTrashItem', trashRow: trashRow });
+    rowEl.remove();
+    if (!el.trashList.querySelector('.trash-item')) {
+      el.trashList.innerHTML = '<div class="trash-empty-msg">垃圾桶是空的</div>';
+    }
+  } catch (err) {
+    rowEl.style.opacity = '1';
+    showStatus('刪除失敗：' + err.message, true);
+  }
+}
+
+armConfirmButton(el.emptyTrashBtn, '再按一次確認清空（不可復原）', async () => {
+  try {
+    await apiCall(MULTI_API_URL, { action: 'emptyTrash' });
+    renderTrashList([]);
+    showStatus('垃圾桶已清空');
+  } catch (err) {
+    showStatus('清空失敗：' + err.message, true);
+  }
+});
+
+// ===== 關鍵字搜尋 + 合併：搜尋不限「今天到期」，多方禱告全部項目都找 =====
+let searchResultsCache = [];
+
+function renderSearchResults(items) {
+  searchResultsCache = items || [];
+  el.searchResultList.innerHTML = '';
+
+  if (searchResultsCache.length === 0) {
+    el.searchResultList.innerHTML = '<div class="trash-empty-msg">沒有符合的項目</div>';
+    return;
+  }
+
+  searchResultsCache.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'search-item';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.row = String(item.row);
+
+    const main = document.createElement('div');
+    main.className = 'search-item-main';
+    const text = document.createElement('div');
+    text.className = 'search-item-text';
+    text.textContent = item.text || '（空白）';
+    const meta = document.createElement('div');
+    meta.className = 'search-item-meta';
+    meta.textContent = [item.cycle, item.tag, item.dateText].filter(Boolean).join('・');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    row.appendChild(checkbox);
+    row.appendChild(main);
+    el.searchResultList.appendChild(row);
+  });
+}
+
+async function performSearch() {
+  const keyword = el.searchKeywordInput.value.trim();
+  if (!keyword) { showStatus('請輸入關鍵字'); return; }
+
+  el.searchResultList.innerHTML = '<div class="trash-empty-msg">搜尋中...</div>';
+  try {
+    const data = await apiCall(MULTI_API_URL, { action: 'searchItems', keyword: keyword });
+    renderSearchResults(data.items || []);
+  } catch (err) {
+    el.searchResultList.innerHTML = '<div class="trash-empty-msg">搜尋失敗：' + err.message + '</div>';
+  }
+}
+
+function openSearchPanel() {
+  el.searchOverlay.classList.add('show');
+  el.searchResultList.innerHTML = '';
+  searchResultsCache = [];
+}
+function closeSearchPanel() {
+  el.searchOverlay.classList.remove('show');
+}
+el.openSearchBtn.addEventListener('click', openSearchPanel);
+el.closeSearchBtn.addEventListener('click', closeSearchPanel);
+el.searchOverlay.addEventListener('click', (e) => {
+  if (e.target === el.searchOverlay) closeSearchPanel();
+});
+el.searchKeywordBtn.addEventListener('click', performSearch);
+el.searchKeywordInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') performSearch();
+});
+
+// 把勾選的多個項目合併成一項：文字依列號由小到大用換行接起來，寫回「週期最短」的那一項，
+// 其餘項目丟進垃圾桶；合併完重新整理全部來源，因為多方禱告的列號/內容可能已經變動
+armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
+  const checkedRows = Array.from(el.searchResultList.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(cb => parseInt(cb.dataset.row, 10));
+  if (checkedRows.length < 2) { showStatus('請至少勾選兩項才能合併'); return; }
+
+  const selected = searchResultsCache
+    .filter(item => checkedRows.includes(item.row))
+    .sort((a, b) => a.row - b.row);
+
+  const cycleIndex = (item) => {
+    const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+    return idx === -1 ? Infinity : idx;
+  };
+  const target = selected.slice().sort((a, b) => cycleIndex(a) - cycleIndex(b) || a.row - b.row)[0];
+  const others = selected.filter(item => item.row !== target.row);
+  const mergedText = selected.map(item => item.text).join('\n');
+
+  setLoading(true);
+  try {
+    await apiCall(MULTI_API_URL, { action: 'updateTextByRow', row: target.row, value: mergedText });
+    const toTrash = others.slice().sort((a, b) => b.row - a.row);
+    for (const item of toTrash) {
+      await apiCall(MULTI_API_URL, { action: 'deleteByRow', row: item.row });
+    }
+    showStatus('已合併 ' + selected.length + ' 項為一項');
+    await performSearch();
+    await loadAll(); // 多方禱告到期清單的列號/內容可能已變動，重新整理全部來源
+  } catch (err) {
+    showStatus('合併失敗：' + err.message, true);
+  } finally {
+    setLoading(false);
+  }
+});
 
 loadAll();
 </script>
