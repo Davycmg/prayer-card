@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>綜合禱告卡片</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🙏</text></svg>">
+<style>
+  :root {
+    --main-primary: #3d4a5c;
+    --main-primary-light: #dde1e6;
+    --main-primary-light-text: #2c3644;
+    --text-main: #2a2f36;
+    --text-sub: #6b7280;
+    --clay: #8a6a4e;
+    --clay-light: #e6d9c8;
+    --clay-light-text: #4a3728;
+    --teal: #3d7a68;
+    --border: #d9dce0;
+    --gray-bg: #f0f1f2;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .header { width: 100%; max-width: 480px; text-align: center; padding: 12px 0; }
+  .header h1 { font-size: 20px; color: var(--main-primary); margin: 0; }
+  .progress { font-size: 14px; color: var(--text-sub); margin-top: 4px; }
+  .progress-breakdown { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px 20px;
+    margin-top: 12px;
+  }
+  .source-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+  }
+  .source-badge.habit { background: #5b7fa6; }
+  .source-badge.network { background: #3d9e8f; }
+  .source-badge.multi { background: var(--clay); }
+  .source-badge.task { background: #a65b8a; }
+  .prayer-text {
+    font-size: 22px;
+    line-height: 1.6;
+    min-height: 120px;
+    white-space: pre-wrap;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    resize: none;
+    color: var(--text-main);
+    margin-top: 12px;
+  }
+  .note { margin-top: 14px; font-size: 13px; color: var(--text-sub); white-space: pre-wrap; }
+  .controls { width: 100%; max-width: 480px; display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--main-primary);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn.prev { background: var(--main-primary-light); color: var(--main-primary-light-text); }
+  .btn.random { background: var(--clay); }
+  .btn.speak { background: var(--clay); }
+  .btn.complete { background: var(--teal); }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+  .repeat-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    justify-content: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
+  }
+  .repeat-row .repeat-options { display: flex; gap: 6px; }
+  .repeat-row button {
+    padding: 6px 12px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 14px;
+  }
+  .repeat-row button.active { background: var(--main-primary); color: white; }
+  .jump-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    gap: 8px; margin-top: 14px; justify-content: center;
+  }
+  .jump-row input {
+    width: 70px; padding: 8px; text-align: center; border-radius: 8px;
+    border: 1px solid var(--border); font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 14px;
+  }
+  .filter-row {
+    width: 100%; max-width: 480px; display: flex; flex-wrap: wrap;
+    gap: 6px; margin-top: 14px; justify-content: center;
+  }
+  .filter-row button {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 12px;
+  }
+  .filter-row button.active { background: var(--main-primary); color: white; }
+  .status { margin-top: 10px; font-size: 12px; color: var(--text-sub); height: 16px; text-align: center; }
+  .loading-overlay {
+    position: fixed; inset: 0; background: rgba(255,255,255,0.7);
+    display: none; align-items: center; justify-content: center;
+    font-size: 15px; color: var(--main-primary);
+  }
+  .loading-overlay.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🙏 綜合禱告卡片</h1>
+  <div class="progress" id="progress">載入中...</div>
+  <div class="progress-breakdown" id="progressBreakdown"></div>
+</div>
+
+<div class="filter-row" id="filterRow">
+  <button type="button" data-source="all" class="active">全部</button>
+  <button type="button" data-source="habit">🔁 習慣</button>
+  <button type="button" data-source="network">🌐 網絡</button>
+  <button type="button" data-source="multi">🙏 多方</button>
+  <button type="button" data-source="task">📋 待辦</button>
+</div>
+
+<div class="card">
+  <span class="source-badge" id="sourceBadge"></span>
+  <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目" readonly></textarea>
+  <div class="note" id="noteText"></div>
+</div>
+
+<div class="controls">
+  <button class="btn complete" id="completeBtn">✅ 標記完成</button>
+</div>
+
+<div class="controls">
+  <button class="btn prev" id="prevBtn">◀ 上一項</button>
+  <button class="btn" id="nextBtn">下一項 ▶</button>
+</div>
+
+<div class="controls">
+  <button class="btn random" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn speak" id="speakBtn">🔊 開始朗讀</button>
+</div>
+
+<div class="repeat-row">
+  <span>每項朗讀次數：</span>
+  <div class="repeat-options" id="repeatOptions">
+    <button type="button" data-count="1">1 次</button>
+    <button type="button" data-count="2">2 次</button>
+    <button type="button" data-count="3">3 次</button>
+  </div>
+</div>
+
+<div class="jump-row">
+  <input type="number" id="jumpInput" placeholder="第幾項" min="1">
+  <button id="jumpBtn">跳到</button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<script>
+// 主要 prayer-card 專案（多方禱告 / 為習慣禱告 / 今日待辦禱告 共用同一個部署網址）
+const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
+// dg-network 是完全獨立的另一個 Apps Script 專案（為網絡禱告）
+const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+
+const SOURCE_META = {
+  habit:   { label: '🔁 為習慣禱告', badgeClass: 'habit' },
+  network: { label: '🌐 為網絡禱告', badgeClass: 'network' },
+  multi:   { label: '🙏 多方禱告',   badgeClass: 'multi' },
+  task:    { label: '📋 今日待辦禱告', badgeClass: 'task' }
+};
+
+// 全部項目（四個來源合併後的清單）+ 目前依篩選顯示的子集
+let allItems = [];      // [{source, text, note, row, id, recurringEventId}, ...]
+let viewItems = [];
+let cachePos = 0;
+let currentFilter = 'all';
+
+const el = {
+  progress: document.getElementById('progress'),
+  progressBreakdown: document.getElementById('progressBreakdown'),
+  filterRow: document.getElementById('filterRow'),
+  sourceBadge: document.getElementById('sourceBadge'),
+  itemText: document.getElementById('itemText'),
+  noteText: document.getElementById('noteText'),
+  completeBtn: document.getElementById('completeBtn'),
+  prevBtn: document.getElementById('prevBtn'),
+  nextBtn: document.getElementById('nextBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  speakBtn: document.getElementById('speakBtn'),
+  repeatOptions: document.getElementById('repeatOptions'),
+  jumpInput: document.getElementById('jumpInput'),
+  jumpBtn: document.getElementById('jumpBtn'),
+  status: document.getElementById('status'),
+  loadingOverlay: document.getElementById('loadingOverlay')
+};
+
+function setLoading(show) {
+  el.loadingOverlay.classList.toggle('show', show);
+}
+
+function showStatus(msg) {
+  el.status.textContent = msg;
+  setTimeout(() => { el.status.textContent = ''; }, 1800);
+}
+
+async function apiCall(baseUrl, params) {
+  params._t = Date.now();
+  const url = baseUrl + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// 每個來源各自打各自的 API，一份失敗不影響其他三份（用 allSettled）
+async function loadAll() {
+  setLoading(true);
+  el.progress.textContent = '載入中...';
+  const [habit, network, multi, task] = await Promise.allSettled([
+    apiCall(MULTI_API_URL, { action: 'getTodayCalendarEvents' }),
+    apiCall(NETWORK_API_URL, { action: 'getAllItems' }),
+    apiCall(MULTI_API_URL, { action: 'getInitData' }),
+    apiCall(MULTI_API_URL, { action: 'getTodayTasksList' })
+  ]);
+
+  const failedSources = [];
+  const items = [];
+
+  function pushItems(result, source, label) {
+    if (result.status === 'fulfilled') {
+      (result.value.items || []).forEach(it => items.push(Object.assign({ source }, it)));
+    } else {
+      failedSources.push(label);
+    }
+  }
+  pushItems(habit, 'habit', '習慣');
+  pushItems(network, 'network', '網絡');
+  pushItems(multi, 'multi', '多方');
+  pushItems(task, 'task', '待辦');
+
+  allItems = items;
+  if (failedSources.length) {
+    showStatus('部分來源載入失敗：' + failedSources.join('、'));
+  }
+  applyFilter(currentFilter);
+  setLoading(false);
+}
+
+function applyFilter(filter) {
+  currentFilter = filter;
+  viewItems = filter === 'all' ? allItems : allItems.filter(it => it.source === filter);
+  cachePos = 0;
+  renderFromView(0);
+  updateBreakdown();
+}
+
+function updateBreakdown() {
+  const counts = { habit: 0, network: 0, multi: 0, task: 0 };
+  allItems.forEach(it => { counts[it.source]++; });
+  el.progressBreakdown.textContent =
+    `🔁${counts.habit} 🌐${counts.network} 🙏${counts.multi} 📋${counts.task}`;
+}
+
+function renderFromView(pos) {
+  if (viewItems.length === 0) {
+    renderEmptyState();
+    return;
+  }
+  cachePos = ((pos % viewItems.length) + viewItems.length) % viewItems.length;
+  const item = viewItems[cachePos];
+  const meta = SOURCE_META[item.source];
+
+  el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
+  el.sourceBadge.textContent = meta.label;
+  el.sourceBadge.className = 'source-badge ' + meta.badgeClass;
+  el.itemText.value = item.text || '';
+  el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+  // 「為習慣禱告」是每天重複的行程，沒有「完成」的概念，隱藏完成按鈕
+  el.completeBtn.style.display = item.source === 'habit' ? 'none' : 'block';
+}
+
+function renderEmptyState() {
+  el.progress.textContent = '第 0 項 / 共 0 項';
+  el.sourceBadge.textContent = '';
+  el.sourceBadge.className = 'source-badge';
+  el.itemText.value = '🎉 目前沒有待代禱的項目';
+  el.noteText.textContent = '';
+  el.completeBtn.style.display = 'none';
+}
+
+el.filterRow.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-source]');
+  if (!btn) return;
+  stopSpeakingIfNeeded();
+  el.filterRow.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  applyFilter(btn.dataset.source);
+});
+
+// 各來源「標記完成」對應的 API 不同，統一在這裡分派
+async function completeCurrentItem(item) {
+  if (item.source === 'multi') {
+    await apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row });
+  } else if (item.source === 'network') {
+    await apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row });
+  } else if (item.source === 'task') {
+    await apiCall(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id });
+  } else {
+    throw new Error('此來源不支援標記完成');
+  }
+}
+
+el.completeBtn.addEventListener('click', async () => {
+  if (viewItems.length === 0) return;
+  const item = viewItems[cachePos];
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await completeCurrentItem(item);
+    // 從全部清單與目前篩選清單中一併移除，維持兩邊同步
+    allItems = allItems.filter(it => it !== item);
+    viewItems.splice(cachePos, 1);
+    if (viewItems.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromView(cachePos);
+    }
+    updateBreakdown();
+    showStatus('已標記完成');
+  } catch (err) {
+    showStatus('操作失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.prevBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromView(cachePos - 1);
+});
+
+el.nextBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromView(cachePos + 1);
+});
+
+el.randomBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  stopSpeakingIfNeeded();
+  renderFromView(Math.floor(Math.random() * viewItems.length));
+});
+
+el.jumpBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  stopSpeakingIfNeeded();
+  renderFromView(val - 1);
+  el.jumpInput.value = '';
+});
+
+// ===== 朗讀：純本地操作，唸完一輪自動停止，不會呼叫任何寫入API =====
+let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
+let autoPlayActive = false;
+let zhVoice = null;
+
+function updateRepeatButtons() {
+  el.repeatOptions.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === repeatCount);
+  });
+}
+el.repeatOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-count]');
+  if (!btn) return;
+  repeatCount = parseInt(btn.dataset.count, 10);
+  localStorage.setItem('prayerRepeatCount', String(repeatCount));
+  updateRepeatButtons();
+});
+updateRepeatButtons();
+
+function loadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  zhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakOnePass(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text || !text.trim()) { resolve(); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-TW';
+    if (zhVoice) utter.voice = zhVoice;
+    utter.rate = 0.95;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function runAutoPlay() {
+  const totalAtStart = viewItems.length;
+  let loopCount = 0;
+
+  try {
+    while (autoPlayActive) {
+      if (viewItems.length === 0) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('目前沒有待代禱的項目 🎉');
+        return;
+      }
+
+      for (let i = 0; i < repeatCount; i++) {
+        if (!autoPlayActive) return;
+        el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
+        await speakOnePass(el.itemText.value);
+      }
+      if (!autoPlayActive) return;
+
+      loopCount++;
+      if (loopCount >= totalAtStart) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('本輪已唸完一遍 🙏');
+        return;
+      }
+      renderFromView(cachePos + 1);
+    }
+  } finally {
+    releaseWakeLock();
+  }
+}
+
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (err) { /* 裝置不支援，忽略 */ }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (err) { /* 忽略 */ }
+    wakeLock = null;
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && autoPlayActive && !wakeLock) {
+    requestWakeLock();
+  }
+});
+
+el.speakBtn.addEventListener('click', () => {
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
+    return;
+  }
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  autoPlayActive = true;
+  requestWakeLock();
+  runAutoPlay();
+});
+
+function stopSpeakingIfNeeded() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
+  }
+}
+
+loadAll();
+</script>
+
+</body>
+</html>
