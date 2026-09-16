@@ -326,11 +326,11 @@ const SOURCE_CONFIG = {
     label: '🔁 為習慣禱告', badgeClass: 'habit',
     text: {
       editable: true,
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
     },
     cycle: {
       show: true, options: CALENDAR_CYCLE_OPTIONS,
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
     },
     tag: { show: false },
     complete: null, // 每天重複的行程沒有「完成」概念
@@ -345,7 +345,7 @@ const SOURCE_CONFIG = {
     text: { editable: false }, // 後端沒有「改姓名」的 action，姓名唯讀
     cycle: {
       show: true, options: NETWORK_CYCLE_OPTIONS,
-      save: (item, value) => apiCall(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value })
     },
     tag: { show: false },
     complete: (item) => apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
@@ -359,15 +359,15 @@ const SOURCE_CONFIG = {
     label: '🙏 多方禱告', badgeClass: 'multi',
     text: {
       editable: true,
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTextByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: item.row, value })
     },
     cycle: {
       show: true, options: Object.values(CYCLE_MAP),
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: item.row, value })
     },
     tag: {
       show: true,
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
     },
     complete: (item) => apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
@@ -380,7 +380,7 @@ const SOURCE_CONFIG = {
     label: '📋 今日待辦禱告', badgeClass: 'task',
     text: {
       editable: true,
-      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTaskTitle', taskId: item.id, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTaskTitle', taskId: item.id, value })
     },
     cycle: { show: false },
     tag: { show: false },
@@ -438,9 +438,15 @@ const el = {
 
 function setLoading(show) { el.loadingOverlay.classList.toggle('show', show); }
 
-function showStatus(msg) {
+let statusClearTimer = null;
+// persistent=true 用在「同步失敗」這種使用者一定要看到、不能一閃而過的訊息，不會自動消失
+function showStatus(msg, persistent) {
+  clearTimeout(statusClearTimer);
   el.status.textContent = msg;
-  setTimeout(() => { el.status.textContent = ''; }, 1800);
+  el.status.style.color = persistent ? 'var(--text-danger)' : '';
+  if (!persistent) {
+    statusClearTimer = setTimeout(() => { el.status.textContent = ''; }, 1800);
+  }
 }
 
 async function apiCall(baseUrl, params) {
@@ -672,7 +678,7 @@ function flushSave(item, config, value) {
   item.text = value;
   config.text.save(item, value)
     .then(() => showStatus('已同步'))
-    .catch(err => showStatus('同步失敗：' + err.message));
+    .catch(err => showStatus('同步失敗：' + err.message, true));
 }
 
 function flushPendingSaveIfAny() {
@@ -690,20 +696,34 @@ el.cycleSelect.addEventListener('change', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.cycle.show || !el.cycleSelect.value) return;
-  item.cycle = el.cycleSelect.value;
-  config.cycle.save(item, item.cycle)
+  const oldCycle = item.cycle;
+  const newCycle = el.cycleSelect.value;
+  item.cycle = newCycle;
+  showStatus('週期同步中...');
+  config.cycle.save(item, newCycle)
     .then(() => showStatus('週期已更新'))
-    .catch(err => showStatus('更新失敗：' + err.message));
+    .catch(err => {
+      // 同步失敗就把畫面上的週期改回原本的值，避免「選單顯示新週期，但試算表其實沒改到」的錯覺
+      item.cycle = oldCycle;
+      el.cycleSelect.value = oldCycle || '';
+      showStatus('週期同步失敗，請重試一次：' + err.message, true);
+    });
 });
 
 function applyTagChange(value) {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.tag.show || !value) return;
+  const oldTag = item.tag;
   item.tag = value;
+  showStatus('標籤同步中...');
   config.tag.save(item, value)
     .then(() => showStatus('標籤已更新'))
-    .catch(err => showStatus('更新失敗：' + err.message));
+    .catch(err => {
+      item.tag = oldTag;
+      populateTagSelect(oldTag);
+      showStatus('標籤同步失敗，請重試一次：' + err.message, true);
+    });
 }
 el.tagSelect.addEventListener('change', () => {
   if (!el.tagSelect.value) return;
@@ -728,7 +748,7 @@ el.addTagBtn.addEventListener('click', async () => {
   el.weekdaySelect.value = '';
   config.tag.save(item, newTag)
     .then(() => showStatus('標籤已套用'))
-    .catch(err => showStatus('套用失敗：' + err.message));
+    .catch(err => showStatus('套用失敗：' + err.message, true));
 
   if (el.saveTagCheckbox.checked) {
     try {
@@ -908,7 +928,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
   apiCall(MULTI_API_URL, { action: action, row: item.row })
     .then(() => showStatus(doneMsg))
     .catch(err => {
-      showStatus('同步失敗，請重新再按一次：' + err.message);
+      showStatus('同步失敗，請重新再按一次：' + err.message, true);
       if (!staysDue) {
         allItems.push(item);
         applyFilter(currentFilter);
@@ -941,9 +961,9 @@ function shiftCycleAndComplete(direction) {
   stopSpeakingIfNeeded();
   removeItemFromLists(item);
 
-  apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+  apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
     .then(() => apiCall(MULTI_API_URL, { action: 'completeByRow', row: row }))
-    .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
+    .catch(err => showStatus('同步失敗，請檢查網路：' + err.message, true));
 
   showStatus('週期已調整為「' + newCycle + '」，已完成');
 }
