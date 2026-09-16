@@ -17,6 +17,9 @@
     --clay-light-text: #4a3728;
     --teal: #3d7a68;
     --border: #d9dce0;
+    --border-strong: #c2c6cc;
+    --text-danger: #b0413e;
+    --danger-light: #f5e0df;
     --gray-bg: #f0f1f2;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -35,6 +38,15 @@
   .header h1 { font-size: 20px; color: var(--main-primary); margin: 0; }
   .progress { font-size: 14px; color: var(--text-sub); margin-top: 4px; }
   .progress-breakdown { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .filter-row {
+    width: 100%; max-width: 480px; display: flex; flex-wrap: wrap;
+    gap: 6px; margin-top: 10px; justify-content: center;
+  }
+  .filter-row button {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 12px;
+  }
+  .filter-row button.active { background: var(--main-primary); color: white; }
   .card {
     width: 100%;
     max-width: 480px;
@@ -70,7 +82,33 @@
     color: var(--text-main);
     margin-top: 12px;
   }
+  .prayer-text:focus { background: var(--main-primary-light); border-radius: 8px; }
+  .prayer-text[readonly] { color: var(--text-sub); }
+  .readonly-hint { font-size: 11px; color: var(--text-sub); margin-top: -6px; }
+  .meta-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .meta-field { flex: 1; min-width: 130px; }
+  .meta-field label { display: block; font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .meta-field select {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+    font-size: 15px; background: white;
+  }
+  .meta-field.cycle select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
+  .meta-field.tag select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
+  .meta-field.weekday select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .note { margin-top: 14px; font-size: 13px; color: var(--text-sub); white-space: pre-wrap; }
+  .add-tag-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+  }
+  .add-tag-row input[type="text"] {
+    flex: 1; min-width: 100px; padding: 8px 10px; border-radius: 8px;
+    border: 1px solid var(--border); font-size: 14px;
+  }
+  .add-tag-checkbox { display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--text-sub); white-space: nowrap; }
+  .add-tag-checkbox input { width: 16px; height: 16px; }
+  .add-tag-row button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 13px; white-space: nowrap;
+  }
   .controls { width: 100%; max-width: 480px; display: flex; gap: 10px; margin-top: 16px; }
   .btn {
     flex: 1;
@@ -86,11 +124,20 @@
     user-select: none;
   }
   .btn:active { opacity: 0.7; }
+  .btn:disabled { opacity: 0.35; cursor: default; }
   .btn.prev { background: var(--main-primary-light); color: var(--main-primary-light-text); }
+  .btn.next { background: var(--main-primary); }
+  .btn.complete { background: var(--teal); }
   .btn.random { background: var(--clay); }
   .btn.speak { background: var(--clay); }
-  .btn.complete { background: var(--teal); }
-  .btn:disabled { opacity: 0.4; cursor: default; }
+  .controls.triple { gap: 6px; }
+  .controls.triple .btn { font-size: 14px; padding: 14px 2px; }
+  .delete-row { width: 100%; max-width: 480px; display: flex; justify-content: center; margin-top: 10px; }
+  .delete-row button {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-danger); font-size: 13px; opacity: 0.6;
+  }
+  .delete-row button:active { opacity: 1; }
   .repeat-row {
     width: 100%; max-width: 480px; display: flex; align-items: center;
     justify-content: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
@@ -113,15 +160,6 @@
     padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary);
     background: white; color: var(--main-primary); font-size: 14px;
   }
-  .filter-row {
-    width: 100%; max-width: 480px; display: flex; flex-wrap: wrap;
-    gap: 6px; margin-top: 14px; justify-content: center;
-  }
-  .filter-row button {
-    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--main-primary);
-    background: white; color: var(--main-primary); font-size: 12px;
-  }
-  .filter-row button.active { background: var(--main-primary); color: white; }
   .status { margin-top: 10px; font-size: 12px; color: var(--text-sub); height: 16px; text-align: center; }
   .loading-overlay {
     position: fixed; inset: 0; background: rgba(255,255,255,0.7);
@@ -149,17 +187,47 @@
 
 <div class="card">
   <span class="source-badge" id="sourceBadge"></span>
-  <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目" readonly></textarea>
+  <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目"></textarea>
+  <div class="readonly-hint" id="readonlyHint" style="display:none;">此來源的名字要到「為網絡禱告」頁面才能改，這裡唯讀</div>
+
+  <div class="meta-row" id="cycleRow" style="display:none;">
+    <div class="meta-field cycle">
+      <label>週期</label>
+      <select id="cycleSelect"></select>
+    </div>
+  </div>
+
+  <div class="meta-row" id="tagRow" style="display:none;">
+    <div class="meta-field tag">
+      <label>標籤</label>
+      <select id="tagSelect"></select>
+    </div>
+    <div class="meta-field weekday">
+      <label>星期標籤</label>
+      <select id="weekdaySelect"></select>
+    </div>
+  </div>
+
+  <div class="add-tag-row" id="addTagRow" style="display:none;">
+    <input type="text" id="newTagInput" placeholder="新增標籤...">
+    <label class="add-tag-checkbox">
+      <input type="checkbox" id="saveTagCheckbox" checked>
+      <span>加入清單</span>
+    </label>
+    <button id="addTagBtn">套用</button>
+  </div>
+
   <div class="note" id="noteText"></div>
 </div>
 
-<div class="controls">
-  <button class="btn complete" id="completeBtn">✅ 標記完成</button>
+<div class="controls triple">
+  <button class="btn prev" id="prevBtn">◀ 上一項</button>
+  <button class="btn next" id="nextBtn">下一項 ▶</button>
+  <button class="btn complete" id="completeBtn">✅ 完成</button>
 </div>
 
-<div class="controls">
-  <button class="btn prev" id="prevBtn">◀ 上一項</button>
-  <button class="btn" id="nextBtn">下一項 ▶</button>
+<div class="delete-row" id="deleteRow">
+  <button id="deleteBtn">🗑 刪除此項</button>
 </div>
 
 <div class="controls">
@@ -191,18 +259,106 @@ const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu
 // dg-network 是完全獨立的另一個 Apps Script 專案（為網絡禱告）
 const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
 
-const SOURCE_META = {
-  habit:   { label: '🔁 為習慣禱告', badgeClass: 'habit' },
-  network: { label: '🌐 為網絡禱告', badgeClass: 'network' },
-  multi:   { label: '🙏 多方禱告',   badgeClass: 'multi' },
-  task:    { label: '📋 今日待辦禱告', badgeClass: 'task' }
+const CYCLE_MAP = {
+  'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
+  'W': 'W每週', 'DW': 'DW每兩週',
+  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
+};
+const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
+const WEEKDAY_MAP = {
+  '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
+  '週五': '週五', '週六': '週六', '週日': '週日'
+};
+// 跟 calendar.html 一致：習慣禱告（日曆行程）的週期選項
+const CALENDAR_CYCLE_OPTIONS = [
+  '不重複',
+  'D每天', '2每兩天', '3每三天', '4每四天', '5每五天',
+  'W每週', 'W每週（平日）', 'W每週（週末）',
+  'W每週（一）', 'W每週（二）', 'W每週（三）', 'W每週（四）', 'W每週（五）', 'W每週（六）', 'W每週（日）',
+  'DW每兩週',
+  'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'
+];
+// 跟 dg-network/CardIndex.html 一致：為網絡禱告的週期選項
+const NETWORK_CYCLE_OPTIONS = ['每天','每兩天','每三天','每四天','每五天','每週','每兩週','每月','每兩個月','每季','每半年','每年'];
+
+// ===== 各來源的能力表：文字能不能編、週期/標籤要不要顯示、完成/刪除打哪個 API =====
+// 每個來源的後端能力不一樣（見 CLAUDE.md 的討論），不能整套 index.html 編輯功能照搬給四個來源，
+// 所以每個功能都要先查這裡，不支援的來源就直接隱藏/停用，不會呼叫到不存在的 action。
+const SOURCE_CONFIG = {
+  habit: {
+    label: '🔁 為習慣禱告', badgeClass: 'habit',
+    text: {
+      editable: true,
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+    },
+    cycle: {
+      show: true, options: CALENDAR_CYCLE_OPTIONS,
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+    },
+    tag: { show: false },
+    complete: null, // 每天重複的行程沒有「完成」概念
+    delete: {
+      show: true,
+      confirmText: '⚠️ 這會直接刪除 Google 日曆裡的這個行程，無法復原，確定要刪除嗎？',
+      run: (item) => apiCall(MULTI_API_URL, { action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' })
+    }
+  },
+  network: {
+    label: '🌐 為網絡禱告', badgeClass: 'network',
+    text: { editable: false }, // 後端沒有「改姓名」的 action，姓名唯讀
+    cycle: {
+      show: true, options: NETWORK_CYCLE_OPTIONS,
+      save: (item, value) => apiCall(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+    },
+    tag: { show: false },
+    complete: (item) => apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
+    delete: {
+      show: true,
+      confirmText: '⚠️ 這會直接從試算表刪掉這一列，無法復原，確定要刪除嗎？',
+      run: (item) => apiCall(NETWORK_API_URL, { action: 'deleteByRow', row: item.row })
+    }
+  },
+  multi: {
+    label: '🙏 多方禱告', badgeClass: 'multi',
+    text: {
+      editable: true,
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTextByRow', row: item.row, value })
+    },
+    cycle: {
+      show: true, options: Object.values(CYCLE_MAP),
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+    },
+    tag: {
+      show: true,
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
+    },
+    complete: (item) => apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
+    delete: {
+      show: true,
+      confirmText: '刪除後會先進垃圾桶（可到 index.html 救回），確定要刪除嗎？',
+      run: (item) => apiCall(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
+    }
+  },
+  task: {
+    label: '📋 今日待辦禱告', badgeClass: 'task',
+    text: {
+      editable: true,
+      save: (item, value) => apiCall(MULTI_API_URL, { action: 'updateTaskTitle', taskId: item.id, value })
+    },
+    cycle: { show: false },
+    tag: { show: false },
+    complete: (item) => apiCall(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id }),
+    delete: { show: false } // Google Tasks 沒有刪除，只有標記完成
+  }
 };
 
-// 全部項目（四個來源合併後的清單）+ 目前依篩選顯示的子集
-let allItems = [];      // [{source, text, note, row, id, recurringEventId}, ...]
+// 全部項目（四個來源合併後的清單，text 已正規化：網絡禱告用 name 補上）+ 目前依篩選顯示的子集
+let allItems = [];
 let viewItems = [];
 let cachePos = 0;
 let currentFilter = 'all';
+let customTagsCache = [];
+let saveTimer = null;
 
 const el = {
   progress: document.getElementById('progress'),
@@ -210,8 +366,20 @@ const el = {
   filterRow: document.getElementById('filterRow'),
   sourceBadge: document.getElementById('sourceBadge'),
   itemText: document.getElementById('itemText'),
+  readonlyHint: document.getElementById('readonlyHint'),
+  cycleRow: document.getElementById('cycleRow'),
+  cycleSelect: document.getElementById('cycleSelect'),
+  tagRow: document.getElementById('tagRow'),
+  tagSelect: document.getElementById('tagSelect'),
+  weekdaySelect: document.getElementById('weekdaySelect'),
+  addTagRow: document.getElementById('addTagRow'),
+  newTagInput: document.getElementById('newTagInput'),
+  saveTagCheckbox: document.getElementById('saveTagCheckbox'),
+  addTagBtn: document.getElementById('addTagBtn'),
   noteText: document.getElementById('noteText'),
   completeBtn: document.getElementById('completeBtn'),
+  deleteRow: document.getElementById('deleteRow'),
+  deleteBtn: document.getElementById('deleteBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
   randomBtn: document.getElementById('randomBtn'),
@@ -223,9 +391,7 @@ const el = {
   loadingOverlay: document.getElementById('loadingOverlay')
 };
 
-function setLoading(show) {
-  el.loadingOverlay.classList.toggle('show', show);
-}
+function setLoading(show) { el.loadingOverlay.classList.toggle('show', show); }
 
 function showStatus(msg) {
   el.status.textContent = msg;
@@ -239,6 +405,15 @@ async function apiCall(baseUrl, params) {
   const data = await res.json();
   if (data.error) throw new Error(data.error);
   return data;
+}
+
+function currentItem() {
+  return viewItems.length ? viewItems[cachePos] : null;
+}
+
+function currentConfig() {
+  const item = currentItem();
+  return item ? SOURCE_CONFIG[item.source] : null;
 }
 
 // 每個來源各自打各自的 API，一份失敗不影響其他三份（用 allSettled）
@@ -255,15 +430,23 @@ async function loadAll() {
   const failedSources = [];
   const items = [];
 
-  function pushItems(result, source, label) {
+  function pushItems(result, source, label, normalize) {
     if (result.status === 'fulfilled') {
-      (result.value.items || []).forEach(it => items.push(Object.assign({ source }, it)));
+      (result.value.items || []).forEach(raw => {
+        // 跟 index.html 一致：多方禱告清單裡的「A安祺禱告／A安祺輸入」標籤項目不在這裡顯示
+        if (source === 'multi' && (raw.tag === 'A安祺禱告' || raw.tag === 'A安祺輸入')) return;
+        const item = Object.assign({ source }, raw);
+        if (normalize) normalize(item);
+        items.push(item);
+      });
+      if (source === 'multi' && result.value.custom) customTagsCache = result.value.custom;
     } else {
       failedSources.push(label);
     }
   }
   pushItems(habit, 'habit', '習慣');
-  pushItems(network, 'network', '網絡');
+  // 網絡禱告後端回傳的是 {name, cycle, note}，沒有 text 欄位，這裡補上 text = name 才能跟其他來源共用同一套卡片渲染邏輯
+  pushItems(network, 'network', '網絡', (item) => { item.text = item.name || ''; });
   pushItems(multi, 'multi', '多方');
   pushItems(task, 'task', '待辦');
 
@@ -290,6 +473,30 @@ function updateBreakdown() {
     `🔁${counts.habit} 🌐${counts.network} 🙏${counts.multi} 📋${counts.task}`;
 }
 
+function populateSelect(selectEl, values, placeholder, currentValue) {
+  selectEl.innerHTML = '<option value="">' + placeholder + '</option>';
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+  selectEl.value = currentValue || '';
+}
+
+function populateTagSelect(currentTag) {
+  el.tagSelect.innerHTML = '<option value="">選擇標籤</option>';
+  const values = Object.values(TAG_MAP).concat(customTagsCache || []);
+  values.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.tagSelect.appendChild(opt);
+  });
+  el.weekdaySelect.value = WEEKDAY_MAP[currentTag] ? currentTag : '';
+  el.tagSelect.value = WEEKDAY_MAP[currentTag] ? '' : (currentTag || '');
+}
+
 function renderFromView(pos) {
   if (viewItems.length === 0) {
     renderEmptyState();
@@ -297,15 +504,31 @@ function renderFromView(pos) {
   }
   cachePos = ((pos % viewItems.length) + viewItems.length) % viewItems.length;
   const item = viewItems[cachePos];
-  const meta = SOURCE_META[item.source];
+  const config = SOURCE_CONFIG[item.source];
 
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
-  el.sourceBadge.textContent = meta.label;
-  el.sourceBadge.className = 'source-badge ' + meta.badgeClass;
+  el.sourceBadge.textContent = config.label;
+  el.sourceBadge.className = 'source-badge ' + config.badgeClass;
+
   el.itemText.value = item.text || '';
+  el.itemText.readOnly = !config.text.editable;
+  el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
+
   el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
-  // 「為習慣禱告」是每天重複的行程，沒有「完成」的概念，隱藏完成按鈕
-  el.completeBtn.style.display = item.source === 'habit' ? 'none' : 'block';
+
+  el.cycleRow.style.display = config.cycle.show ? 'flex' : 'none';
+  if (config.cycle.show) {
+    populateSelect(el.cycleSelect, config.cycle.options, '選擇週期', item.cycle);
+  }
+
+  el.tagRow.style.display = config.tag.show ? 'flex' : 'none';
+  el.addTagRow.style.display = config.tag.show ? 'flex' : 'none';
+  if (config.tag.show) {
+    populateTagSelect(item.tag);
+  }
+
+  el.completeBtn.style.display = config.complete ? 'block' : 'none';
+  el.deleteRow.style.display = config.delete.show ? 'flex' : 'none';
 }
 
 function renderEmptyState() {
@@ -313,39 +536,119 @@ function renderEmptyState() {
   el.sourceBadge.textContent = '';
   el.sourceBadge.className = 'source-badge';
   el.itemText.value = '🎉 目前沒有待代禱的項目';
+  el.itemText.readOnly = true;
+  el.readonlyHint.style.display = 'none';
   el.noteText.textContent = '';
+  el.cycleRow.style.display = 'none';
+  el.tagRow.style.display = 'none';
+  el.addTagRow.style.display = 'none';
   el.completeBtn.style.display = 'none';
+  el.deleteRow.style.display = 'none';
 }
 
 el.filterRow.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-source]');
   if (!btn) return;
   stopSpeakingIfNeeded();
+  flushPendingSaveIfAny();
   el.filterRow.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
   applyFilter(btn.dataset.source);
 });
 
-// 各來源「標記完成」對應的 API 不同，統一在這裡分派
-async function completeCurrentItem(item) {
-  if (item.source === 'multi') {
-    await apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row });
-  } else if (item.source === 'network') {
-    await apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row });
-  } else if (item.source === 'task') {
-    await apiCall(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id });
-  } else {
-    throw new Error('此來源不支援標記完成');
+// ===== 文字編輯：打字停頓 1 秒後才背景送出，切項目前會先強制送出，避免存錯項目 =====
+el.itemText.addEventListener('input', () => {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.text.editable) return;
+  const value = el.itemText.value;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => flushSave(item, config, value), 1000);
+});
+
+function flushSave(item, config, value) {
+  item.text = value;
+  config.text.save(item, value)
+    .then(() => showStatus('已同步'))
+    .catch(err => showStatus('同步失敗：' + err.message));
+}
+
+function flushPendingSaveIfAny() {
+  if (saveTimer === null) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const item = currentItem();
+  const config = currentConfig();
+  if (item && config && config.text.editable && item.text !== el.itemText.value) {
+    flushSave(item, config, el.itemText.value);
   }
 }
 
+el.cycleSelect.addEventListener('change', () => {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.cycle.show || !el.cycleSelect.value) return;
+  item.cycle = el.cycleSelect.value;
+  config.cycle.save(item, item.cycle)
+    .then(() => showStatus('週期已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message));
+});
+
+function applyTagChange(value) {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.tag.show || !value) return;
+  item.tag = value;
+  config.tag.save(item, value)
+    .then(() => showStatus('標籤已更新'))
+    .catch(err => showStatus('更新失敗：' + err.message));
+}
+el.tagSelect.addEventListener('change', () => {
+  if (!el.tagSelect.value) return;
+  el.weekdaySelect.value = '';
+  applyTagChange(el.tagSelect.value);
+});
+el.weekdaySelect.addEventListener('change', () => {
+  if (!el.weekdaySelect.value) return;
+  el.tagSelect.value = '';
+  applyTagChange(el.weekdaySelect.value);
+});
+
+el.addTagBtn.addEventListener('click', async () => {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.tag.show) return;
+  const newTag = el.newTagInput.value.trim();
+  if (!newTag) { showStatus('請輸入標籤內容'); return; }
+
+  item.tag = newTag;
+  el.tagSelect.value = '';
+  el.weekdaySelect.value = '';
+  config.tag.save(item, newTag)
+    .then(() => showStatus('標籤已套用'))
+    .catch(err => showStatus('套用失敗：' + err.message));
+
+  if (el.saveTagCheckbox.checked) {
+    try {
+      const data = await apiCall(MULTI_API_URL, { action: 'addCustomTag', value: newTag });
+      customTagsCache = data.custom || [];
+      populateTagSelect(newTag);
+    } catch (err) {
+      showStatus('加入清單失敗：' + err.message);
+    }
+  }
+  el.newTagInput.value = '';
+});
+
 el.completeBtn.addEventListener('click', async () => {
-  if (viewItems.length === 0) return;
-  const item = viewItems[cachePos];
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.complete) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
   stopSpeakingIfNeeded();
   setLoading(true);
   try {
-    await completeCurrentItem(item);
-    // 從全部清單與目前篩選清單中一併移除，維持兩邊同步
+    await config.complete(item);
     allItems = allItems.filter(it => it !== item);
     viewItems.splice(cachePos, 1);
     if (viewItems.length === 0) {
@@ -362,20 +665,50 @@ el.completeBtn.addEventListener('click', async () => {
   }
 });
 
+el.deleteBtn.addEventListener('click', async () => {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.delete.show) return;
+  if (!confirm(config.delete.confirmText)) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await config.delete.run(item);
+    allItems = allItems.filter(it => it !== item);
+    viewItems.splice(cachePos, 1);
+    if (viewItems.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromView(cachePos);
+    }
+    updateBreakdown();
+    showStatus('已刪除');
+  } catch (err) {
+    showStatus('刪除失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
 el.prevBtn.addEventListener('click', () => {
   if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
   renderFromView(cachePos - 1);
 });
 
 el.nextBtn.addEventListener('click', () => {
   if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
   renderFromView(cachePos + 1);
 });
 
 el.randomBtn.addEventListener('click', () => {
   if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
   renderFromView(Math.floor(Math.random() * viewItems.length));
 });
@@ -384,7 +717,7 @@ el.jumpBtn.addEventListener('click', () => {
   if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
   const val = parseInt(el.jumpInput.value, 10);
   if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
-  stopSpeakingIfNeeded();
+  flushPendingSaveIfAny();
   renderFromView(val - 1);
   el.jumpInput.value = '';
 });
