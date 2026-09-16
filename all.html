@@ -447,9 +447,28 @@ async function apiCall(baseUrl, params) {
   params._t = Date.now();
   const url = baseUrl + '?' + new URLSearchParams(params).toString();
   const res = await fetch(url, { cache: 'no-store' });
-  const data = await res.json();
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch (parseErr) {
+    // 伺服器沒有回傳JSON（通常是Google登入逾時、或Apps Script暫時性錯誤，改回傳了HTML頁面），
+    // 這是「為網絡禱告偶爾匯入失敗」最常見的原因，直接顯示 parse 錯誤對使用者沒有意義
+    throw new Error('伺服器回應異常，可能是登入逾時或暫時性錯誤');
+  }
   if (data.error) throw new Error(data.error);
   return data;
+}
+
+// 打不到就等一下再試一次（Apps Script 偶爾會出現暫時性錯誤，重試一次通常就好了），
+// 兩次都失敗才真的算這個來源載入失敗。
+async function apiCallWithRetry(baseUrl, params) {
+  try {
+    return await apiCall(baseUrl, Object.assign({}, params));
+  } catch (err) {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    return await apiCall(baseUrl, Object.assign({}, params));
+  }
 }
 
 function currentItem() {
@@ -461,15 +480,20 @@ function currentConfig() {
   return item ? SOURCE_CONFIG[item.source] : null;
 }
 
-// 每個來源各自打各自的 API，一份失敗不影響其他三份（用 allSettled）
+// 記住上次載入失敗的來源，讓失敗狀態常駐顯示（不像 showStatus 1.8 秒就消失），
+// 不然「今天剛好 0 項」跟「其實是載入失敗」在畫面上會分不出來。
+let lastFailedSources = [];
+
+// 每個來源各自打各自的 API，一份失敗不影響其他三份（用 allSettled），
+// 失敗的來源會自動重試一次（apiCallWithRetry），還是失敗才算數。
 async function loadAll() {
   setLoading(true);
   el.progress.textContent = '載入中...';
   const [habit, network, multi, task] = await Promise.allSettled([
-    apiCall(MULTI_API_URL, { action: 'getTodayCalendarEvents' }),
-    apiCall(NETWORK_API_URL, { action: 'getAllItems' }),
-    apiCall(MULTI_API_URL, { action: 'getInitData' }),
-    apiCall(MULTI_API_URL, { action: 'getTodayTasksList' })
+    apiCallWithRetry(MULTI_API_URL, { action: 'getTodayCalendarEvents' }),
+    apiCallWithRetry(NETWORK_API_URL, { action: 'getAllItems' }),
+    apiCallWithRetry(MULTI_API_URL, { action: 'getInitData' }),
+    apiCallWithRetry(MULTI_API_URL, { action: 'getTodayTasksList' })
   ]);
 
   const failedSources = [];
@@ -486,7 +510,7 @@ async function loadAll() {
       });
       if (source === 'multi' && result.value.custom) customTagsCache = result.value.custom;
     } else {
-      failedSources.push(label);
+      failedSources.push({ source, label, message: result.reason && result.reason.message });
     }
   }
   pushItems(habit, 'habit', '習慣');
@@ -496,9 +520,7 @@ async function loadAll() {
   pushItems(task, 'task', '待辦');
 
   allItems = items;
-  if (failedSources.length) {
-    showStatus('部分來源載入失敗：' + failedSources.join('、'));
-  }
+  lastFailedSources = failedSources;
   applyFilter(currentFilter);
   setLoading(false);
 }
@@ -514,9 +536,29 @@ function applyFilter(filter) {
 function updateBreakdown() {
   const counts = { habit: 0, network: 0, multi: 0, task: 0 };
   allItems.forEach(it => { counts[it.source]++; });
+  const failedSet = new Set(lastFailedSources.map(f => f.source));
+  const countLabel = (source, icon) => failedSet.has(source) ? `${icon}⚠️載入失敗` : `${icon}${counts[source]}`;
+
   el.progressBreakdown.textContent =
-    `🔁${counts.habit} 🌐${counts.network} 🙏${counts.multi} 📋${counts.task}`;
+    [countLabel('habit', '🔁'), countLabel('network', '🌐'), countLabel('multi', '🙏'), countLabel('task', '📋')].join(' ');
+
+  if (lastFailedSources.length) {
+    el.progressBreakdown.title = '點一下重新整理失敗的來源';
+    el.progressBreakdown.style.cursor = 'pointer';
+    el.progressBreakdown.style.color = 'var(--text-danger)';
+  } else {
+    el.progressBreakdown.removeAttribute('title');
+    el.progressBreakdown.style.cursor = '';
+    el.progressBreakdown.style.color = '';
+  }
 }
+
+// 失敗來源常駐顯示，並且點一下就能重新整理全部（簡單可靠，不用再另外做「只重載單一來源」的邏輯）
+el.progressBreakdown.addEventListener('click', () => {
+  if (lastFailedSources.length === 0) return;
+  showStatus('重新載入中...');
+  loadAll();
+});
 
 function populateSelect(selectEl, values, placeholder, currentValue) {
   selectEl.innerHTML = '<option value="">' + placeholder + '</option>';
