@@ -698,6 +698,21 @@ el.cycleSelect.addEventListener('change', () => {
   if (!item || !config || !config.cycle.show || !el.cycleSelect.value) return;
   const oldCycle = item.cycle;
   const newCycle = el.cycleSelect.value;
+  const row = item.row;
+
+  // 跟 index.html 一致：多方禱告改週期＝同時標記這項完成（這是唯一有「改週期直接完成」規則的來源，
+  // 網絡禱告／習慣禱告的週期只是單純設定，改了不會標記完成）
+  if (item.source === 'multi') {
+    stopSpeakingIfNeeded();
+    item.cycle = newCycle;
+    removeItemFromLists(item);
+    apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+      .then(() => apiCall(MULTI_API_URL, { action: 'completeByRow', row: row }))
+      .catch(err => showStatus('同步失敗，請檢查網路：' + err.message, true));
+    showStatus('週期已更新為「' + newCycle + '」，已完成');
+    return;
+  }
+
   item.cycle = newCycle;
   showStatus('週期同步中...');
   config.cycle.save(item, newCycle)
