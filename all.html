@@ -109,6 +109,12 @@
     padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary);
     background: white; color: var(--main-primary); font-size: 13px; white-space: nowrap;
   }
+  .quad-actions { display: flex; gap: 6px; margin-top: 12px; }
+  .quad-btn {
+    flex: 1; min-width: 0; padding: 8px 2px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 11px; line-height: 1.3; cursor: pointer;
+  }
+  .quad-btn:active { opacity: 0.7; }
   .controls { width: 100%; max-width: 480px; display: flex; gap: 10px; margin-top: 16px; }
   .btn {
     flex: 1;
@@ -130,6 +136,8 @@
   .btn.complete { background: var(--teal); }
   .btn.random { background: var(--clay); }
   .btn.speak { background: var(--clay); }
+  .btn.pray-more { background: var(--clay); }
+  .btn.pray-less { background: var(--clay-light); color: var(--clay-light-text); }
   .controls.triple { gap: 6px; }
   .controls.triple .btn { font-size: 14px; padding: 14px 2px; }
   .delete-row { width: 100%; max-width: 480px; display: flex; justify-content: center; margin-top: 10px; }
@@ -217,6 +225,13 @@
     <button id="addTagBtn">套用</button>
   </div>
 
+  <div class="quad-actions" id="quadActionsRow" style="display:none;">
+    <button class="quad-btn" id="copyToTasksBtn">📋 複製到 Tasks</button>
+    <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
+    <button class="quad-btn" id="setWeekdayBtn">📅 平日禱告</button>
+    <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
+  </div>
+
   <div class="note" id="noteText"></div>
 </div>
 
@@ -228,6 +243,11 @@
 
 <div class="delete-row" id="deleteRow">
   <button id="deleteBtn">🗑 刪除此項</button>
+</div>
+
+<div class="controls" id="prayMoreLessRow" style="display:none;">
+  <button class="btn pray-more" id="prayMoreBtn">🔺 禱告更多</button>
+  <button class="btn pray-less" id="prayLessBtn">🔻 禱告更少</button>
 </div>
 
 <div class="controls">
@@ -268,6 +288,23 @@ const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 
 const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
   '週五': '週五', '週六': '週六', '週日': '週日'
+};
+// 週期由密集到疏鬆的順序，「禱告更多／禱告更少」按鈕依這個順序調整週期（只有多方禱告支援）
+const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y'];
+// 週期文字 → Google 日曆的 RRULE 重複規則，「加入日曆」按鈕用（只有多方禱告支援）
+const CYCLE_RRULE_MAP = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  '4每四天': 'RRULE:FREQ=DAILY;INTERVAL=4',
+  '5每五天': 'RRULE:FREQ=DAILY;INTERVAL=5',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
 };
 // 跟 calendar.html 一致：習慣禱告（日曆行程）的週期選項
 const CALENDAR_CYCLE_OPTIONS = [
@@ -376,10 +413,18 @@ const el = {
   newTagInput: document.getElementById('newTagInput'),
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
+  quadActionsRow: document.getElementById('quadActionsRow'),
+  copyToTasksBtn: document.getElementById('copyToTasksBtn'),
+  addToCalendarBtn: document.getElementById('addToCalendarBtn'),
+  setWeekdayBtn: document.getElementById('setWeekdayBtn'),
+  setWeekendBtn: document.getElementById('setWeekendBtn'),
   noteText: document.getElementById('noteText'),
   completeBtn: document.getElementById('completeBtn'),
   deleteRow: document.getElementById('deleteRow'),
   deleteBtn: document.getElementById('deleteBtn'),
+  prayMoreLessRow: document.getElementById('prayMoreLessRow'),
+  prayMoreBtn: document.getElementById('prayMoreBtn'),
+  prayLessBtn: document.getElementById('prayLessBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
   randomBtn: document.getElementById('randomBtn'),
@@ -493,6 +538,15 @@ function populateTagSelect(currentTag) {
     opt.textContent = v;
     el.tagSelect.appendChild(opt);
   });
+  // 星期標籤選單本身沒有動態內容，但每次還是要重建 <option>，
+  // 不然只設 .value 卻沒有對應的 option，選單會停在「選擇星期標籤」不會變化（就是回報的「不work」）
+  el.weekdaySelect.innerHTML = '<option value="">選擇星期標籤</option>';
+  Object.values(WEEKDAY_MAP).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.weekdaySelect.appendChild(opt);
+  });
   el.weekdaySelect.value = WEEKDAY_MAP[currentTag] ? currentTag : '';
   el.tagSelect.value = WEEKDAY_MAP[currentTag] ? '' : (currentTag || '');
 }
@@ -529,6 +583,11 @@ function renderFromView(pos) {
 
   el.completeBtn.style.display = config.complete ? 'block' : 'none';
   el.deleteRow.style.display = config.delete.show ? 'flex' : 'none';
+
+  // 複製到Tasks/加入日曆/平日禱告/週末禱告/禱告更多/禱告更少：只有多方禱告的後端有對應 action，其他來源隱藏
+  const isMulti = item.source === 'multi';
+  el.quadActionsRow.style.display = isMulti ? 'flex' : 'none';
+  el.prayMoreLessRow.style.display = isMulti ? 'flex' : 'none';
 }
 
 function renderEmptyState() {
@@ -544,6 +603,8 @@ function renderEmptyState() {
   el.addTagRow.style.display = 'none';
   el.completeBtn.style.display = 'none';
   el.deleteRow.style.display = 'none';
+  el.quadActionsRow.style.display = 'none';
+  el.prayMoreLessRow.style.display = 'none';
 }
 
 el.filterRow.addEventListener('click', (e) => {
@@ -639,6 +700,49 @@ el.addTagBtn.addEventListener('click', async () => {
   el.newTagInput.value = '';
 });
 
+// 刪除一列後，同一張試算表裡後面的列號都會往前移一位，本地暫存區要跟著校正，
+// 不然之後對其他項目的操作會對錯列（只有 multi／network 是「列」的概念，habit/task 不受影響）
+function reindexRowsAfterDelete(source, deletedRow) {
+  allItems.forEach(it => { if (it.source === source && it.row > deletedRow) it.row -= 1; });
+}
+
+// 從畫面上移除目前這項（已經在後端處理完，這裡只負責同步本地暫存區＋重新渲染）
+function removeItemFromLists(item) {
+  allItems = allItems.filter(it => it !== item);
+  const idx = viewItems.indexOf(item);
+  if (idx !== -1) viewItems.splice(idx, 1);
+  if (viewItems.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromView(Math.min(cachePos, viewItems.length - 1));
+  }
+  updateBreakdown();
+}
+
+// 雙按確認：第一下只進入「待確認」狀態，CONFIRM_TIMEOUT_MS 內按第二下才真的觸發，
+// 避免滑動、誤觸就直接複製到 Tasks／加入日曆／改期這種不好復原的操作
+const CONFIRM_TIMEOUT_MS = 1000;
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+  function reset() {
+    confirming = false;
+    clearTimeout(resetTimer);
+    btn.textContent = originalText;
+  }
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+
 el.completeBtn.addEventListener('click', async () => {
   const item = currentItem();
   const config = currentConfig();
@@ -649,14 +753,7 @@ el.completeBtn.addEventListener('click', async () => {
   setLoading(true);
   try {
     await config.complete(item);
-    allItems = allItems.filter(it => it !== item);
-    viewItems.splice(cachePos, 1);
-    if (viewItems.length === 0) {
-      renderEmptyState();
-    } else {
-      renderFromView(cachePos);
-    }
-    updateBreakdown();
+    removeItemFromLists(item);
     showStatus('已標記完成');
   } catch (err) {
     showStatus('操作失敗：' + err.message);
@@ -676,14 +773,10 @@ el.deleteBtn.addEventListener('click', async () => {
   setLoading(true);
   try {
     await config.delete.run(item);
-    allItems = allItems.filter(it => it !== item);
-    viewItems.splice(cachePos, 1);
-    if (viewItems.length === 0) {
-      renderEmptyState();
-    } else {
-      renderFromView(cachePos);
+    if (item.source === 'multi' || item.source === 'network') {
+      reindexRowsAfterDelete(item.source, item.row);
     }
-    updateBreakdown();
+    removeItemFromLists(item);
     showStatus('已刪除');
   } catch (err) {
     showStatus('刪除失敗：' + err.message);
@@ -691,6 +784,127 @@ el.deleteBtn.addEventListener('click', async () => {
     setLoading(false);
   }
 });
+
+// ===== 以下四個功能只有「多方禱告」的後端支援，只會在 source === 'multi' 時顯示 =====
+
+// 不管標籤目前是什麼值，都直接複製目前這項到 Google Tasks 預設清單，可重複按。
+// 複製成功後這項在這裡就算完成了：一般項目丟進垃圾桶，文字開頭是 S 的項目改成只標記完成（不丟垃圾桶）。
+armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
+  const item = currentItem();
+  if (!item || item.source !== 'multi') return;
+  apiCall(MULTI_API_URL, { action: 'copyToTasks', row: item.row })
+    .then(async (data) => {
+      if (!data || !data.copied) { showStatus('複製失敗，請稍後再試'); return; }
+      if ((item.text || '').trim().startsWith('S')) {
+        await SOURCE_CONFIG.multi.complete(item);
+        removeItemFromLists(item);
+        showStatus('已複製到 Google Tasks 預設清單，並標記完成（S開頭不丟垃圾桶）');
+      } else {
+        await SOURCE_CONFIG.multi.delete.run(item);
+        reindexRowsAfterDelete('multi', item.row);
+        removeItemFromLists(item);
+        showStatus('已複製到 Google Tasks 預設清單，並丟進垃圾桶');
+      }
+    })
+    .catch(err => showStatus('複製失敗：' + err.message));
+});
+
+// 開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
+  const item = currentItem();
+  if (!item || item.source !== 'multi') return;
+
+  const rrule = CYCLE_RRULE_MAP[item.cycle];
+  if (!rrule) { showStatus('請先設定週期才能加入日曆'); return; }
+
+  const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: item.text || '',
+    recur: rrule
+  });
+  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+});
+
+// 「平日禱告／週末禱告」：把到期日改到最近的平日／週末。
+// 前端先算出新日期，如果換算後還是「今天或更早」就留在清單裡，否則本地立刻移除、畫面瞬間更新；
+// 「已改到...」的成功訊息要等 API 真的回應成功才顯示，失敗的話把本地移除的項目放回去。
+function nearestWeekdayLocal(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay();
+  if (day >= 1 && day <= 5) return d;
+  d.setDate(d.getDate() + (day === 6 ? 2 : 1));
+  return d;
+}
+function nearestWeekendLocal(fromDate) {
+  const d = new Date(fromDate);
+  const day = d.getDay();
+  if (day === 0 || day === 6) return d;
+  d.setDate(d.getDate() + (6 - day));
+  return d;
+}
+function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
+  const item = currentItem();
+  if (!item || item.source !== 'multi') return;
+  stopSpeakingIfNeeded();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const newDate = computeNewDate(today);
+  const staysDue = newDate.getTime() <= today.getTime();
+
+  if (!staysDue) removeItemFromLists(item);
+
+  apiCall(MULTI_API_URL, { action: action, row: item.row })
+    .then(() => showStatus(doneMsg))
+    .catch(err => {
+      showStatus('同步失敗，請重新再按一次：' + err.message);
+      if (!staysDue) {
+        allItems.push(item);
+        applyFilter(currentFilter);
+      }
+    });
+}
+armConfirmButton(el.setWeekdayBtn, '再按一次確認改到最近平日', () => {
+  setDueDateAndMaybeRemove('setDateToNearestWeekday', nearestWeekdayLocal, '已改到最近的平日');
+});
+armConfirmButton(el.setWeekendBtn, '再按一次確認改到最近週末', () => {
+  setDueDateAndMaybeRemove('setDateToNearestWeekend', nearestWeekendLocal, '已改到最近的週末');
+});
+
+// 「禱告更多／禱告更少」：把週期調整成更密集／更疏鬆的下一級，然後標記完成
+el.prayMoreBtn.addEventListener('click', () => shiftCycleAndComplete(-1));
+el.prayLessBtn.addEventListener('click', () => shiftCycleAndComplete(1));
+function shiftCycleAndComplete(direction) {
+  const item = currentItem();
+  if (!item || item.source !== 'multi') return;
+
+  const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
+  if (idx === -1) { showStatus('請先設定週期，才能用這個按鈕調整'); return; }
+  const newIdx = idx + direction;
+  if (newIdx < 0) { showStatus('已經是最密集的週期了'); return; }
+  if (newIdx >= CYCLE_ORDER.length) { showStatus('已經是最疏鬆的週期了'); return; }
+
+  const newCycle = CYCLE_MAP[CYCLE_ORDER[newIdx]];
+  const row = item.row;
+
+  stopSpeakingIfNeeded();
+  removeItemFromLists(item);
+
+  apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+    .then(() => apiCall(MULTI_API_URL, { action: 'completeByRow', row: row }))
+    .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
+
+  showStatus('週期已調整為「' + newCycle + '」，已完成');
+}
 
 el.prevBtn.addEventListener('click', () => {
   if (viewItems.length === 0) return;
