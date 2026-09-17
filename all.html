@@ -1005,26 +1005,27 @@ function armConfirmButton(btn, confirmText, onConfirmed) {
   });
 }
 
-el.completeBtn.addEventListener('click', async () => {
+// 跟 index.html 一致：本地樂觀更新，先立刻從畫面移除、瞬間有反應，API 在背景默默同步，
+// 不卡「處理中」畫面。失敗才需要使用者處理，所以把項目加回來並用常駐錯誤訊息提示。
+el.completeBtn.addEventListener('click', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.complete) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   stopSpeakingIfNeeded();
-  setLoading(true);
-  try {
-    await config.complete(item);
-    removeItemFromLists(item);
-    showStatus('已標記完成');
-  } catch (err) {
-    showStatus('操作失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
+
+  removeItemFromLists(item);
+  showStatus('已標記完成');
+
+  config.complete(item).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message, true);
+    allItems.push(item);
+    applyFilter(currentFilter);
+  });
 });
 
-el.deleteBtn.addEventListener('click', async () => {
+el.deleteBtn.addEventListener('click', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.delete.show) return;
@@ -1032,19 +1033,21 @@ el.deleteBtn.addEventListener('click', async () => {
   clearTimeout(saveTimer);
   saveTimer = null;
   stopSpeakingIfNeeded();
-  setLoading(true);
-  try {
-    await config.delete.run(item);
-    if (item.source === 'multi' || item.source === 'network') {
-      reindexRowsAfterDelete(item.source, item.row);
-    }
-    removeItemFromLists(item);
-    showStatus('已刪除');
-  } catch (err) {
-    showStatus('刪除失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
+
+  removeItemFromLists(item);
+  showStatus('已刪除');
+
+  config.delete.run(item)
+    .then(() => {
+      if (item.source === 'multi' || item.source === 'network') {
+        reindexRowsAfterDelete(item.source, item.row);
+      }
+    })
+    .catch(err => {
+      showStatus('同步失敗，請檢查網路：' + err.message, true);
+      allItems.push(item);
+      applyFilter(currentFilter);
+    });
 });
 
 // ===== 以下四個功能只有「多方禱告」的後端支援，只會在 source === 'multi' 時顯示 =====
