@@ -340,12 +340,12 @@
   <span>純朗讀模式（不標記完成）</span>
 </div>
 
-<div class="toggle-row" id="randomOrderRow" style="display:none;">
+<div class="toggle-row" id="randomOrderRow">
   <label class="switch">
     <input type="checkbox" id="randomOrderToggle">
     <span class="slider"></span>
   </label>
-  <span>隨機排序（多方禱告）</span>
+  <span>隨機排序</span>
 </div>
 
 <div class="jump-row">
@@ -687,14 +687,12 @@ function applyFilter(filter) {
   currentFilter = filter;
   viewItems = filter === 'all' ? allItems : allItems.filter(it => it.source === filter);
 
-  // 「隨機排序」跟排序規則只有多方禱告支援（跟 index.html 一致），其他來源/全部混合維持原本抓回來的順序
-  el.randomOrderRow.style.display = filter === 'multi' ? 'flex' : 'none';
-  if (filter === 'multi') {
-    if (el.randomOrderToggle.checked) {
-      shuffleItems(viewItems);
-    } else {
-      sortItemsByCycleDesc(viewItems);
-    }
+  // 跟 index.html 一致：隨機排序開關對任何篩選都適用（多方禱告以外的來源沒有 CYCLE_MAP 週期格式，
+  // 「依週期排序」對它們等於維持原順序，不影響顯示，但開關本身不限來源都能用）
+  if (el.randomOrderToggle.checked) {
+    shuffleItems(viewItems);
+  } else {
+    sortItemsByCycleDesc(viewItems);
   }
 
   cachePos = 0;
@@ -703,7 +701,6 @@ function applyFilter(filter) {
 }
 
 el.randomOrderToggle.addEventListener('change', () => {
-  if (currentFilter !== 'multi') return;
   stopSpeakingIfNeeded();
   applyFilter(currentFilter);
 });
