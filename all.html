@@ -589,7 +589,19 @@ function showStatus(msg, persistent) {
 async function apiCall(baseUrl, params) {
   params._t = Date.now();
   const url = baseUrl + '?' + new URLSearchParams(params).toString();
-  const res = await fetch(url, { cache: 'no-store' });
+  // Apps Script 偶爾會整個掛住不回應（尤其是 dg-network 那個獨立部署），沒有逾時的話畫面會一直卡在
+  // 「載入中」等到瀏覽器自己放棄，體感非常久。這裡主動設 12 秒逾時，逾時就當失敗，讓重試機制介入。
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  let res;
+  try {
+    res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('連線逾時（超過 12 秒沒有回應）');
+    throw new Error('連線失敗：' + err.message);
+  } finally {
+    clearTimeout(timeoutId);
+  }
   const text = await res.text();
   let data;
   try {
@@ -603,15 +615,20 @@ async function apiCall(baseUrl, params) {
   return data;
 }
 
-// 打不到就等一下再試一次（Apps Script 偶爾會出現暫時性錯誤，重試一次通常就好了），
-// 兩次都失敗才真的算這個來源載入失敗。
+// 打不到就再試幾次（Apps Script 偶爾會出現暫時性錯誤或整個掛住，尤其是 dg-network 那個獨立部署），
+// 每次重試間隔拉長一點（1.2秒／2.5秒），總共試 3 次都失敗才真的算這個來源載入失敗。
 async function apiCallWithRetry(baseUrl, params) {
-  try {
-    return await apiCall(baseUrl, Object.assign({}, params));
-  } catch (err) {
-    await new Promise(resolve => setTimeout(resolve, 1200));
-    return await apiCall(baseUrl, Object.assign({}, params));
+  const delays = [0, 1200, 2500];
+  let lastErr;
+  for (const delay of delays) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    try {
+      return await apiCall(baseUrl, Object.assign({}, params));
+    } catch (err) {
+      lastErr = err;
+    }
   }
+  throw lastErr;
 }
 
 function currentItem() {
@@ -627,45 +644,50 @@ function currentConfig() {
 // 不然「今天剛好 0 項」跟「其實是載入失敗」在畫面上會分不出來。
 let lastFailedSources = [];
 
-// 每個來源各自打各自的 API，一份失敗不影響其他三份（用 allSettled），
-// 失敗的來源會自動重試一次（apiCallWithRetry），還是失敗才算數。
-async function loadAll() {
-  setLoading(true);
-  el.progress.textContent = '載入中...';
-  const [habit, network, multi, task] = await Promise.allSettled([
-    apiCallWithRetry(MULTI_API_URL, { action: 'getTodayCalendarEvents' }),
-    apiCallWithRetry(NETWORK_API_URL, { action: 'getAllItems' }),
-    apiCallWithRetry(MULTI_API_URL, { action: 'getInitData' }),
-    apiCallWithRetry(MULTI_API_URL, { action: 'getTodayTasksList' })
-  ]);
+// 每個來源各自打各自的 API，各自獨立、互不等待：哪個先回來就先把畫面更新出來，
+// 不會因為其中一個來源（通常是 dg-network 那個獨立部署）比較慢或不穩，
+// 害其他三個明明已經抓好的來源也一起卡在「載入中」動彈不得。
+// 失敗的來源會自動重試（apiCallWithRetry，總共試 3 次），還是失敗才算數。
+let loadGeneration = 0; // 每次 loadAll() 遞增一次，避免舊的一輪還沒回來時使用者又按了重新整理，兩輪結果互相覆蓋
 
-  const failedSources = [];
-  const items = [];
-
-  function pushItems(result, source, label, normalize) {
-    if (result.status === 'fulfilled') {
-      (result.value.items || []).forEach(raw => {
+function loadSource(generation, source, label, promise, normalize) {
+  promise
+    .then(data => {
+      if (generation !== loadGeneration) return; // 這一輪已經過期，結果直接丟棄
+      lastFailedSources = lastFailedSources.filter(f => f.source !== source);
+      (data.items || []).forEach(raw => {
         // 跟 index.html 一致：多方禱告清單裡的「A安祺禱告／A安祺輸入」標籤項目不在這裡顯示
         if (source === 'multi' && (raw.tag === 'A安祺禱告' || raw.tag === 'A安祺輸入')) return;
         const item = Object.assign({ source }, raw);
         if (normalize) normalize(item);
-        items.push(item);
+        allItems.push(item);
       });
-      if (source === 'multi' && result.value.custom) customTagsCache = result.value.custom;
-    } else {
-      failedSources.push({ source, label, message: result.reason && result.reason.message });
-    }
-  }
-  pushItems(habit, 'habit', '習慣');
-  // 網絡禱告後端回傳的是 {name, cycle, note}，沒有 text 欄位，這裡補上 text = name 才能跟其他來源共用同一套卡片渲染邏輯
-  pushItems(network, 'network', '網絡', (item) => { item.text = item.name || ''; });
-  pushItems(multi, 'multi', '多方');
-  pushItems(task, 'task', '待辦');
+      if (source === 'multi' && data.custom) customTagsCache = data.custom;
+      applyFilter(currentFilter);
+    })
+    .catch(err => {
+      if (generation !== loadGeneration) return;
+      lastFailedSources = lastFailedSources.filter(f => f.source !== source);
+      lastFailedSources.push({ source, label, message: err.message });
+      updateBreakdown();
+    });
+}
 
-  allItems = items;
-  lastFailedSources = failedSources;
-  applyFilter(currentFilter);
-  setLoading(false);
+function loadAll() {
+  loadGeneration++;
+  const generation = loadGeneration;
+  allItems = [];
+  lastFailedSources = [];
+  viewItems = [];
+  cachePos = 0;
+  renderEmptyState();
+  el.progress.textContent = '載入中...';
+
+  loadSource(generation, 'habit', '習慣', apiCallWithRetry(MULTI_API_URL, { action: 'getTodayCalendarEvents' }));
+  // 網絡禱告後端回傳的是 {name, cycle, note}，沒有 text 欄位，這裡補上 text = name 才能跟其他來源共用同一套卡片渲染邏輯
+  loadSource(generation, 'network', '網絡', apiCallWithRetry(NETWORK_API_URL, { action: 'getAllItems' }), (item) => { item.text = item.name || ''; });
+  loadSource(generation, 'multi', '多方', apiCallWithRetry(MULTI_API_URL, { action: 'getInitData' }));
+  loadSource(generation, 'task', '待辦', apiCallWithRetry(MULTI_API_URL, { action: 'getTodayTasksList' }));
 }
 
 // 跟 index.html 一致：依週期長短排序，週期空白/無法辨識的排最前面，最長排到最短
