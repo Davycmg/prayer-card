@@ -95,7 +95,15 @@
   .meta-field.cycle select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .meta-field.tag select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .meta-field.weekday select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
-  .note { margin-top: 14px; font-size: 13px; color: var(--text-sub); white-space: pre-wrap; }
+  .note {
+    display: block; margin-top: 14px; font-size: 13px; color: var(--text-sub);
+    white-space: pre-wrap; width: 100%; border: none; outline: none; background: transparent;
+    font-family: inherit; resize: none; padding: 0;
+  }
+  .note:not([readonly]) {
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: white;
+  }
+  .note:not([readonly]):focus { border-color: var(--main-primary); }
   .add-tag-row {
     display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap;
   }
@@ -264,7 +272,7 @@
 <div class="card">
   <span class="source-badge" id="sourceBadge"></span>
   <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目"></textarea>
-  <div class="readonly-hint" id="readonlyHint" style="display:none;">此來源的名字要到「為網絡禱告」頁面才能改，這裡唯讀</div>
+  <div class="readonly-hint" id="readonlyHint" style="display:none;">姓名要到「為網絡禱告」頁面才能改，這裡唯讀；備註可以直接在下面編輯</div>
 
   <div class="meta-row" id="cycleRow" style="display:none;">
     <div class="meta-field cycle">
@@ -300,7 +308,7 @@
     <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
   </div>
 
-  <div class="note" id="noteText"></div>
+  <textarea class="note" id="noteText" placeholder="備註" rows="2"></textarea>
 </div>
 
 <div class="controls triple">
@@ -454,6 +462,7 @@ const SOURCE_CONFIG = {
       save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
     },
     tag: { show: false },
+    note: { editable: false },
     complete: null, // 每天重複的行程沒有「完成」概念
     delete: {
       show: true,
@@ -469,6 +478,11 @@ const SOURCE_CONFIG = {
       save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value })
     },
     tag: { show: false },
+    // 跟 dg-network/CardIndex.html 一致：這個來源真正可以編輯的是備註，姓名反而不能改
+    note: {
+      editable: true,
+      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNoteByRow', row: item.row, value })
+    },
     complete: (item) => apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
       show: true,
@@ -490,6 +504,7 @@ const SOURCE_CONFIG = {
       show: true,
       save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
     },
+    note: { editable: false }, // index.html 本身也沒有讓備註可編輯，維持唯讀
     complete: (item) => apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
       show: true,
@@ -507,6 +522,7 @@ const SOURCE_CONFIG = {
     },
     cycle: { show: false },
     tag: { show: false },
+    note: { editable: false },
     complete: (item) => apiCall(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id }),
     delete: { show: false } // Google Tasks 沒有刪除，只有標記完成
   }
@@ -806,7 +822,9 @@ function renderFromView(pos) {
   el.itemText.readOnly = !config.text.editable;
   el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
 
-  el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+  el.noteText.value = item.note || '';
+  el.noteText.readOnly = !config.note.editable;
+  el.noteText.placeholder = config.note.editable ? '備註（可直接編輯）' : '備註';
 
   el.cycleRow.style.display = config.cycle.show ? 'flex' : 'none';
   if (config.cycle.show) {
@@ -835,7 +853,8 @@ function renderEmptyState() {
   el.itemText.value = '🎉 目前沒有待代禱的項目';
   el.itemText.readOnly = true;
   el.readonlyHint.style.display = 'none';
-  el.noteText.textContent = '';
+  el.noteText.value = '';
+  el.noteText.readOnly = true;
   el.cycleRow.style.display = 'none';
   el.tagRow.style.display = 'none';
   el.addTagRow.style.display = 'none';
@@ -854,31 +873,58 @@ el.filterRow.addEventListener('click', (e) => {
   applyFilter(btn.dataset.source);
 });
 
-// ===== 文字編輯：打字停頓 1 秒後才背景送出，切項目前會先強制送出，避免存錯項目 =====
+// ===== 文字/備註編輯：打字停頓 1 秒後才背景送出，切項目前會先強制送出，避免存錯項目 =====
+// field 是 'text' 或 'note'，兩者各自獨立的計時器/儲存邏輯，寫法共用同一套
+let noteSaveTimer = null;
+
+function fieldEditable(config, field) {
+  return field === 'text' ? config.text.editable : config.note.editable;
+}
+function fieldSave(config, field) {
+  return field === 'text' ? config.text.save : config.note.save;
+}
+
 el.itemText.addEventListener('input', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.text.editable) return;
   const value = el.itemText.value;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => flushSave(item, config, value), 1000);
+  saveTimer = setTimeout(() => flushSave(item, config, 'text', value), 1000);
 });
 
-function flushSave(item, config, value) {
-  item.text = value;
-  config.text.save(item, value)
+el.noteText.addEventListener('input', () => {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.note.editable) return;
+  const value = el.noteText.value;
+  clearTimeout(noteSaveTimer);
+  noteSaveTimer = setTimeout(() => flushSave(item, config, 'note', value), 1000);
+});
+
+function flushSave(item, config, field, value) {
+  item[field] = value;
+  fieldSave(config, field)(item, value)
     .then(() => showStatus('已同步'))
     .catch(err => showStatus('同步失敗：' + err.message, true));
 }
 
 function flushPendingSaveIfAny() {
-  if (saveTimer === null) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
   const item = currentItem();
   const config = currentConfig();
-  if (item && config && config.text.editable && item.text !== el.itemText.value) {
-    flushSave(item, config, el.itemText.value);
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    if (item && config && fieldEditable(config, 'text') && item.text !== el.itemText.value) {
+      flushSave(item, config, 'text', el.itemText.value);
+    }
+  }
+  if (noteSaveTimer !== null) {
+    clearTimeout(noteSaveTimer);
+    noteSaveTimer = null;
+    if (item && config && fieldEditable(config, 'note') && item.note !== el.noteText.value) {
+      flushSave(item, config, 'note', el.noteText.value);
+    }
   }
 }
 
@@ -1034,6 +1080,8 @@ el.completeBtn.addEventListener('click', () => {
   if (!item || !config || !config.complete) return;
   clearTimeout(saveTimer);
   saveTimer = null;
+  clearTimeout(noteSaveTimer);
+  noteSaveTimer = null;
   stopSpeakingIfNeeded();
 
   removeItemFromLists(item);
@@ -1053,6 +1101,8 @@ el.deleteBtn.addEventListener('click', () => {
   if (config.delete.confirmBeforeDelete !== false && !confirm(config.delete.confirmText)) return;
   clearTimeout(saveTimer);
   saveTimer = null;
+  clearTimeout(noteSaveTimer);
+  noteSaveTimer = null;
   stopSpeakingIfNeeded();
 
   removeItemFromLists(item);
