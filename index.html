@@ -1450,7 +1450,7 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
   };
   const target = selected.slice().sort((a, b) => cycleIndex(a) - cycleIndex(b) || a.row - b.row)[0];
   const others = selected.filter(item => item.row !== target.row);
-  const mergedText = selected.map(item => item.text).join('\n');
+  const mergedText = selected.map(item => item.text).join('；');
 
   setLoading(true);
   try {
