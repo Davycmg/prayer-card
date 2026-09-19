@@ -493,7 +493,9 @@ const SOURCE_CONFIG = {
     complete: (item) => apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
       show: true,
-      confirmText: '刪除後會先進垃圾桶（可到 index.html 救回），確定要刪除嗎？',
+      // 跟 index.html 一致：多方禱告的刪除是軟刪除（先進垃圾桶，可救回），不用跳確認對話框，
+      // 按下去本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新）
+      confirmBeforeDelete: false,
       run: (item) => apiCall(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
     }
   },
@@ -1048,7 +1050,7 @@ el.deleteBtn.addEventListener('click', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.delete.show) return;
-  if (!confirm(config.delete.confirmText)) return;
+  if (config.delete.confirmBeforeDelete !== false && !confirm(config.delete.confirmText)) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   stopSpeakingIfNeeded();
