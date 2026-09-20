@@ -467,7 +467,7 @@ const SOURCE_CONFIG = {
     delete: {
       show: true,
       confirmText: '⚠️ 這會直接刪除 Google 日曆裡的這個行程，無法復原，確定要刪除嗎？',
-      run: (item) => apiCall(MULTI_API_URL, { action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' })
+      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' })
     }
   },
   network: {
@@ -483,11 +483,11 @@ const SOURCE_CONFIG = {
       editable: true,
       save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNoteByRow', row: item.row, value })
     },
-    complete: (item) => apiCall(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
+    complete: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
       show: true,
       confirmText: '⚠️ 這會直接從試算表刪掉這一列，無法復原，確定要刪除嗎？',
-      run: (item) => apiCall(NETWORK_API_URL, { action: 'deleteByRow', row: item.row })
+      run: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'deleteByRow', row: item.row })
     }
   },
   multi: {
@@ -505,13 +505,13 @@ const SOURCE_CONFIG = {
       save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
     },
     note: { editable: false }, // index.html 本身也沒有讓備註可編輯，維持唯讀
-    complete: (item) => apiCall(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
+    complete: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
     delete: {
       show: true,
       // 跟 index.html 一致：多方禱告的刪除是軟刪除（先進垃圾桶，可救回），不用跳確認對話框，
       // 按下去本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新）
       confirmBeforeDelete: false,
-      run: (item) => apiCall(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
+      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
     }
   },
   task: {
@@ -523,7 +523,7 @@ const SOURCE_CONFIG = {
     cycle: { show: false },
     tag: { show: false },
     note: { editable: false },
-    complete: (item) => apiCall(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id }),
+    complete: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'completeTaskItem', taskId: item.id }),
     delete: { show: false } // Google Tasks 沒有刪除，只有標記完成
   }
 };
@@ -957,10 +957,16 @@ el.cycleSelect.addEventListener('change', () => {
     stopSpeakingIfNeeded();
     item.cycle = newCycle;
     removeItemFromLists(item);
-    apiCall(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
-      .then(() => apiCall(MULTI_API_URL, { action: 'completeByRow', row: row }))
-      .catch(err => showStatus('同步失敗，請檢查網路：' + err.message, true));
     showStatus('週期已更新為「' + newCycle + '」，已完成');
+    apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+      .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row }))
+      .catch(err => {
+        // 重試 3 次都失敗，代表這項其實沒有真的完成，加回清單裡，不然畫面上顯示「已完成」
+        // 但試算表其實沒改到，重新整理後這項又跑回來，會誤以為出了怪異的 bug
+        showStatus('同步失敗，請檢查網路：' + err.message, true);
+        allItems.push(item);
+        applyFilter(currentFilter);
+      });
     return;
   }
 
@@ -1143,7 +1149,7 @@ el.deleteBtn.addEventListener('click', () => {
 armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   const item = currentItem();
   if (!item || item.source !== 'multi') return;
-  apiCall(MULTI_API_URL, { action: 'copyToTasks', row: item.row })
+  apiCallWithRetry(MULTI_API_URL, { action: 'copyToTasks', row: item.row })
     .then(async (data) => {
       if (!data || !data.copied) { showStatus('複製失敗，請稍後再試'); return; }
       if ((item.text || '').trim().startsWith('S')) {
@@ -1214,7 +1220,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
 
   if (!staysDue) removeItemFromLists(item);
 
-  apiCall(MULTI_API_URL, { action: action, row: item.row })
+  apiCallWithRetry(MULTI_API_URL, { action: action, row: item.row })
     .then(() => showStatus(doneMsg))
     .catch(err => {
       showStatus('同步失敗，請重新再按一次：' + err.message, true);
@@ -1249,12 +1255,15 @@ function shiftCycleAndComplete(direction) {
 
   stopSpeakingIfNeeded();
   removeItemFromLists(item);
+  showStatus('週期已調整為「' + newCycle + '」，已完成');
 
   apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
-    .then(() => apiCall(MULTI_API_URL, { action: 'completeByRow', row: row }))
-    .catch(err => showStatus('同步失敗，請檢查網路：' + err.message, true));
-
-  showStatus('週期已調整為「' + newCycle + '」，已完成');
+    .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row }))
+    .catch(err => {
+      showStatus('同步失敗，請檢查網路：' + err.message, true);
+      allItems.push(item);
+      applyFilter(currentFilter);
+    });
 }
 
 el.prevBtn.addEventListener('click', () => {
@@ -1369,7 +1378,11 @@ async function runAutoPlay() {
         continue;
       }
 
-      config.complete(item).catch(err => showStatus('同步失敗：' + err.message, true));
+      config.complete(item).catch(err => {
+        showStatus('同步失敗：' + err.message, true);
+        allItems.push(item);
+        applyFilter(currentFilter);
+      });
       removeItemFromLists(item);
 
       if (viewItems.length === 0) {
