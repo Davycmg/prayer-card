@@ -308,7 +308,7 @@
     <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
   </div>
 
-  <textarea class="note" id="noteText" placeholder="備註" rows="10"></textarea>
+  <textarea class="note" id="noteText" placeholder="備註" rows="10" style="display:none;"></textarea>
 </div>
 
 <div class="controls triple">
@@ -822,9 +822,23 @@ function renderFromView(pos) {
   el.itemText.readOnly = !config.text.editable;
   el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
 
-  el.noteText.value = item.note || '';
-  el.noteText.readOnly = !config.note.editable;
-  el.noteText.placeholder = config.note.editable ? '備註（可直接編輯）' : '備註';
+  // 只有網絡禱告的備註可以編輯、內容通常也比較長，才需要一大格；其他來源備註大多是空的，
+  // 顯示一個空的大格子只會把下面的按鈕往下擠，不能編輯又沒內容的話乾脆整欄隱藏。
+  if (config.note.editable) {
+    el.noteText.style.display = 'block';
+    el.noteText.value = item.note || '';
+    el.noteText.readOnly = false;
+    el.noteText.rows = 10;
+    el.noteText.placeholder = '備註（可直接編輯）';
+  } else if (item.note) {
+    el.noteText.style.display = 'block';
+    el.noteText.value = item.note;
+    el.noteText.readOnly = true;
+    el.noteText.rows = Math.min(6, Math.max(2, item.note.split('\n').length));
+  } else {
+    el.noteText.style.display = 'none';
+    el.noteText.value = '';
+  }
 
   el.cycleRow.style.display = config.cycle.show ? 'flex' : 'none';
   if (config.cycle.show) {
@@ -855,6 +869,7 @@ function renderEmptyState() {
   el.readonlyHint.style.display = 'none';
   el.noteText.value = '';
   el.noteText.readOnly = true;
+  el.noteText.style.display = 'none';
   el.cycleRow.style.display = 'none';
   el.tagRow.style.display = 'none';
   el.addTagRow.style.display = 'none';
