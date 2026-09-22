@@ -1175,12 +1175,21 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
 });
 
 // 開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+// 「加入日曆」：週期已經設定好的話直接用；週期是空的話這裡問一次要用哪個週期，
+// 只用來產生這次的日曆連結，不會寫回試算表（跟「選週期＝完成」那條規則無關，不會觸發完成）。
+// 建好日曆連結後，這項的任務已經轉移到 Google 日曆，直接把它從「表單回覆 1」刪除（進垃圾桶，可救回）。
 armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   const item = currentItem();
   if (!item || item.source !== 'multi') return;
 
-  const rrule = CYCLE_RRULE_MAP[item.cycle];
-  if (!rrule) { showStatus('週期是空的（紅色），請先在上面選好週期才能加入日曆', true); return; }
+  let rrule = CYCLE_RRULE_MAP[item.cycle];
+  if (!rrule) {
+    const options = Object.values(CYCLE_MAP);
+    const input = prompt('這項還沒有設定週期，請輸入下面其中一個週期文字（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
+    if (input === null) return; // 使用者取消
+    rrule = CYCLE_RRULE_MAP[input.trim()];
+    if (!rrule) { showStatus('沒有找到這個週期，請輸入清單中完全一樣的文字', true); return; }
+  }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
   const start = new Date();
@@ -1197,6 +1206,18 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     recur: rrule
   });
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+
+  stopSpeakingIfNeeded();
+  const row = item.row;
+  removeItemFromLists(item);
+  showStatus('已開啟日曆連結，並從「表單回覆 1」刪除這項');
+  SOURCE_CONFIG.multi.delete.run(item)
+    .then(() => reindexRowsAfterDelete('multi', row))
+    .catch(err => {
+      showStatus('日曆連結已開啟，但刪除失敗，請到 index.html 手動刪除：' + err.message, true);
+      allItems.push(item);
+      applyFilter(currentFilter);
+    });
 });
 
 // 「平日禱告／週末禱告」：把到期日改到最近的平日／週末。
