@@ -93,6 +93,9 @@
     font-size: 15px; background: white;
   }
   .meta-field.cycle select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
+  .meta-field.cycle select.cycle-empty {
+    background: #ff8a80; border: 1px solid #d32f2f; color: #7a0000; font-weight: bold;
+  }
   .meta-field.tag select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .meta-field.weekday select { background: var(--main-primary-light); border: 1px solid var(--border-strong); }
   .note {
@@ -843,6 +846,9 @@ function renderFromView(pos) {
   el.cycleRow.style.display = config.cycle.show ? 'flex' : 'none';
   if (config.cycle.show) {
     populateSelect(el.cycleSelect, config.cycle.options, '選擇週期', item.cycle);
+    // 跟 index.html 一致：週期沒設定時用紅底醒目提示，不然「加入日曆」「禱告更多/更少」這些
+    // 需要先設定週期的按鈕按下去沒反應，使用者會看不出來是因為週期是空的
+    el.cycleSelect.classList.toggle('cycle-empty', !el.cycleSelect.value);
   }
 
   el.tagRow.style.display = config.tag.show ? 'flex' : 'none';
@@ -947,6 +953,7 @@ el.cycleSelect.addEventListener('change', () => {
   const item = currentItem();
   const config = currentConfig();
   if (!item || !config || !config.cycle.show || !el.cycleSelect.value) return;
+  el.cycleSelect.classList.remove('cycle-empty');
   const oldCycle = item.cycle;
   const newCycle = el.cycleSelect.value;
   const row = item.row;
@@ -978,6 +985,7 @@ el.cycleSelect.addEventListener('change', () => {
       // 同步失敗就把畫面上的週期改回原本的值，避免「選單顯示新週期，但試算表其實沒改到」的錯覺
       item.cycle = oldCycle;
       el.cycleSelect.value = oldCycle || '';
+      el.cycleSelect.classList.toggle('cycle-empty', !oldCycle);
       showStatus('週期同步失敗，請重試一次：' + err.message, true);
     });
 });
@@ -1172,7 +1180,7 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   if (!item || item.source !== 'multi') return;
 
   const rrule = CYCLE_RRULE_MAP[item.cycle];
-  if (!rrule) { showStatus('請先設定週期才能加入日曆'); return; }
+  if (!rrule) { showStatus('週期是空的（紅色），請先在上面選好週期才能加入日曆', true); return; }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
   const start = new Date();
@@ -1245,7 +1253,7 @@ function shiftCycleAndComplete(direction) {
   if (!item || item.source !== 'multi') return;
 
   const idx = CYCLE_ORDER.findIndex(code => CYCLE_MAP[code] === item.cycle);
-  if (idx === -1) { showStatus('請先設定週期，才能用這個按鈕調整'); return; }
+  if (idx === -1) { showStatus('週期是空的（紅色），請先在上面選好週期才能用這個按鈕', true); return; }
   const newIdx = idx + direction;
   if (newIdx < 0) { showStatus('已經是最密集的週期了'); return; }
   if (newIdx >= CYCLE_ORDER.length) { showStatus('已經是最疏鬆的週期了'); return; }
