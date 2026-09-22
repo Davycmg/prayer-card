@@ -725,6 +725,14 @@
     <span>純朗讀模式（不標記完成）</span>
   </div>
 
+  <div class="toggle-row">
+    <label class="switch">
+      <input type="checkbox" id="tcRandomOrderToggle" checked>
+      <span class="slider"></span>
+    </label>
+    <span>隨機排序</span>
+  </div>
+
   <div class="jump-row">
     <input type="number" id="tcJumpInput" placeholder="第幾項" min="1">
     <button id="tcJumpBtn">跳到</button>
@@ -829,6 +837,21 @@ function sortItemsByCycleDesc(items) {
   };
   items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
 }
+// 洗牌演算法（Fisher-Yates），打亂陣列順序。跟 index.html 的 shuffleItems 完全一致
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+// 依照「隨機排序」勾選狀態排列卡片瀏覽清單，跟 index.html 的 applyOrderPreference 一致
+function tcApplyOrderPreference(items) {
+  if (el.tcRandomOrderToggle && el.tcRandomOrderToggle.checked) {
+    shuffleItems(items);
+  } else {
+    sortItemsByCycleDesc(items);
+  }
+}
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
 const WEEKDAY_MAP = {
   '週一': '週一', '週二': '週二', '週三': '週三', '週四': '週四',
@@ -890,6 +913,7 @@ const el = {
   tcSpeakBtn: document.getElementById('tcSpeakBtn'),
   tcRepeatOptions: document.getElementById('tcRepeatOptions'),
   tcPureReadToggle: document.getElementById('tcPureReadToggle'),
+  tcRandomOrderToggle: document.getElementById('tcRandomOrderToggle'),
   tcJumpInput: document.getElementById('tcJumpInput'),
   tcJumpBtn: document.getElementById('tcJumpBtn'),
   tcExportAllBtn: document.getElementById('tcExportAllBtn'),
@@ -1028,7 +1052,7 @@ el.tagQueryBtn.addEventListener('click', async () => {
   try {
     const data = await apiCall(queryParams);
     tcItemsCache = data.items || [];
-    sortItemsByCycleDesc(tcItemsCache); // 跟 index.html 一致：沒有週期的最先，接著週期長到短
+    tcApplyOrderPreference(tcItemsCache); // 隨機排序開啟時洗牌，否則沿用 index.html 的週期排序規則
     tcCachePos = 0;
     tcFromTagQuery = true; // 這次卡片瀏覽是從「依標籤查詢」叫出來的，移除標籤後這張卡片要從清單消失
 
@@ -1088,6 +1112,7 @@ el.keywordQueryBtn.addEventListener('click', async () => {
       // 卡片瀏覽需要試算表的列號（row）才能翻頁/編輯/完成，Google Tasks 項目沒有列號，卡片模式只收表單回覆1的結果
       if (sheetItems.length === 0) { showStatus(el.status, '沒有符合的項目（Google Tasks 的結果不支援卡片瀏覽，請改用清單模式）'); return; }
       tcItemsCache = sheetItems;
+      tcApplyOrderPreference(tcItemsCache);
       tcCachePos = 0;
       tcFromTagQuery = false; // 關鍵字查詢叫出的卡片瀏覽，移除標籤只是清空欄位，卡片不會消失
       el.listView.style.display = 'none';
@@ -1484,6 +1509,14 @@ el.tcRandomBtn.addEventListener('click', () => {
   tcRenderFromCache(Math.floor(Math.random() * tcItemsCache.length));
 });
 
+el.tcRandomOrderToggle.addEventListener('change', () => {
+  if (tcItemsCache.length === 0) return;
+  tcStopSpeakingIfNeeded();
+  tcApplyOrderPreference(tcItemsCache);
+  tcCachePos = 0;
+  tcRenderFromCache(0);
+});
+
 el.tcJumpBtn.addEventListener('click', () => {
   if (tcItemsCache.length === 0) { showStatus(el.tcStatus, '目前沒有項目'); return; }
   const val = parseInt(el.tcJumpInput.value, 10);
@@ -1803,7 +1836,7 @@ armConfirmButton(el.tcMergeSearchBtn, '再按一次確認合併', async () => {
       // 目前標籤瀏覽清單的列號/內容可能已變動，重新查詢一次
       const data = await apiCall({ action: 'getItemsByTag', tag: el.tagQuerySelect.value });
       tcItemsCache = data.items || [];
-      sortItemsByCycleDesc(tcItemsCache);
+      tcApplyOrderPreference(tcItemsCache);
       tcRenderFromCache(tcCachePos);
     }
   } catch (err) {
