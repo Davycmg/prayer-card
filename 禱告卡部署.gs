@@ -1012,7 +1012,7 @@ function doGet(e) {
         result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value);
         break;
       case 'exportCalendarEventToPrayerSheet':
-        result = exportCalendarEventToPrayerSheet(e.parameter.value, e.parameter.cycle);
+        result = exportCalendarEventToPrayerSheet(e.parameter.value, e.parameter.cycle, e.parameter.note);
         break;
       case 'exportCalendarEventToTasks':
         result = exportCalendarEventToTasks(e.parameter.value);
@@ -1258,12 +1258,13 @@ function updateCalendarEventTitle(eventId, recurringEventId, value) {
 /**
  * 把「為習慣禱告」（calendar.html）的一個行程連同週期，匯出成「表單回覆 1」的一筆新資料，
  * 讓它從此也出現在禱告卡片（index.html）的清單裡。只新增一列，不會動到原本的日曆行程。
- * 欄位對照：A時間戳記（現在時間）、B事項（value）、C DG 週期（cycle）、D~H留白（本次禱告時間留白＝立刻出現在待禱告清單）。
+ * 欄位對照：A時間戳記（現在時間）、B事項（value）、C DG 週期（cycle）、D備註（note，選填）、
+ * E~H留白（本次禱告時間留白＝立刻出現在待禱告清單）。
  */
-function exportCalendarEventToPrayerSheet(value, cycle) {
+function exportCalendarEventToPrayerSheet(value, cycle, note) {
   if (!value) throw new Error('缺少事項內容');
   const sheet = getSheet_();
-  sheet.appendRow([new Date(), value, cycle || '', '', '', '', '', '']);
+  sheet.appendRow([new Date(), value, cycle || '', note || '', '', '', '', '']);
   return { exported: true };
 }
 
