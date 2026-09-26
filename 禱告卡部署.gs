@@ -297,12 +297,23 @@ function handleTagExportEdit_(e) {
  * 確保兩邊行為一致（因為程式碼寫入儲存格不會觸發onEdit，手機版必須主動呼叫這個函式才會生效）。
  * 回傳 true 代表已成功複製到對應的 Google Tasks 清單。
  */
+/**
+ * 組出複製到 Google Tasks 時要用的標題：原本的「週期-事項」規則，再加上最前面固定的「1」前綴。
+ * 「選擇星期標籤」跟「複製到 Tasks」按鈕這兩個匯出路徑都共用這個規則。
+ */
+function buildTaskExportTitle_(cycle, text) {
+  const base = cycle ? (cycle + '-' + text) : text;
+  return '1' + base;
+}
+
 function exportWeekdayTagIfMatched_(sheet, row) {
   const tagVal = sheet.getRange(row, COL.TAG).getValue().toString().trim();
   const listName = WEEKDAY_TASK_LISTS[tagVal];
   if (!listName) return false; // 不是週幾標籤，不用處理
 
-  const title = sheet.getRange(row, COL.TEXT).getValue().toString();
+  const cycle = sheet.getRange(row, COL.CYCLE).getValue().toString().trim();
+  const text = sheet.getRange(row, COL.TEXT).getValue().toString();
+  const title = buildTaskExportTitle_(cycle, text);
   const notes = sheet.getRange(row, COL.NOTE).getValue().toString();
 
   try {
@@ -337,7 +348,7 @@ function findOrCreateTaskList_(name) {
 function copyRowToDefaultTaskList_(sheet, row) {
   const text = sheet.getRange(row, COL.TEXT).getValue().toString();
   const cycle = sheet.getRange(row, COL.CYCLE).getValue().toString().trim();
-  const title = cycle ? (cycle + '-' + text) : text;
+  const title = buildTaskExportTitle_(cycle, text);
   const notes = sheet.getRange(row, COL.NOTE).getValue().toString();
   return copyTextToDefaultTaskList_(title, notes, '列 ' + row);
 }
