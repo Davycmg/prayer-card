@@ -548,8 +548,9 @@ let activeSources = new Set(ALL_SOURCES);
 let customTagsCache = [];
 let saveTimer = null;
 
-// ===== 「隨機一項」不重複抽取：記住這一輪已經抽過的項目，直到目前顯示的項目都抽過一輪才重置。
-// 存在 localStorage，重新整理頁面也記得，跟 index.html 的「隨機一項」單純每次都真隨機不一樣。
+// ===== 「這一輪看過了」的記憶：不管是用隨機一項、下一項、上一項、跳到第幾項看到的，
+// 都算這一輪「看過」，直到目前顯示的項目全部看過一輪才重置。存在 localStorage，重新整理頁面也記得，
+// 跟 index.html 的「隨機一項」單純每次都真隨機不一樣。
 const DRAWN_KEYS_STORAGE_KEY = 'allHtml_drawnKeys';
 function keyOf(item) {
   const id = item.row !== undefined ? 'r' + item.row : 'i' + item.id;
@@ -569,6 +570,13 @@ function saveDrawnKeys() {
   } catch (err) { /* 存不進去就算了，不影響本次抽取 */ }
 }
 let drawnKeys = loadDrawnKeys();
+function markAsSeen(item) {
+  const key = keyOf(item);
+  if (!drawnKeys.has(key)) {
+    drawnKeys.add(key);
+    saveDrawnKeys();
+  }
+}
 
 const el = {
   progress: document.getElementById('progress'),
@@ -847,6 +855,7 @@ function renderFromView(pos) {
   cachePos = ((pos % viewItems.length) + viewItems.length) % viewItems.length;
   const item = viewItems[cachePos];
   const config = SOURCE_CONFIG[item.source];
+  markAsSeen(item);
 
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
   el.sourceBadge.textContent = config.label;
@@ -1401,17 +1410,15 @@ el.randomBtn.addEventListener('click', () => {
   flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
 
-  let notDrawnYet = viewItems.filter(it => !drawnKeys.has(keyOf(it)));
-  if (notDrawnYet.length === 0) {
-    // 目前顯示的這些項目這一輪都抽過了，重置這一輪、重新開始抽
+  let notSeenYet = viewItems.filter(it => !drawnKeys.has(keyOf(it)));
+  if (notSeenYet.length === 0) {
+    // 目前顯示的這些項目這一輪都看過了（不管是用隨機/翻頁/跳頁看到的），重置這一輪、重新開始抽
     viewItems.forEach(it => drawnKeys.delete(keyOf(it)));
-    notDrawnYet = viewItems.slice();
-    showStatus('這一輪都抽過了，重新開始');
+    notSeenYet = viewItems.slice();
+    showStatus('這一輪都看過了，重新開始');
   }
-  const picked = notDrawnYet[Math.floor(Math.random() * notDrawnYet.length)];
-  drawnKeys.add(keyOf(picked));
-  saveDrawnKeys();
-  renderFromView(viewItems.indexOf(picked));
+  const picked = notSeenYet[Math.floor(Math.random() * notSeenYet.length)];
+  renderFromView(viewItems.indexOf(picked)); // renderFromView 本身就會把這項標記成「看過」
 });
 
 el.jumpBtn.addEventListener('click', () => {
