@@ -541,9 +541,34 @@ const SOURCE_CONFIG = {
 let allItems = [];
 let viewItems = [];
 let cachePos = 0;
-let currentFilter = 'all';
+// 篩選鈕改成可以複選：activeSources 是目前勾選的來源集合，「全部」是快速全選的捷徑按鈕，
+// 不是獨立的第五個來源。預設全選（等同原本的「全部」）。
+const ALL_SOURCES = ['habit', 'network', 'multi', 'task'];
+let activeSources = new Set(ALL_SOURCES);
 let customTagsCache = [];
 let saveTimer = null;
+
+// ===== 「隨機一項」不重複抽取：記住這一輪已經抽過的項目，直到目前顯示的項目都抽過一輪才重置。
+// 存在 localStorage，重新整理頁面也記得，跟 index.html 的「隨機一項」單純每次都真隨機不一樣。
+const DRAWN_KEYS_STORAGE_KEY = 'allHtml_drawnKeys';
+function keyOf(item) {
+  const id = item.row !== undefined ? 'r' + item.row : 'i' + item.id;
+  return item.source + '|' + id;
+}
+function loadDrawnKeys() {
+  try {
+    const raw = localStorage.getItem(DRAWN_KEYS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (err) {
+    return new Set();
+  }
+}
+function saveDrawnKeys() {
+  try {
+    localStorage.setItem(DRAWN_KEYS_STORAGE_KEY, JSON.stringify(Array.from(drawnKeys)));
+  } catch (err) { /* 存不進去就算了，不影響本次抽取 */ }
+}
+let drawnKeys = loadDrawnKeys();
 
 const el = {
   progress: document.getElementById('progress'),
@@ -691,7 +716,7 @@ function loadSource(generation, source, label, promise, normalize) {
         allItems.push(item);
       });
       if (source === 'multi' && data.custom) customTagsCache = data.custom;
-      applyFilter(currentFilter);
+      applyFilter();
     })
     .catch(err => {
       if (generation !== loadGeneration) return;
@@ -733,9 +758,8 @@ function shuffleItems(items) {
   }
 }
 
-function applyFilter(filter) {
-  currentFilter = filter;
-  viewItems = filter === 'all' ? allItems : allItems.filter(it => it.source === filter);
+function applyFilter() {
+  viewItems = allItems.filter(it => activeSources.has(it.source));
 
   // 跟 index.html 一致：隨機排序開關對任何篩選都適用（多方禱告以外的來源沒有 CYCLE_MAP 週期格式，
   // 「依週期排序」對它們等於維持原順序，不影響顯示，但開關本身不限來源都能用）
@@ -752,7 +776,7 @@ function applyFilter(filter) {
 
 el.randomOrderToggle.addEventListener('change', () => {
   stopSpeakingIfNeeded();
-  applyFilter(currentFilter);
+  applyFilter();
 });
 
 function updateBreakdown() {
@@ -897,13 +921,31 @@ function renderEmptyState() {
   el.exportToFormBtn.style.display = 'none';
 }
 
+function updateFilterButtonsUI() {
+  el.filterRow.querySelectorAll('button[data-source]').forEach(btn => {
+    const source = btn.dataset.source;
+    const isActive = source === 'all' ? activeSources.size === ALL_SOURCES.length : activeSources.has(source);
+    btn.classList.toggle('active', isActive);
+  });
+}
+
 el.filterRow.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-source]');
   if (!btn) return;
   stopSpeakingIfNeeded();
   flushPendingSaveIfAny();
-  el.filterRow.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
-  applyFilter(btn.dataset.source);
+
+  const source = btn.dataset.source;
+  if (source === 'all') {
+    activeSources = new Set(ALL_SOURCES);
+  } else if (activeSources.has(source)) {
+    if (activeSources.size === 1) { showStatus('至少要選一個來源'); return; }
+    activeSources.delete(source);
+  } else {
+    activeSources.add(source);
+  }
+  updateFilterButtonsUI();
+  applyFilter();
 });
 
 // ===== 文字/備註編輯：打字停頓 1 秒後才背景送出，切項目前會先強制送出，避免存錯項目 =====
@@ -984,7 +1026,7 @@ el.cycleSelect.addEventListener('change', () => {
         // 但試算表其實沒改到，重新整理後這項又跑回來，會誤以為出了怪異的 bug
         showStatus('同步失敗，請檢查網路：' + err.message, true);
         allItems.push(item);
-        applyFilter(currentFilter);
+        applyFilter();
       });
     return;
   }
@@ -1131,7 +1173,7 @@ el.completeBtn.addEventListener('click', () => {
   config.complete(item).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message, true);
     allItems.push(item);
-    applyFilter(currentFilter);
+    applyFilter();
   });
 });
 
@@ -1158,7 +1200,7 @@ el.deleteBtn.addEventListener('click', () => {
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
       allItems.push(item);
-      applyFilter(currentFilter);
+      applyFilter();
     });
 });
 
@@ -1228,7 +1270,7 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     .catch(err => {
       showStatus('日曆連結已開啟，但刪除失敗，請到 index.html 手動刪除：' + err.message, true);
       allItems.push(item);
-      applyFilter(currentFilter);
+      applyFilter();
     });
 });
 
@@ -1267,7 +1309,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
       showStatus('同步失敗，請重新再按一次：' + err.message, true);
       if (!staysDue) {
         allItems.push(item);
-        applyFilter(currentFilter);
+        applyFilter();
       }
     });
 }
@@ -1336,7 +1378,7 @@ function shiftCycleAndComplete(direction) {
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
       allItems.push(item);
-      applyFilter(currentFilter);
+      applyFilter();
     });
 }
 
@@ -1358,7 +1400,18 @@ el.randomBtn.addEventListener('click', () => {
   if (viewItems.length === 0) return;
   flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
-  renderFromView(Math.floor(Math.random() * viewItems.length));
+
+  let notDrawnYet = viewItems.filter(it => !drawnKeys.has(keyOf(it)));
+  if (notDrawnYet.length === 0) {
+    // 目前顯示的這些項目這一輪都抽過了，重置這一輪、重新開始抽
+    viewItems.forEach(it => drawnKeys.delete(keyOf(it)));
+    notDrawnYet = viewItems.slice();
+    showStatus('這一輪都抽過了，重新開始');
+  }
+  const picked = notDrawnYet[Math.floor(Math.random() * notDrawnYet.length)];
+  drawnKeys.add(keyOf(picked));
+  saveDrawnKeys();
+  renderFromView(viewItems.indexOf(picked));
 });
 
 el.jumpBtn.addEventListener('click', () => {
@@ -1455,7 +1508,7 @@ async function runAutoPlay() {
       config.complete(item).catch(err => {
         showStatus('同步失敗：' + err.message, true);
         allItems.push(item);
-        applyFilter(currentFilter);
+        applyFilter();
       });
       removeItemFromLists(item);
 
