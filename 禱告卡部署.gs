@@ -1858,9 +1858,23 @@ const CYCLE_PLAIN_LABEL_MAP_ = (function () {
   return map;
 })();
 
+// CYCLE_MAP 的值本身（如「2每兩天」「W每週」，帶編號/字母代碼的完整寫法）也可能直接
+// 出現在標題前綴——「複製到 Tasks」匯出時（buildTaskExportTitle_）用的就是這個格式——
+// 所以要跟純中文寫法（CYCLE_PLAIN_LABEL_MAP_）一起查表，兩種寫法都認得。
+const CYCLE_FULL_LABEL_SET_ = (function () {
+  const set = {};
+  Object.keys(CYCLE_MAP).forEach(code => {
+    set[CYCLE_MAP[code]] = CYCLE_MAP[code];
+  });
+  return set;
+})();
+
 /**
- * 解析 Google Tasks 標題開頭的「週期-」前綴（例如「每季-同工會：...」）。
- * 有對應到週期就回傳 { cycle, text }（text 是去掉前綴後的標題)，沒有就回傳 null。
+ * 解析 Google Tasks 標題開頭的「週期-」前綴，純中文寫法（例如「每季-同工會：...」）跟
+ * 帶代碼的完整寫法（例如「2每兩天-...」「W每週-...」）都認得。
+ * 標題開頭疊了好幾段前綴（例如舊的匯出殘留沒拆乾淨，變成「2每兩天-W每週-同工會：...」）時，
+ * 全部依序拆掉，但只採用最前面（最新）那一段當週期。
+ * 有對應到週期就回傳 { cycle, text }（text 是去掉所有前綴後的標題)，沒有就回傳 null。
  */
 // 常見異體字容錯：週/周、兩/二 視為同一個字，比對前綴時先正規化再查表
 function normalizeCyclePrefixText_(text) {
@@ -1868,13 +1882,22 @@ function normalizeCyclePrefixText_(text) {
 }
 
 function extractCyclePrefixFromTitle_(title) {
-  const match = title.match(/^([一-龥]+)-(.*)$/);
-  if (!match) return null;
-  const cycle = CYCLE_PLAIN_LABEL_MAP_[normalizeCyclePrefixText_(match[1])];
-  if (!cycle) return null;
-  const text = match[2].trim();
-  if (!text) return null;
-  return { cycle: cycle, text: text };
+  let text = title;
+  let cycle = null;
+
+  while (true) {
+    const match = text.match(/^([A-Za-z0-9]*[一-龥]+)-(.*)$/);
+    if (!match) break;
+    const normalized = normalizeCyclePrefixText_(match[1]);
+    const matchedCycle = CYCLE_FULL_LABEL_SET_[normalized] || CYCLE_PLAIN_LABEL_MAP_[normalized];
+    if (!matchedCycle) break;
+    const rest = match[2].trim();
+    if (!rest) break; // 前綴後面沒有其他文字了，不繼續拆，避免整個標題被吃光
+    cycle = cycle || matchedCycle;
+    text = rest;
+  }
+
+  return cycle ? { cycle: cycle, text: text } : null;
 }
 
 function importGoogleTasksToday_() {
