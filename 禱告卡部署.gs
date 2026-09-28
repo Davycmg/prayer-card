@@ -1376,9 +1376,47 @@ function searchGoogleTasks(keyword) {
 // 禱告首頁「隨機抽任務」用：已抽過的 Task ID 清單，存在 PropertiesService（跟這份試算表綁定）
 const DRAWN_TASK_IDS_PROP_KEY = 'drawnTaskIds';
 
+// 禱告首頁「隨機抽任務」用：把每次抽到的任務記錄到這個日曆，當作實際花費時間的紀錄
+const DRAW_TASK_CALENDAR_ID = '84bd77a44cae8733190797728561b22f16a8458aa1ea4e012c4e6c3fc847d5ec@group.calendar.google.com';
+const DRAW_TASK_DEFAULT_DURATION_MINUTES = 5;
+// 上一筆「抽任務」事件的 ID，存在 PropertiesService，讓下一次點擊可以回填它的結束時間
+const LAST_DRAW_TASK_EVENT_ID_PROP_KEY = 'lastDrawTaskEventId';
+
+/**
+ * 把這次點擊「隨機抽任務」的時間記錄到 DRAW_TASK_CALENDAR_ID：
+ * 這個時間是新任務的開始時間，同時也是「上一個任務」事件的結束時間（回填上一筆事件的 end）。
+ * 新事件預設結束時間是開始時間 + 5 分鐘，等下一次點擊時會被回填成真正的結束時間；
+ * 如果之後都沒有再點擊，最後一筆事件就會維持這個預設 5 分鐘的長度。
+ */
+function logDrawnTaskToCalendar_(taskText) {
+  const now = new Date();
+  const props = PropertiesService.getDocumentProperties();
+  const lastEventId = props.getProperty(LAST_DRAW_TASK_EVENT_ID_PROP_KEY);
+
+  if (lastEventId) {
+    try {
+      const lastEvent = Calendar.Events.get(DRAW_TASK_CALENDAR_ID, lastEventId);
+      lastEvent.end = { dateTime: now.toISOString() };
+      Calendar.Events.patch(lastEvent, DRAW_TASK_CALENDAR_ID, lastEventId);
+    } catch (err) {
+      // 上一筆事件可能已被刪除或找不到，忽略，直接建立新的一筆
+    }
+  }
+
+  const defaultEnd = new Date(now.getTime() + DRAW_TASK_DEFAULT_DURATION_MINUTES * 60 * 1000);
+  const newEvent = Calendar.Events.insert({
+    summary: taskText,
+    start: { dateTime: now.toISOString() },
+    end: { dateTime: defaultEnd.toISOString() }
+  }, DRAW_TASK_CALENDAR_ID);
+
+  props.setProperty(LAST_DRAW_TASK_EVENT_ID_PROP_KEY, newEvent.id);
+}
+
 /**
  * 從 Google Tasks 預設清單的未完成項目裡隨機抽一筆，抽過的記住（存在 PropertiesService），
  * 下次抽選會排除已抽過的，直到全部都抽完才自動重新開始一輪。
+ * 每次抽到的任務也會記錄到 DRAW_TASK_CALENDAR_ID（見 logDrawnTaskToCalendar_）。
  */
 function drawRandomTask() {
   const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
@@ -1418,6 +1456,8 @@ function drawRandomTask() {
   const picked = candidates[Math.floor(Math.random() * candidates.length)];
   drawnIds.push(picked.id);
   props.setProperty(DRAWN_TASK_IDS_PROP_KEY, JSON.stringify(drawnIds));
+
+  logDrawnTaskToCalendar_(picked.text);
 
   return {
     task: picked,
