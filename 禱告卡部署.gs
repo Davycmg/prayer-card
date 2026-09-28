@@ -1378,15 +1378,15 @@ const DRAWN_TASK_IDS_PROP_KEY = 'drawnTaskIds';
 
 // 禱告首頁「隨機抽任務」用：把每次抽到的任務記錄到這個日曆，當作實際花費時間的紀錄
 const DRAW_TASK_CALENDAR_ID = '84bd77a44cae8733190797728561b22f16a8458aa1ea4e012c4e6c3fc847d5ec@group.calendar.google.com';
-const DRAW_TASK_DEFAULT_DURATION_MINUTES = 5;
+const DRAW_TASK_DEFAULT_DURATION_MINUTES = 1;
 // 上一筆「抽任務」事件的 ID，存在 PropertiesService，讓下一次點擊可以回填它的結束時間
 const LAST_DRAW_TASK_EVENT_ID_PROP_KEY = 'lastDrawTaskEventId';
 
 /**
  * 把這次點擊「隨機抽任務」的時間記錄到 DRAW_TASK_CALENDAR_ID：
  * 這個時間是新任務的開始時間，同時也是「上一個任務」事件的結束時間（回填上一筆事件的 end）。
- * 新事件預設結束時間是開始時間 + 5 分鐘，等下一次點擊時會被回填成真正的結束時間；
- * 如果之後都沒有再點擊，最後一筆事件就會維持這個預設 5 分鐘的長度。
+ * 新事件預設結束時間是開始時間 + 1 分鐘，等下一次點擊時會被回填成真正的結束時間；
+ * 如果之後都沒有再點擊，最後一筆事件就會維持這個預設 1 分鐘的長度。
  */
 function logDrawnTaskToCalendar_(taskText) {
   const now = new Date();
