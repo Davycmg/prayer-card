@@ -1031,6 +1031,9 @@ function doGet(e) {
       case 'getTodayTasksList':
         result = getTodayTasksList();
         break;
+      case 'getPrefixTasksList':
+        result = getPrefixTasksList(e.parameter.prefix);
+        break;
       case 'updateTaskTitle':
         result = updateTaskTitle(e.parameter.taskId, e.parameter.value, e.parameter.listId);
         break;
@@ -1310,6 +1313,17 @@ function getTodayTasksList() {
     };
   });
 
+  return { items: items, total: items.length };
+}
+
+/**
+ * 列出 Google Tasks 預設清單裡「未完成」且標題以指定前綴開頭的任務（nonwork.html「為非工作事務禱告」用，前綴預設 H）。
+ * 跟 getTodayTasksList 一樣即時抓取、不存檔；標題原樣回傳（含前綴），編輯時才不會弄掉前綴。
+ */
+function getPrefixTasksList(prefix) {
+  const p = prefix || 'H';
+  const all = getTodayTasksList().items;
+  const items = all.filter(function (t) { return t.text.indexOf(p) === 0; });
   return { items: items, total: items.length };
 }
 

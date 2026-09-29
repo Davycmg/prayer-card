@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>為非工作事務禱告</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
+<style>
+  :root {
+    --purple: #3d4a5c;
+    --purple-light: #dde1e6;
+    --green: #3d7a68;
+    --yellow: #e6d9c8;
+    --gray-bg: #f0f1f2;
+    --text-main: #2a2f36;
+    --text-sub: #6b7280;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .header {
+    width: 100%;
+    max-width: 480px;
+    text-align: center;
+    padding: 12px 0;
+  }
+  .header h1 {
+    font-size: 20px;
+    color: var(--purple);
+    margin: 0;
+  }
+  .progress {
+    font-size: 14px;
+    color: var(--text-sub);
+    margin-top: 4px;
+  }
+  .card {
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px 20px;
+    margin-top: 12px;
+  }
+  .prayer-text {
+    font-size: 22px;
+    line-height: 1.6;
+    min-height: 100px;
+    white-space: pre-wrap;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    resize: none;
+    color: var(--text-main);
+  }
+  .note {
+    margin-top: 14px;
+    font-size: 13px;
+    color: var(--text-sub);
+    white-space: pre-wrap;
+  }
+  .export-btn {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 16px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+    cursor: pointer;
+  }
+  .export-btn:active { opacity: 0.7; }
+  .danger-zone {
+    width: 100%;
+    max-width: 480px;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #e5e5e5;
+    display: flex;
+    justify-content: center;
+  }
+  .danger-zone button {
+    padding: 8px 18px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: transparent;
+    color: var(--green);
+    font-size: 13px;
+    opacity: 0.8;
+  }
+  .danger-zone button:active { opacity: 1; }
+  .controls {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+  }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--purple);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn.secondary { background: var(--green); }
+  .jump-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    justify-content: center;
+  }
+  .jump-row input {
+    width: 70px;
+    padding: 8px;
+    text-align: center;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .toggle-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .repeat-row {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .repeat-row .repeat-options {
+    display: flex;
+    gap: 6px;
+  }
+  .repeat-row button {
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--purple);
+    background: white;
+    color: var(--purple);
+    font-size: 14px;
+  }
+  .repeat-row button.active {
+    background: var(--purple);
+    color: white;
+  }
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc;
+    transition: .2s;
+    border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px; width: 18px;
+    left: 3px; bottom: 3px;
+    background-color: white;
+    transition: .2s;
+    border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--purple); }
+  input:checked + .slider:before { transform: translateX(20px); }
+  .status {
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    height: 16px;
+    text-align: center;
+  }
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: var(--purple);
+    display: none;
+  }
+  .loading-overlay.show { display: flex; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌿 為非工作事務禱告</h1>
+  <div class="progress" id="progress">載入中...</div>
+</div>
+
+<div class="card">
+  <textarea class="prayer-text" id="eventText" placeholder="目前沒有 H 開頭的待辦事項"></textarea>
+  <div class="note" id="noteText"></div>
+</div>
+
+<button class="export-btn" id="exportToSheetBtn">📤 匯出到禱告卡片清單（表單回覆 1）</button>
+
+<div class="danger-zone">
+  <button id="completeBtn">✅ 標記完成（從清單移除）</button>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="prevBtn">◀ 上一項</button>
+  <button class="btn" id="nextBtn">下一項 ▶</button>
+</div>
+
+<div class="controls">
+  <button class="btn secondary" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn" id="speakBtn" style="background: var(--purple);">🔊 開始朗讀</button>
+</div>
+
+<div class="repeat-row">
+  <span>每項朗讀次數：</span>
+  <div class="repeat-options" id="repeatOptions">
+    <button type="button" data-count="1">1 次</button>
+    <button type="button" data-count="2">2 次</button>
+    <button type="button" data-count="3">3 次</button>
+  </div>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="randomOrderToggle" checked>
+    <span class="slider"></span>
+  </label>
+  <span>隨機排序</span>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="pureReadToggle" checked disabled>
+    <span class="slider"></span>
+  </label>
+  <span>純朗讀模式（唸一輪自動停止）</span>
+</div>
+
+<div class="jump-row">
+  <input type="number" id="jumpInput" placeholder="第幾項" min="1">
+  <button id="jumpBtn">跳到</button>
+</div>
+
+<div class="status" id="status"></div>
+
+<div class="loading-overlay" id="loadingOverlay">處理中...</div>
+
+<script>
+// ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getPrefixTasksList 這組 action，只抓標題以 H 開頭的未完成任務）
+const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
+
+// ===== 本地暫存區：一次抓好 Google Tasks 預設清單裡「還沒完成」的項目，
+// 之後翻頁/隨機/跳項都用這份資料，不用再打API。
+// 這份清單本身就是即時抓取（不是存在試算表或其他地方的固定清單），
+// 所以每次打開這個頁面，都會自動反映當下 Google Tasks 預設清單的最新內容，達到「每天更新」的效果。
+let itemsCache = [];   // [{id, text, note}, ...]
+let cachePos = 0;
+let saveTimer = null;
+
+// ===== 「這一輪看過了」的記憶（邏輯跟 all.html 一致）：不管是用隨機一項、上一項、下一項、跳到第幾項看到的，
+// 都算這一輪「看過」，直到目前清單全部看過一輪才重置。存在 localStorage，重新整理頁面也記得。
+const DRAWN_KEYS_STORAGE_KEY = 'nonworkHtml_drawnKeys';
+function keyOf(item) { return 'i' + item.id; }
+function loadDrawnKeys() {
+  try {
+    const raw = localStorage.getItem(DRAWN_KEYS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (err) {
+    return new Set();
+  }
+}
+function saveDrawnKeys() {
+  try {
+    localStorage.setItem(DRAWN_KEYS_STORAGE_KEY, JSON.stringify(Array.from(drawnKeys)));
+  } catch (err) { /* 存不進去就算了，不影響本次抽取 */ }
+}
+let drawnKeys = loadDrawnKeys();
+function markAsSeen(item) {
+  const key = keyOf(item);
+  if (!drawnKeys.has(key)) {
+    drawnKeys.add(key);
+    saveDrawnKeys();
+  }
+}
+
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+const el = {
+  randomOrderToggle: document.getElementById('randomOrderToggle'),
+  progress: document.getElementById('progress'),
+  eventText: document.getElementById('eventText'),
+  noteText: document.getElementById('noteText'),
+  exportToSheetBtn: document.getElementById('exportToSheetBtn'),
+  completeBtn: document.getElementById('completeBtn'),
+  prevBtn: document.getElementById('prevBtn'),
+  nextBtn: document.getElementById('nextBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  speakBtn: document.getElementById('speakBtn'),
+  repeatOptions: document.getElementById('repeatOptions'),
+  jumpInput: document.getElementById('jumpInput'),
+  jumpBtn: document.getElementById('jumpBtn'),
+  status: document.getElementById('status'),
+  loadingOverlay: document.getElementById('loadingOverlay')
+};
+
+function setLoading(show) {
+  el.loadingOverlay.classList.toggle('show', show);
+}
+
+function showStatus(msg) {
+  el.status.textContent = msg;
+  setTimeout(() => { el.status.textContent = ''; }, 1800);
+}
+
+async function apiCall(params) {
+  params._t = Date.now(); // 加時間戳記，繞過瀏覽器快取
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+function renderFromCache(pos) {
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+    return;
+  }
+  cachePos = ((pos % itemsCache.length) + itemsCache.length) % itemsCache.length;
+  const item = itemsCache[cachePos];
+  markAsSeen(item);
+
+  el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
+  el.eventText.value = item.text || '';
+  el.eventText.readOnly = false;
+  el.noteText.textContent = item.note ? ('備註：' + item.note) : '';
+}
+
+function renderEmptyState() {
+  el.progress.textContent = '第 0 項 / 共 0 項';
+  el.eventText.value = '🎉 目前沒有 H 開頭的待辦事項';
+  el.eventText.readOnly = true;
+  el.noteText.textContent = '';
+}
+
+async function loadTodayTasks() {
+  setLoading(true);
+  try {
+    const data = await apiCall({ action: 'getPrefixTasksList', prefix: 'H' });
+    itemsCache = data.items || [];
+    // 進頁面預設整份打亂順序（隨機排序開關開著時）；關掉就維持 Google Tasks 原順序
+    if (el.randomOrderToggle.checked) shuffleItems(itemsCache);
+    cachePos = 0;
+    renderFromCache(0);
+  } catch (err) {
+    showStatus('載入失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// 標題編輯 → 本地暫存同步更新 + 背景同步API（打字後停頓1秒才送出）
+// 注意：item 要在打字當下（cachePos 還沒被切換）就抓好存進 closure，
+// 不能等 setTimeout 觸發時才讀 cachePos，否則使用者打完字後立刻切到下一項，
+// 儲存會誤存到「切過去的那一項」，taskId 對不上導致同步失敗。
+el.eventText.addEventListener('input', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  const value = el.eventText.value;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    flushSave(item, value);
+  }, 1000);
+});
+
+function flushSave(item, value) {
+  item.text = value;
+  apiCall({ action: 'updateTaskTitle', taskId: item.id, value: value })
+    .then(() => showStatus('已同步'))
+    .catch(err => showStatus('同步失敗：' + err.message));
+}
+
+// 切換項目前，把還在等待中的編輯立刻送出，避免計時器留到下一項才觸發、存錯項目。
+function flushPendingSaveIfAny() {
+  if (saveTimer === null) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+  if (item && item.text !== el.eventText.value) {
+    flushSave(item, el.eventText.value);
+  }
+}
+
+// 匯出：把這一項複製成「表單回覆 1」的一筆新資料，讓它也出現在禱告卡片（index.html）的清單裡，
+// 不會動到原本的 Google Tasks 項目，可以重複按。
+el.exportToSheetBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  setLoading(true);
+  try {
+    await apiCall({ action: 'exportCalendarEventToPrayerSheet', value: item.text || '', cycle: '' });
+    showStatus('已匯出到禱告卡片清單');
+  } catch (err) {
+    showStatus('匯出失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+// 標記完成：把 Google Tasks 裡的這個項目標成完成，它就會從「未完成」清單消失，
+// 不是真的刪除，Google Tasks 裡還留著完成紀錄。
+el.completeBtn.addEventListener('click', async () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stopSpeakingIfNeeded();
+  setLoading(true);
+  try {
+    await apiCall({ action: 'completeTaskItem', taskId: item.id });
+    itemsCache.splice(cachePos, 1);
+    if (itemsCache.length === 0) {
+      renderEmptyState();
+    } else {
+      renderFromCache(cachePos);
+    }
+    showStatus('已標記完成');
+  } catch (err) {
+    showStatus('操作失敗：' + err.message);
+  } finally {
+    setLoading(false);
+  }
+});
+
+el.prevBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos - 1);
+});
+
+el.nextBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  renderFromCache(cachePos + 1);
+});
+
+el.randomBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+
+  let notSeenYet = itemsCache.filter(it => !drawnKeys.has(keyOf(it)));
+  if (notSeenYet.length === 0) {
+    // 這一輪都看過了，重置、重新開始抽
+    itemsCache.forEach(it => drawnKeys.delete(keyOf(it)));
+    notSeenYet = itemsCache.slice();
+    showStatus('這一輪都看過了，重新開始');
+  }
+  const picked = notSeenYet[Math.floor(Math.random() * notSeenYet.length)];
+  renderFromCache(itemsCache.indexOf(picked)); // renderFromCache 本身就會把這項標記成「看過」
+});
+
+// 切換隨機排序：重新排列目前清單（開＝洗牌；關＝回到 Google Tasks 原順序，重新載入）
+el.randomOrderToggle.addEventListener('change', () => {
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  if (el.randomOrderToggle.checked) {
+    shuffleItems(itemsCache);
+    cachePos = 0;
+    renderFromCache(0);
+  } else {
+    loadTodayTasks();
+  }
+});
+
+el.jumpBtn.addEventListener('click', () => {
+  if (itemsCache.length === 0) { showStatus('目前沒有 H 開頭的待辦事項'); return; }
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  flushPendingSaveIfAny();
+  renderFromCache(val - 1);
+  el.jumpInput.value = '';
+});
+
+// ===== 朗讀：純本地操作，唸完一輪自動停止，不會呼叫任何寫入API =====
+let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
+let autoPlayActive = false;
+let zhVoice = null;
+
+function updateRepeatButtons() {
+  el.repeatOptions.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === repeatCount);
+  });
+}
+el.repeatOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-count]');
+  if (!btn) return;
+  repeatCount = parseInt(btn.dataset.count, 10);
+  localStorage.setItem('prayerRepeatCount', String(repeatCount));
+  updateRepeatButtons();
+});
+updateRepeatButtons();
+
+function loadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  zhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function speakOnePass(text) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text || !text.trim()) { resolve(); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'zh-TW';
+    if (zhVoice) utter.voice = zhVoice;
+    utter.rate = 0.95;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+async function runAutoPlay() {
+  const totalAtStart = itemsCache.length;
+  let loopCount = 0;
+
+  try {
+    while (autoPlayActive) {
+      if (itemsCache.length === 0) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('目前沒有 H 開頭的待辦事項 🎉');
+        return;
+      }
+
+      for (let i = 0; i < repeatCount; i++) {
+        if (!autoPlayActive) return;
+        el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
+        await speakOnePass(el.eventText.value);
+      }
+      if (!autoPlayActive) return;
+
+      loopCount++;
+      if (loopCount >= totalAtStart) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('本輪已唸完一遍 🙏');
+        return;
+      }
+      renderFromCache(cachePos + 1);
+    }
+  } finally {
+    // 不管朗讀從哪個路徑結束（正常唸完、被停止、發生錯誤），都確保釋放螢幕喚醒鎖
+    releaseWakeLock();
+  }
+}
+
+// ===== 螢幕保持喚醒（避免朗讀途中因為太久沒碰螢幕而自動熄屏鎖定中斷）=====
+// 注意：這只能防止「自動熄屏」，如果手動按電源鍵鎖屏，系統仍會強制中斷背景分頁的執行，這是手機系統層級的限制。
+let wakeLock = null;
+
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (err) {
+    // 裝置不支援或無法取得，不影響其他功能，只是朗讀途中螢幕可能還是會自動熄屏
+  }
+}
+
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (err) { /* 忽略 */ }
+    wakeLock = null;
+  }
+}
+
+// 分頁切回前景時，如果朗讀還在進行中，嘗試重新取得喚醒鎖（有些瀏覽器切背景時會自動釋放）
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && autoPlayActive && !wakeLock) {
+    requestWakeLock();
+  }
+});
+
+el.speakBtn.addEventListener('click', () => {
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
+    return;
+  }
+  if (itemsCache.length === 0) { showStatus('目前沒有 H 開頭的待辦事項'); return; }
+  autoPlayActive = true;
+  requestWakeLock();
+  runAutoPlay();
+});
+
+function stopSpeakingIfNeeded() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
+  }
+}
+
+loadTodayTasks();
+</script>
+
+</body>
+</html>
