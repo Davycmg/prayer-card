@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>今日待辦禱告</title>
+<title>為非工作事務禱告</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📋</text></svg>">
 <style>
   :root {
@@ -239,12 +239,12 @@
 <body>
 
 <div class="header">
-  <h1>📋 今日待辦禱告</h1>
+  <h1>🌿 為非工作事務禱告</h1>
   <div class="progress" id="progress">載入中...</div>
 </div>
 
 <div class="card">
-  <textarea class="prayer-text" id="eventText" placeholder="今天沒有待辦事項"></textarea>
+  <textarea class="prayer-text" id="eventText" placeholder="目前沒有 H 開頭的待辦事項"></textarea>
   <div class="note" id="noteText"></div>
 </div>
 
@@ -299,7 +299,7 @@
 <div class="loading-overlay" id="loadingOverlay">處理中...</div>
 
 <script>
-// ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getTodayTasksList 這組 action）
+// ⚠️ 沿用禱告卡片同一個 Apps Script 部署網址（同一個後端，多加了 getPrefixTasksList 這組 action，只抓標題以 H 開頭的未完成任務）
 const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 
 // ===== 本地暫存區：一次抓好 Google Tasks 預設清單裡「還沒完成」的項目，
@@ -312,7 +312,7 @@ let saveTimer = null;
 
 // ===== 「這一輪看過了」的記憶（邏輯跟 all.html 一致）：不管是用隨機一項、上一項、下一項、跳到第幾項看到的，
 // 都算這一輪「看過」，直到目前清單全部看過一輪才重置。存在 localStorage，重新整理頁面也記得。
-const DRAWN_KEYS_STORAGE_KEY = 'todayHtml_drawnKeys';
+const DRAWN_KEYS_STORAGE_KEY = 'nonworkHtml_drawnKeys';
 function keyOf(item) { return 'i' + item.id; }
 function loadDrawnKeys() {
   try {
@@ -396,7 +396,7 @@ function renderFromCache(pos) {
 
 function renderEmptyState() {
   el.progress.textContent = '第 0 項 / 共 0 項';
-  el.eventText.value = '🎉 今天沒有待辦事項';
+  el.eventText.value = '🎉 目前沒有 H 開頭的待辦事項';
   el.eventText.readOnly = true;
   el.noteText.textContent = '';
 }
@@ -404,7 +404,7 @@ function renderEmptyState() {
 async function loadTodayTasks() {
   setLoading(true);
   try {
-    const data = await apiCall({ action: 'getTodayTasksList' });
+    const data = await apiCall({ action: 'getPrefixTasksList', prefix: 'H' });
     itemsCache = data.items || [];
     // 進頁面預設整份打亂順序（隨機排序開關開著時）；關掉就維持 Google Tasks 原順序
     if (el.randomOrderToggle.checked) shuffleItems(itemsCache);
@@ -537,7 +537,7 @@ el.randomOrderToggle.addEventListener('change', () => {
 });
 
 el.jumpBtn.addEventListener('click', () => {
-  if (itemsCache.length === 0) { showStatus('今天沒有待辦事項'); return; }
+  if (itemsCache.length === 0) { showStatus('目前沒有 H 開頭的待辦事項'); return; }
   const val = parseInt(el.jumpInput.value, 10);
   if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
   flushPendingSaveIfAny();
@@ -597,7 +597,7 @@ async function runAutoPlay() {
       if (itemsCache.length === 0) {
         autoPlayActive = false;
         el.speakBtn.textContent = '🔊 開始朗讀';
-        showStatus('今天沒有待辦事項 🎉');
+        showStatus('目前沒有 H 開頭的待辦事項 🎉');
         return;
       }
 
@@ -660,7 +660,7 @@ el.speakBtn.addEventListener('click', () => {
     releaseWakeLock();
     return;
   }
-  if (itemsCache.length === 0) { showStatus('今天沒有待辦事項'); return; }
+  if (itemsCache.length === 0) { showStatus('目前沒有 H 開頭的待辦事項'); return; }
   autoPlayActive = true;
   requestWakeLock();
   runAutoPlay();

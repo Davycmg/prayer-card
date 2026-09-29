@@ -34,6 +34,10 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 - 相關 action（`禱告卡部署.gs` 的 `doGet`）：`getTodayTasksList`（列出未完成項目）、`updateTaskTitle`（編輯標題會同步回 Google Tasks）、`completeTaskItem`（標記完成＝從清單移除，Google Tasks 裡仍保留完成紀錄，不是真的刪除）。
 - 前端沿用 `calendar.html` 的翻頁／隨機／朗讀邏輯，但拿掉「週期」欄位（Tasks 沒有週期概念），刪除鈕改成「標記完成」。
 
+## nonwork.html（為非工作事務禱告）
+
+`today.html` 的姊妹頁：同樣抓 Google Tasks 預設清單未完成項目，但只留標題以 `H` 開頭的任務（後端 action `getPrefixTasksList`，`prefix` 預設 `H`）。網址：`https://davycmg.github.io/prayer-card/nonwork.html`。跟 today.html 一樣進頁面預設隨機打亂、記憶已看過（localStorage key `nonworkHtml_drawnKeys`）。
+
 ## dg-network（另一個獨立的代禱表單／卡片專案）
 
 `dg-network/` 是同一套代禱表單＋代禱卡片工具的**另一份獨立部署**，給「DG網絡」這個群組用，跟根目錄的 prayer-card 是各自獨立的 Google 試算表 + Apps Script 專案（各自的 scriptId、各自的資料），**不要混用**。
