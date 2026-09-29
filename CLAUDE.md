@@ -36,7 +36,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 
 ## nonwork.html（為非工作事務禱告）
 
-`today.html` 的姊妹頁：同樣抓 Google Tasks 預設清單未完成項目，但只留標題以 `H` 開頭的任務（後端 action `getPrefixTasksList`，`prefix` 預設 `H`）。網址：`https://davycmg.github.io/prayer-card/nonwork.html`。跟 today.html 一樣進頁面預設隨機打亂、記憶已看過（localStorage key `nonworkHtml_drawnKeys`）。
+`today.html` 的姊妹頁：同樣抓 Google Tasks 預設清單未完成項目，但只留標題以 `H` 開頭的任務（後端 action `getPrefixTasksList`，`prefix` 預設 `H`；比對不分大小寫、全形半形視為相同、標題開頭空白忽略）。網址：`https://davycmg.github.io/prayer-card/nonwork.html`。跟 today.html 一樣進頁面預設隨機打亂、記憶已看過（localStorage key `nonworkHtml_drawnKeys`）。
 
 ## dg-network（另一個獨立的代禱表單／卡片專案）
 
