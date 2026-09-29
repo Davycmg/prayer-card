@@ -117,16 +117,6 @@
     margin-top: 10px;
   }
   .query-row a.btn:active { opacity: 0.7; }
-  .query-row a.btn.row-with-progress {
-    justify-content: space-between;
-    padding-left: 20px;
-    padding-right: 20px;
-  }
-  .query-row .row-progress {
-    font-size: 12px;
-    font-weight: normal;
-    color: var(--text-sub);
-  }
 </style>
 </head>
 <body>
@@ -160,12 +150,8 @@
 
 <div class="query-row">
   <a class="btn" href="calendar.html">🔁 為習慣禱告</a>
-  <a class="btn row-with-progress" href="https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec?view=card">
-    <span>🌐 為網絡禱告</span><span class="row-progress" id="networkProgress">載入中...</span>
-  </a>
-  <a class="btn row-with-progress" href="index.html">
-    <span>🙏 多方禱告</span><span class="row-progress" id="multiProgress">載入中...</span>
-  </a>
+  <a class="btn" href="https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec?view=card">🌐 為網絡禱告</a>
+  <a class="btn" href="index.html">🙏 多方禱告</a>
   <a class="btn" href="today.html">📋 今日待辦禱告</a>
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
@@ -179,25 +165,7 @@
 </div>
 
 <script>
-const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
 const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
-
-async function loadProgress(apiUrl, elId) {
-  const el = document.getElementById(elId);
-  try {
-    const url = apiUrl + '?' + new URLSearchParams({ action: 'getPrayerProgress', _t: Date.now() }).toString();
-    const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    el.textContent = `${data.rate}%（${data.completed}/${data.total}）`;
-  } catch (err) {
-    el.textContent = '載入失敗';
-  }
-}
-
-loadProgress(NETWORK_API_URL, 'networkProgress');
-loadProgress(MULTI_API_URL, 'multiProgress');
-
 const TASKS_API_URL = MULTI_API_URL;
 
 document.getElementById('drawTaskBtn').addEventListener('click', async function (e) {
