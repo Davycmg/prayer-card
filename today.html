@@ -275,6 +275,14 @@
 
 <div class="toggle-row">
   <label class="switch">
+    <input type="checkbox" id="randomOrderToggle" checked>
+    <span class="slider"></span>
+  </label>
+  <span>隨機排序</span>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
     <input type="checkbox" id="pureReadToggle" checked disabled>
     <span class="slider"></span>
   </label>
@@ -302,7 +310,41 @@ let itemsCache = [];   // [{id, text, note}, ...]
 let cachePos = 0;
 let saveTimer = null;
 
+// ===== 「這一輪看過了」的記憶（邏輯跟 all.html 一致）：不管是用隨機一項、上一項、下一項、跳到第幾項看到的，
+// 都算這一輪「看過」，直到目前清單全部看過一輪才重置。存在 localStorage，重新整理頁面也記得。
+const DRAWN_KEYS_STORAGE_KEY = 'todayHtml_drawnKeys';
+function keyOf(item) { return 'i' + item.id; }
+function loadDrawnKeys() {
+  try {
+    const raw = localStorage.getItem(DRAWN_KEYS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (err) {
+    return new Set();
+  }
+}
+function saveDrawnKeys() {
+  try {
+    localStorage.setItem(DRAWN_KEYS_STORAGE_KEY, JSON.stringify(Array.from(drawnKeys)));
+  } catch (err) { /* 存不進去就算了，不影響本次抽取 */ }
+}
+let drawnKeys = loadDrawnKeys();
+function markAsSeen(item) {
+  const key = keyOf(item);
+  if (!drawnKeys.has(key)) {
+    drawnKeys.add(key);
+    saveDrawnKeys();
+  }
+}
+
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
 const el = {
+  randomOrderToggle: document.getElementById('randomOrderToggle'),
   progress: document.getElementById('progress'),
   eventText: document.getElementById('eventText'),
   noteText: document.getElementById('noteText'),
@@ -344,6 +386,7 @@ function renderFromCache(pos) {
   }
   cachePos = ((pos % itemsCache.length) + itemsCache.length) % itemsCache.length;
   const item = itemsCache[cachePos];
+  markAsSeen(item);
 
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${itemsCache.length} 項`;
   el.eventText.value = item.text || '';
@@ -363,6 +406,8 @@ async function loadTodayTasks() {
   try {
     const data = await apiCall({ action: 'getTodayTasksList' });
     itemsCache = data.items || [];
+    // 進頁面預設整份打亂順序（隨機排序開關開著時）；關掉就維持 Google Tasks 原順序
+    if (el.randomOrderToggle.checked) shuffleItems(itemsCache);
     cachePos = 0;
     renderFromCache(0);
   } catch (err) {
@@ -466,7 +511,29 @@ el.randomBtn.addEventListener('click', () => {
   if (itemsCache.length === 0) return;
   flushPendingSaveIfAny();
   stopSpeakingIfNeeded();
-  renderFromCache(Math.floor(Math.random() * itemsCache.length));
+
+  let notSeenYet = itemsCache.filter(it => !drawnKeys.has(keyOf(it)));
+  if (notSeenYet.length === 0) {
+    // 這一輪都看過了，重置、重新開始抽
+    itemsCache.forEach(it => drawnKeys.delete(keyOf(it)));
+    notSeenYet = itemsCache.slice();
+    showStatus('這一輪都看過了，重新開始');
+  }
+  const picked = notSeenYet[Math.floor(Math.random() * notSeenYet.length)];
+  renderFromCache(itemsCache.indexOf(picked)); // renderFromCache 本身就會把這項標記成「看過」
+});
+
+// 切換隨機排序：重新排列目前清單（開＝洗牌；關＝回到 Google Tasks 原順序，重新載入）
+el.randomOrderToggle.addEventListener('change', () => {
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  if (el.randomOrderToggle.checked) {
+    shuffleItems(itemsCache);
+    cachePos = 0;
+    renderFromCache(0);
+  } else {
+    loadTodayTasks();
+  }
 });
 
 el.jumpBtn.addEventListener('click', () => {
