@@ -103,6 +103,12 @@
     opacity: 0.8;
   }
   .danger-zone button:active { opacity: 1; }
+  .quad-actions { width: 100%; max-width: 480px; display: flex; gap: 6px; margin-top: 12px; }
+  .quad-btn {
+    flex: 1; min-width: 0; padding: 8px 2px; border-radius: 8px; border: 1px solid var(--purple);
+    background: white; color: var(--purple); font-size: 11px; line-height: 1.3; cursor: pointer;
+  }
+  .quad-btn:active { opacity: 0.7; }
   .controls {
     width: 100%;
     max-width: 480px;
@@ -254,6 +260,10 @@
   <button id="completeBtn">✅ 標記完成（從清單移除）</button>
 </div>
 
+<div class="quad-actions">
+  <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
+</div>
+
 <div class="controls">
   <button class="btn secondary" id="prevBtn">◀ 上一項</button>
   <button class="btn" id="nextBtn">下一項 ▶</button>
@@ -350,6 +360,7 @@ const el = {
   noteText: document.getElementById('noteText'),
   exportToSheetBtn: document.getElementById('exportToSheetBtn'),
   completeBtn: document.getElementById('completeBtn'),
+  addToCalendarBtn: document.getElementById('addToCalendarBtn'),
   prevBtn: document.getElementById('prevBtn'),
   nextBtn: document.getElementById('nextBtn'),
   randomBtn: document.getElementById('randomBtn'),
@@ -491,6 +502,92 @@ el.completeBtn.addEventListener('click', async () => {
   } finally {
     setLoading(false);
   }
+});
+
+// 雙按確認（跟 all.html 一致）：第一下只進入「待確認」狀態，CONFIRM_TIMEOUT_MS 內按第二下才真的觸發，
+// 避免滑動、誤觸就直接加入日曆並把待辦標記完成這種不好復原的操作
+const CONFIRM_TIMEOUT_MS = 1000;
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+  function reset() {
+    confirming = false;
+    clearTimeout(resetTimer);
+    btn.textContent = originalText;
+  }
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+
+// 週期文字 → Google 日曆的 RRULE 重複規則（跟 all.html 一致）
+const CYCLE_RRULE_MAP = {
+  'D每天': 'RRULE:FREQ=DAILY',
+  '2每兩天': 'RRULE:FREQ=DAILY;INTERVAL=2',
+  '3每三天': 'RRULE:FREQ=DAILY;INTERVAL=3',
+  '4每四天': 'RRULE:FREQ=DAILY;INTERVAL=4',
+  '5每五天': 'RRULE:FREQ=DAILY;INTERVAL=5',
+  'W每週': 'RRULE:FREQ=WEEKLY',
+  'DW每兩週': 'RRULE:FREQ=WEEKLY;INTERVAL=2',
+  'M每月': 'RRULE:FREQ=MONTHLY',
+  '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
+  'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
+  'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
+  'Y每年': 'RRULE:FREQ=YEARLY'
+};
+
+// 「加入日曆」：待辦沒有週期，所以每次都問一次要用哪個週期，只用來產生這次的日曆連結。
+// 建好日曆連結後，這項的任務已經轉移到 Google 日曆，直接把 Google Tasks 裡這項標記完成（從清單移除，Tasks 仍留完成紀錄）。
+armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
+  if (itemsCache.length === 0) return;
+  const item = itemsCache[cachePos];
+
+  const options = Object.keys(CYCLE_RRULE_MAP);
+  const input = prompt('請輸入下面其中一個週期文字（只用來產生這次的日曆連結）：\n\n' + options.join('、'));
+  if (input === null) return; // 使用者取消
+  const rrule = CYCLE_RRULE_MAP[input.trim()];
+  if (!rrule) { showStatus('沒有找到這個週期，請輸入清單中完全一樣的文字'); return; }
+
+  const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+  const start = new Date();
+  start.setDate(start.getDate() + 1);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${fmt(start)}/${fmt(end)}`,
+    details: item.text || '',
+    recur: rrule
+  });
+  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  stopSpeakingIfNeeded();
+  itemsCache.splice(cachePos, 1);
+  if (itemsCache.length === 0) {
+    renderEmptyState();
+  } else {
+    renderFromCache(cachePos);
+  }
+  showStatus('已開啟日曆連結，並把這項標記完成');
+  apiCall({ action: 'completeTaskItem', taskId: item.id })
+    .catch(err => {
+      showStatus('日曆連結已開啟，但標記完成失敗，請手動標記完成：' + err.message);
+      itemsCache.push(item);
+      renderFromCache(cachePos);
+    });
 });
 
 el.prevBtn.addEventListener('click', () => {
