@@ -1321,9 +1321,11 @@ function getTodayTasksList() {
  * 跟 getTodayTasksList 一樣即時抓取、不存檔；標題原樣回傳（含前綴），編輯時才不會弄掉前綴。
  */
 function getPrefixTasksList(prefix) {
-  const p = prefix || 'H';
+  // 放寬比對：不分大小寫、全形半形視為相同（NFKC，例如「Ｈ」＝「H」），標題開頭的空白（含全形空格）忽略
+  const norm = function (str) { return String(str).normalize('NFKC').replace(/^\s+/, '').toLowerCase(); };
+  const p = norm(prefix || 'H');
   const all = getTodayTasksList().items;
-  const items = all.filter(function (t) { return t.text.indexOf(p) === 0; });
+  const items = all.filter(function (t) { return norm(t.text).indexOf(p) === 0; });
   return { items: items, total: items.length };
 }
 
