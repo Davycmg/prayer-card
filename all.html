@@ -902,7 +902,10 @@ function renderFromView(pos) {
 
   // 複製到Tasks/加入日曆/平日禱告/週末禱告/禱告更多/禱告更少：只有多方禱告的後端有對應 action，其他來源隱藏
   const isMulti = item.source === 'multi';
-  el.quadActionsRow.style.display = isMulti ? 'flex' : 'none';
+  // 「加入日曆」待辦（task）也支援：用前端產生日曆連結，不需要多方禱告的後端 action，所以待辦只顯示這一顆
+  const isTask = item.source === 'task';
+  el.quadActionsRow.style.display = (isMulti || isTask) ? 'flex' : 'none';
+  [el.copyToTasksBtn, el.setWeekdayBtn, el.setWeekendBtn].forEach(b => { b.style.display = isMulti ? '' : 'none'; });
   el.prayMoreLessRow.style.display = isMulti ? 'flex' : 'none';
 
   // 匯出到表單回覆1：只有「習慣」「網絡」這兩個來源本來就不是表單回覆1，才需要這個「搬過去」的按鈕
@@ -1243,12 +1246,16 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
 // 建好日曆連結後，這項的任務已經轉移到 Google 日曆，直接把它從「表單回覆 1」刪除（進垃圾桶，可救回）。
 armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   const item = currentItem();
-  if (!item || item.source !== 'multi') return;
+  if (!item || (item.source !== 'multi' && item.source !== 'task')) return;
+  const isTask = item.source === 'task';
 
-  let rrule = CYCLE_RRULE_MAP[item.cycle];
+  // 待辦沒有週期，每次都問一次；多方禱告週期空白時才問
+  let rrule = isTask ? undefined : CYCLE_RRULE_MAP[item.cycle];
   if (!rrule) {
     const options = Object.values(CYCLE_MAP);
-    const input = prompt('這項還沒有設定週期，請輸入下面其中一個週期文字（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
+    const input = prompt(isTask
+      ? '請輸入下面其中一個週期文字（只用來產生這次的日曆連結）：\n\n' + Object.keys(CYCLE_RRULE_MAP).join('、')
+      : '這項還沒有設定週期，請輸入下面其中一個週期文字（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
     if (input === null) return; // 使用者取消
     rrule = CYCLE_RRULE_MAP[input.trim()];
     if (!rrule) { showStatus('沒有找到這個週期，請輸入清單中完全一樣的文字', true); return; }
@@ -1271,6 +1278,19 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
 
   stopSpeakingIfNeeded();
+  if (isTask) {
+    // 待辦：日曆連結建好後，把 Google Tasks 裡這項標記完成（從清單移除，Tasks 仍留完成紀錄）
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    removeItemFromLists(item);
+    showStatus('已開啟日曆連結，並把這項標記完成');
+    SOURCE_CONFIG.task.complete(item).catch(err => {
+      showStatus('日曆連結已開啟，但標記完成失敗，請手動標記完成：' + err.message, true);
+      allItems.push(item);
+      applyFilter();
+    });
+    return;
+  }
   const row = item.row;
   removeItemFromLists(item);
   showStatus('已開啟日曆連結，並從「表單回覆 1」刪除這項');
