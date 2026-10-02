@@ -1252,6 +1252,21 @@ function resolveCycleRrule(input) {
   return '';
 }
 
+// 開啟 Google 日曆新增活動：Android 先試著用已安裝的 Google 日曆 APP 開（intent 網址，帶入標題／內容／整天／重複規則），
+// 沒裝 APP 或 APP 不接受時，Android 會自動退回網頁版（S.browser_fallback_url）；其他裝置（電腦、iPhone）維持開網頁版。
+function openCalendarEvent(webUrl, ev) {
+  if (/Android/i.test(navigator.userAgent)) {
+    const utc = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); // 整天活動用 UTC 午夜
+    const e = encodeURIComponent;
+    window.location.href = 'intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.dir/event;package=com.google.android.calendar;'
+      + 'S.title=' + e(ev.title) + ';S.description=' + e(ev.details) + ';S.rrule=' + e(ev.rrule.replace(/^RRULE:/, ''))
+      + ';B.allDay=true;l.beginTime=' + utc(ev.start) + ';l.endTime=' + utc(ev.end)
+      + ';S.browser_fallback_url=' + e(webUrl) + ';end';
+    return;
+  }
+  window.open(webUrl, '_blank');
+}
+
 // 開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
 // 「加入日曆」：週期已經設定好的話直接用；週期是空的話這裡問一次要用哪個週期，
 // 只用來產生這次的日曆連結，不會寫回試算表（跟「選週期＝完成」那條規則無關，不會觸發完成）。
@@ -1287,7 +1302,7 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     details: item.text || '',
     recur: rrule
   });
-  window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
+  openCalendarEvent('https://calendar.google.com/calendar/render?' + params.toString(), { title, details: item.text || '', rrule, start, end });
 
   stopSpeakingIfNeeded();
   if (isTask) {
