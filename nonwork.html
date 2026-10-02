@@ -544,6 +544,18 @@ const CYCLE_RRULE_MAP = {
   'Y每年': 'RRULE:FREQ=YEARLY'
 };
 
+// 週期輸入比對放寬：完整文字（W每週）、只打中文（每週）、只打代碼（W）都可以，不分大小寫、全形半形
+function resolveCycleRrule(input) {
+  const t = String(input).normalize('NFKC').trim();
+  if (!t) return '';
+  const up = t.toUpperCase();
+  for (const key of Object.keys(CYCLE_RRULE_MAP)) {
+    const m = key.match(/^([A-Z0-9]+)(.+)$/);
+    if (up === key.toUpperCase() || t === m[2] || up === m[1]) return CYCLE_RRULE_MAP[key];
+  }
+  return '';
+}
+
 // 「加入日曆」：待辦沒有週期，所以每次都問一次要用哪個週期，只用來產生這次的日曆連結。
 // 建好日曆連結後，這項的任務已經轉移到 Google 日曆，直接把 Google Tasks 裡這項標記完成（從清單移除，Tasks 仍留完成紀錄）。
 armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
@@ -553,8 +565,8 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   const options = Object.keys(CYCLE_RRULE_MAP);
   const input = prompt('請輸入下面其中一個週期文字（只用來產生這次的日曆連結）：\n\n' + options.join('、'));
   if (input === null) return; // 使用者取消
-  const rrule = CYCLE_RRULE_MAP[input.trim()];
-  if (!rrule) { showStatus('沒有找到這個週期，請輸入清單中完全一樣的文字'); return; }
+  const rrule = resolveCycleRrule(input);
+  if (!rrule) { showStatus('沒有找到這個週期，請輸入像「每週」或「W每週」這樣的文字'); return; }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
   const start = new Date();

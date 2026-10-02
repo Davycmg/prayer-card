@@ -1240,6 +1240,18 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
     .catch(err => showStatus('複製失敗：' + err.message));
 });
 
+// 週期輸入比對放寬：完整文字（W每週）、只打中文（每週）、只打代碼（W）都可以，不分大小寫、全形半形
+function resolveCycleRrule(input) {
+  const t = String(input).normalize('NFKC').trim();
+  if (!t) return '';
+  const up = t.toUpperCase();
+  for (const key of Object.keys(CYCLE_RRULE_MAP)) {
+    const m = key.match(/^([A-Z0-9]+)(.+)$/);
+    if (up === key.toUpperCase() || t === m[2] || up === m[1]) return CYCLE_RRULE_MAP[key];
+  }
+  return '';
+}
+
 // 開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
 // 「加入日曆」：週期已經設定好的話直接用；週期是空的話這裡問一次要用哪個週期，
 // 只用來產生這次的日曆連結，不會寫回試算表（跟「選週期＝完成」那條規則無關，不會觸發完成）。
@@ -1257,8 +1269,8 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
       ? '請輸入下面其中一個週期文字（只用來產生這次的日曆連結）：\n\n' + Object.keys(CYCLE_RRULE_MAP).join('、')
       : '這項還沒有設定週期，請輸入下面其中一個週期文字（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
     if (input === null) return; // 使用者取消
-    rrule = CYCLE_RRULE_MAP[input.trim()];
-    if (!rrule) { showStatus('沒有找到這個週期，請輸入清單中完全一樣的文字', true); return; }
+    rrule = resolveCycleRrule(input);
+    if (!rrule) { showStatus('沒有找到這個週期，請輸入像「每週」或「W每週」這樣的文字', true); return; }
   }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
