@@ -761,6 +761,8 @@ function loadAll() {
   loadSource(generation, 'network', '網絡', apiCallWithRetry(NETWORK_API_URL, { action: 'getAllItems' }), (item) => { item.text = item.name || ''; });
   loadSource(generation, 'multi', '多方', apiCallWithRetry(MULTI_API_URL, { action: 'getInitData' }));
   loadSource(generation, 'task', '待辦', apiCallWithRetry(MULTI_API_URL, { action: 'getTodayTasksList' }));
+  tasksAllListsForDup = [];
+  loadTasksAllListsForDup(generation);
 }
 
 // 跟 index.html 一致：依週期長短排序，週期空白/無法辨識的排最前面，最長排到最短
@@ -785,6 +787,11 @@ function normalizeForDup(text) {
   return (text || '').replace(/\s+/g, ' ').trim();
 }
 
+// 「待辦」來源的卡片只抓 Google Tasks 預設清單（getTodayTasksList），使用者自己建的其他清單
+// 不會變成卡片，但裡面的任務還是可能跟別的來源重複——這份清單就是「所有」Google Tasks 清單
+// 的項目，只用來跟其他來源比對找重複，不會顯示成卡片本身（見 loadTasksAllListsForDup）。
+let tasksAllListsForDup = [];
+
 function findDuplicateSourceLabels(item) {
   const norm = normalizeForDup(item.text);
   if (!norm) return [];
@@ -794,7 +801,31 @@ function findDuplicateSourceLabels(item) {
     if (normalizeForDup(other.text) !== norm) return;
     labels.add(SOURCE_CONFIG[other.source].label);
   });
+
+  // 預設清單的任務已經算在上面的「待辦」來源裡了（by task id），這裡只補「預設清單以外」的重複，
+  // 避免同一個 Google Tasks 項目被算兩次、提示訊息變得多餘。
+  const taskIdsAlreadyCounted = new Set(
+    allItems.filter(it => it.source === 'task').map(it => it.id)
+  );
+  tasksAllListsForDup.forEach(t => {
+    if (taskIdsAlreadyCounted.has(t.taskId)) return;
+    if (normalizeForDup(t.text) !== norm) return;
+    labels.add('📋 Google Tasks（' + (t.listTitle || '未命名清單') + '）');
+  });
+
   return Array.from(labels);
+}
+
+// 跟四大來源各自獨立載入一樣，失敗就算了（這份只是重複提示用的輔助資料，不影響主要卡片功能），
+// 載完後重新渲染目前這張卡片，讓重複提示補上去（這份資料通常比其他四個來源晚回來）。
+function loadTasksAllListsForDup(generation) {
+  apiCallWithRetry(MULTI_API_URL, { action: 'getAllGoogleTasksAllLists' })
+    .then(data => {
+      if (generation !== loadGeneration) return;
+      tasksAllListsForDup = data.items || [];
+      renderFromView(cachePos);
+    })
+    .catch(() => { /* 比對用的輔助資料，載入失敗不影響主要卡片功能，靜默略過 */ });
 }
 
 function applyFilter() {

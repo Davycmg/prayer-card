@@ -1043,6 +1043,9 @@ function doGet(e) {
       case 'searchGoogleTasks':
         result = searchGoogleTasks(e.parameter.keyword);
         break;
+      case 'getAllGoogleTasksAllLists':
+        result = getAllGoogleTasksAllLists();
+        break;
       case 'drawRandomTask':
         result = drawRandomTask();
         break;
@@ -1381,6 +1384,32 @@ function searchGoogleTasks(keyword) {
         listTitle: list.title || '',
         taskId: t.id,
         text: title,
+        note: t.notes || ''
+      });
+    });
+  });
+
+  return { items: items };
+}
+
+/**
+ * all.html「綜合禱告卡片」判斷重複用：列出使用者「所有」Google Tasks 清單（不只預設清單）裡
+ * 還沒完成的項目。跟 searchGoogleTasks 共用同一個「掃全部清單」邏輯，差別是這裡不用關鍵字篩選、
+ * 全部回傳——前端會拿這份清單跟習慣/網絡/多方/待辦四個來源的文字比對找重複，不會把這些項目
+ * 顯示成卡片本身（預設清單的項目已經是「待辦」來源的卡片了，這裡主要是抓「預設清單以外」的重複）。
+ */
+function getAllGoogleTasksAllLists() {
+  const taskLists = Tasks.Tasklists.list({ maxResults: 100 });
+  const items = [];
+
+  (taskLists.items || []).forEach(list => {
+    const tasksResult = Tasks.Tasks.list(list.id, { showCompleted: false, maxResults: 100 });
+    (tasksResult.items || []).forEach(t => {
+      items.push({
+        listId: list.id,
+        listTitle: list.title || '',
+        taskId: t.id,
+        text: t.title || '(無標題)',
         note: t.notes || ''
       });
     });
