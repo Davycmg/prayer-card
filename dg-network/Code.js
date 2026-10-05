@@ -165,6 +165,13 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=custom → 中午RPG（自選名單）：進入表單前先輸入最多 7 位姓名，表單就只列出這幾位
+  if (e.parameter.form === 'custom') {
+    return HtmlService.createHtmlOutputFromFile('中午RPG自選')
+      .setTitle('中午RPG（自選名單）')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // 預設 → 代禱表單
   return HtmlService.createTemplateFromFile('Form')
     .evaluate()
