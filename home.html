@@ -117,6 +117,43 @@
     margin-top: 10px;
   }
   .query-row a.btn:active { opacity: 0.7; }
+  .draw-task-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .draw-task-row .draw-task-icon {
+    font-size: 18px;
+    line-height: 1.5;
+    padding-top: 2px;
+  }
+  #drawTaskText {
+    flex: 1;
+    max-width: 100%;
+    font-size: 18px;
+    font-weight: bold;
+    font-family: inherit;
+    color: var(--text-main);
+    text-align: center;
+    border: none;
+    outline: none;
+    background: transparent;
+    resize: none;
+    overflow: hidden;
+    padding: 2px 4px;
+  }
+  #drawTaskText:focus {
+    background: var(--gray-bg);
+    border-radius: 6px;
+  }
+  #drawTaskSaveStatus {
+    font-size: 11px;
+    color: var(--text-sub);
+    min-height: 14px;
+    margin-top: 4px;
+  }
 </style>
 </head>
 <body>
@@ -172,14 +209,51 @@
 </div>
 
 <div id="drawTaskResult" style="display:none; width:100%; max-width:960px; margin-top:16px; background:white; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); padding:20px; text-align:center;">
-  <div id="drawTaskText" style="font-size:18px; font-weight:bold; color:var(--text-main); margin-bottom:6px;"></div>
+  <div class="draw-task-row">
+    <span class="draw-task-icon">🎯</span>
+    <textarea id="drawTaskText" rows="1"></textarea>
+  </div>
   <div id="drawTaskNote" style="font-size:13px; color:var(--text-sub); margin-bottom:6px;"></div>
   <div id="drawTaskProgress" style="font-size:12px; color:var(--text-sub);"></div>
+  <div id="drawTaskSaveStatus"></div>
 </div>
 
 <script>
 const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 const TASKS_API_URL = MULTI_API_URL;
+
+// 目前畫面上抽到的這筆任務（Google Tasks 的 id），編輯標題時要用來同步回 Google Tasks。
+// 沒抽到任務（或還沒抽過）時是 null，這時 drawTaskText 不能編輯。
+let drawnTaskId = null;
+let drawTaskSaveTimer = null;
+
+const drawTaskTextEl = document.getElementById('drawTaskText');
+
+function autoResizeDrawTaskText() {
+  drawTaskTextEl.style.height = 'auto';
+  drawTaskTextEl.style.height = drawTaskTextEl.scrollHeight + 'px';
+}
+
+drawTaskTextEl.addEventListener('input', () => {
+  autoResizeDrawTaskText();
+  if (!drawnTaskId) return;
+  const taskId = drawnTaskId;
+  const value = drawTaskTextEl.value;
+  const statusEl = document.getElementById('drawTaskSaveStatus');
+  statusEl.textContent = '編輯中...';
+  clearTimeout(drawTaskSaveTimer);
+  drawTaskSaveTimer = setTimeout(async () => {
+    try {
+      const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'updateTaskTitle', taskId: taskId, value: value, _t: Date.now() }).toString();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      statusEl.textContent = '已同步 ✓';
+    } catch (err) {
+      statusEl.textContent = '同步失敗：' + err.message;
+    }
+  }, 1000);
+});
 
 document.getElementById('drawTaskBtn').addEventListener('click', async function (e) {
   e.preventDefault();
@@ -192,19 +266,26 @@ document.getElementById('drawTaskBtn').addEventListener('click', async function 
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     const resultBox = document.getElementById('drawTaskResult');
-    const textEl = document.getElementById('drawTaskText');
     const noteEl = document.getElementById('drawTaskNote');
     const progressEl = document.getElementById('drawTaskProgress');
+    const statusEl = document.getElementById('drawTaskSaveStatus');
+    clearTimeout(drawTaskSaveTimer);
+    statusEl.textContent = '';
     if (!data.task) {
-      textEl.textContent = '目前沒有待辦任務';
+      drawnTaskId = null;
+      drawTaskTextEl.value = '目前沒有待辦任務';
+      drawTaskTextEl.disabled = true;
       noteEl.textContent = '';
       progressEl.textContent = '';
     } else {
-      textEl.textContent = '🎯 ' + data.task.text;
+      drawnTaskId = data.task.id;
+      drawTaskTextEl.disabled = false;
+      drawTaskTextEl.value = data.task.text;
       noteEl.textContent = data.task.note || '';
       progressEl.textContent = `已抽 ${data.total - data.remaining}/${data.total}，剩 ${data.remaining} 個未抽`;
     }
     resultBox.style.display = 'block';
+    autoResizeDrawTaskText();
   } catch (err) {
     alert('抽選失敗：' + err.message);
   } finally {
