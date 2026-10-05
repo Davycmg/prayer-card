@@ -1301,11 +1301,10 @@ function exportCalendarEventToTasks(value) {
  * 所以每次打開 today.html 都會自動反映當下 Google Tasks 預設清單的最新內容（等同「每天更新」）。
  */
 function getTodayTasksList() {
-  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
-  if (!taskLists.items || taskLists.items.length === 0) {
+  const defaultListId = getDefaultTaskListIdOrNull_();
+  if (!defaultListId) {
     return { items: [], total: 0 };
   }
-  const defaultListId = taskLists.items[0].id;
 
   const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
   const items = (tasksResult.items || []).map(function (t) {
@@ -1355,10 +1354,29 @@ function completeTaskItem(taskId, listId) {
   return { success: true };
 }
 
-function getDefaultTaskListId_() {
+// Google Tasks 預設清單的 id 幾乎不會變動，用 CacheService 快取起來（6 小時，CacheService 允許的上限），
+// 省掉每次操作（抽任務、列清單、編輯標題...）都要先打一次 Tasks.Tasklists.list 的來回時間——
+// 「隨機抽一個待辦任務」會明顯變快就是靠這個快取。
+const DEFAULT_TASK_LIST_ID_CACHE_KEY = 'defaultTaskListId_v1';
+const DEFAULT_TASK_LIST_ID_CACHE_SECONDS = 21600;
+
+function getDefaultTaskListIdOrNull_() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get(DEFAULT_TASK_LIST_ID_CACHE_KEY);
+  if (cached) return cached;
+
   const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
-  if (!taskLists.items || taskLists.items.length === 0) throw new Error('找不到 Google Tasks 清單');
-  return taskLists.items[0].id;
+  if (!taskLists.items || taskLists.items.length === 0) return null;
+
+  const id = taskLists.items[0].id;
+  cache.put(DEFAULT_TASK_LIST_ID_CACHE_KEY, id, DEFAULT_TASK_LIST_ID_CACHE_SECONDS);
+  return id;
+}
+
+function getDefaultTaskListId_() {
+  const id = getDefaultTaskListIdOrNull_();
+  if (!id) throw new Error('找不到 Google Tasks 清單');
+  return id;
 }
 
 /**
@@ -1440,9 +1458,8 @@ function logDrawnTaskToCalendar_(taskText) {
 
   if (lastEventId) {
     try {
-      const lastEvent = Calendar.Events.get(DRAW_TASK_CALENDAR_ID, lastEventId);
-      lastEvent.end = { dateTime: now.toISOString() };
-      Calendar.Events.patch(lastEvent, DRAW_TASK_CALENDAR_ID, lastEventId);
+      // patch 是局部更新，不用先 get 整筆事件再改欄位送回去——省一次來回，「隨機抽任務」明顯變快
+      Calendar.Events.patch({ end: { dateTime: now.toISOString() } }, DRAW_TASK_CALENDAR_ID, lastEventId);
     } catch (err) {
       // 上一筆事件可能已被刪除或找不到，忽略，直接建立新的一筆
     }
@@ -1464,11 +1481,10 @@ function logDrawnTaskToCalendar_(taskText) {
  * 每次抽到的任務也會記錄到 DRAW_TASK_CALENDAR_ID（見 logDrawnTaskToCalendar_）。
  */
 function drawRandomTask() {
-  const taskLists = Tasks.Tasklists.list({ maxResults: 1 });
-  if (!taskLists.items || taskLists.items.length === 0) {
+  const defaultListId = getDefaultTaskListIdOrNull_();
+  if (!defaultListId) {
     return { task: null, remaining: 0, total: 0 };
   }
-  const defaultListId = taskLists.items[0].id;
 
   const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
   const items = (tasksResult.items || []).map(function (t) {
