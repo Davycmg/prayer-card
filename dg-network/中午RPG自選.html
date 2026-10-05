@@ -2,7 +2,7 @@
 <html>
 <head>
   <base target="_top">
-  <title>中午RPG</title>
+  <title>中午RPG（自選名單）</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍱</text></svg>">
   <style>
     body {
@@ -66,33 +66,50 @@
       border: 1px solid #4a3b8f;
     }
     #copyStatus { margin-top: 6px; font-size: 13px; text-align: center; color: #4a3b8f; min-height: 16px; }
+    #setup input[type=text] {
+      width: 100%; padding: 8px; margin-top: 8px; box-sizing: border-box;
+      font-size: 14px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit;
+    }
+    #backBtn { margin-top: 0; background: white; color: #777; border: 1px solid #ccc; }
   </style>
 </head>
 <body>
-  <h2>中午RPG</h2>
-  <p class="desc">固定列出以下幾位；「新增內容」是這次要輸入的，送出時會自動併入既有備註</p>
+  <h2>中午RPG（自選名單）</h2>
 
-  <button onclick="copyAll()" id="copyBtn">📋 一鍵複製新輸入內容</button>
-  <div id="copyStatus"></div>
+  <div id="setup">
+    <p class="desc">先輸入這次要代禱的人名（最多 7 位，空白的欄位會略過）</p>
+    <div id="nameInputs"></div>
+    <button onclick="startForm()">開始</button>
+    <div id="setupStatus" style="margin-top:12px;font-size:14px;text-align:center;color:#c00;"></div>
+  </div>
 
-  <div id="personList"></div>
+  <div id="formArea" style="display:none">
+    <p class="desc">「新增內容」是這次要輸入的，送出時會自動併入既有備註</p>
+    <button onclick="backToSetup()" id="backBtn">← 重新選擇名單</button>
 
-  <button onclick="submitAll()" id="submitBtn">全部送出</button>
-  <div id="status"></div>
+    <button onclick="copyAll()" id="copyBtn" style="margin-top:12px">📋 一鍵複製新輸入內容</button>
+    <div id="copyStatus"></div>
+
+    <div id="personList"></div>
+
+    <button onclick="submitAll()" id="submitBtn">全部送出</button>
+    <div id="status"></div>
+  </div>
 
   <script>
-    // 跟後端 Code.js 的 FIXED_ROSTER_NAMES 保持一致，顯示順序以這裡為準
-    const FIXED_NAMES = ['王銓興', '陳豪雷', '張天維', '郭大衛', '賴秀華', '江吉昇', '劉彥漢', '李麗文', '何雅雯', '關崇文', '顏志龍'];
+    const MAX_NAMES = 7;
+    // 名單由使用者在進入表單前輸入，顯示順序依輸入順序
+    let FIXED_NAMES = [];
     const DEFAULT_CYCLE = '每月';
 
     // 每個人各自記住：查詢時抓到的同名列號（送出時要一併帶回去）、目前套用的週期、
     // existingNote = 查詢到的舊備註（唯讀欄位顯示用，送出時當作底稿，把新增內容併進去）
-    const state = FIXED_NAMES.map(() => ({ rows: [], cycle: '', existingNote: '' }));
+    let state = [];
 
     function personBlockHtml(name, idx) {
       return (
         '<div class="person-block">' +
-          '<div class="person-name">' + name + '</div>' +
+          '<div class="person-name">' + name.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</div>' +
           '<div class="person-hint" id="hint-' + idx + '">查詢中...</div>' +
           '<label>新增內容</label>' +
           '<textarea id="new-note-' + idx + '" class="new-input" placeholder="這次要新增的內容..."></textarea>' +
@@ -132,6 +149,45 @@
           })
           .lookupByName(name);
       });
+    }
+
+    function renderSetup() {
+      let html = '';
+      for (let i = 0; i < MAX_NAMES; i++) {
+        html += '<input type="text" class="name-input" placeholder="姓名 ' + (i + 1) + '">';
+      }
+      document.getElementById('nameInputs').innerHTML = html;
+    }
+
+    // 輸入框內可用空白、逗號、頓號分隔多個人名；去除重複、最多 MAX_NAMES 位
+    function collectNames() {
+      const names = [];
+      document.querySelectorAll('.name-input').forEach(function (el) {
+        el.value.split(/[\s,，、]+/).forEach(function (n) {
+          n = n.trim();
+          if (n && names.indexOf(n) === -1) names.push(n);
+        });
+      });
+      return names;
+    }
+
+    function startForm() {
+      const names = collectNames();
+      const msg = document.getElementById('setupStatus');
+      if (names.length === 0) { msg.innerText = '請至少輸入一位姓名'; return; }
+      if (names.length > MAX_NAMES) { msg.innerText = '最多只能輸入 ' + MAX_NAMES + ' 位'; return; }
+      msg.innerText = '';
+      FIXED_NAMES = names;
+      state = FIXED_NAMES.map(function () { return { rows: [], cycle: '', existingNote: '' }; });
+      document.getElementById('setup').style.display = 'none';
+      document.getElementById('formArea').style.display = 'block';
+      document.getElementById('status').innerText = '';
+      init();
+    }
+
+    function backToSetup() {
+      document.getElementById('formArea').style.display = 'none';
+      document.getElementById('setup').style.display = 'block';
     }
 
     async function init() {
@@ -229,7 +285,7 @@
       btn.disabled = false;
     }
 
-    init();
+    renderSetup();
   </script>
 </body>
 </html>
