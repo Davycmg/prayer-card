@@ -68,6 +68,16 @@
   .source-badge.network { background: #3d9e8f; }
   .source-badge.multi { background: var(--clay); }
   .source-badge.task { background: #a65b8a; }
+  .dup-warning {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: bold;
+    color: var(--text-danger);
+    background: var(--danger-light);
+  }
   .prayer-text {
     font-size: 22px;
     line-height: 1.6;
@@ -274,6 +284,7 @@
 
 <div class="card">
   <span class="source-badge" id="sourceBadge"></span>
+  <span class="dup-warning" id="dupWarning" style="display:none;"></span>
   <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目"></textarea>
   <div class="readonly-hint" id="readonlyHint" style="display:none;">姓名要到「為網絡禱告」頁面才能改，這裡唯讀；備註可以直接在下面編輯</div>
 
@@ -583,6 +594,7 @@ const el = {
   progressBreakdown: document.getElementById('progressBreakdown'),
   filterRow: document.getElementById('filterRow'),
   sourceBadge: document.getElementById('sourceBadge'),
+  dupWarning: document.getElementById('dupWarning'),
   itemText: document.getElementById('itemText'),
   readonlyHint: document.getElementById('readonlyHint'),
   cycleRow: document.getElementById('cycleRow'),
@@ -766,6 +778,25 @@ function shuffleItems(items) {
   }
 }
 
+// 判斷同一句話是否在別的來源也有一份（例如 Google Tasks 跟多方禱告都各自存了一筆一樣的文字），
+// 讓使用者知道這兩邊其實是重複的，可以自己決定去刪掉其中一份。
+// 忽略前後空白跟內文連續空白的差異（例如半形空白打了一個或兩個），其餘要完全一樣的文字才算重複。
+function normalizeForDup(text) {
+  return (text || '').replace(/\s+/g, ' ').trim();
+}
+
+function findDuplicateSourceLabels(item) {
+  const norm = normalizeForDup(item.text);
+  if (!norm) return [];
+  const labels = new Set();
+  allItems.forEach(other => {
+    if (other === item) return;
+    if (normalizeForDup(other.text) !== norm) return;
+    labels.add(SOURCE_CONFIG[other.source].label);
+  });
+  return Array.from(labels);
+}
+
 function applyFilter() {
   viewItems = allItems.filter(it => activeSources.has(it.source));
 
@@ -861,6 +892,14 @@ function renderFromView(pos) {
   el.sourceBadge.textContent = config.label;
   el.sourceBadge.className = 'source-badge ' + config.badgeClass;
 
+  const dupLabels = findDuplicateSourceLabels(item);
+  if (dupLabels.length) {
+    el.dupWarning.textContent = '⚠️ 重複，也在：' + dupLabels.join('、');
+    el.dupWarning.style.display = 'inline-block';
+  } else {
+    el.dupWarning.style.display = 'none';
+  }
+
   el.itemText.value = item.text || '';
   el.itemText.readOnly = !config.text.editable;
   el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
@@ -917,6 +956,7 @@ function renderEmptyState() {
   el.progress.textContent = '第 0 項 / 共 0 項';
   el.sourceBadge.textContent = '';
   el.sourceBadge.className = 'source-badge';
+  el.dupWarning.style.display = 'none';
   el.itemText.value = '🎉 目前沒有待代禱的項目';
   el.itemText.readOnly = true;
   el.readonlyHint.style.display = 'none';
