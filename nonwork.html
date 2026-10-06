@@ -558,7 +558,7 @@ function resolveCycleRrule(input) {
 
 // 開啟 Google 日曆新增活動：Android 先試著用已安裝的 Google 日曆 APP 開（intent 網址，帶入標題／內容／整天／重複規則），
 // 沒裝 APP 或 APP 不接受時，Android 會自動退回網頁版（S.browser_fallback_url）；其他裝置（電腦、iPhone）維持開網頁版。
-// 注意：APP intent 無法指定日曆，APP 內若預設不是「整合日曆」需手動切換；網頁版則由網址的 src 指定「整合日曆」。
+// 注意：APP intent 無法指定日曆，APP 內若預設不是「FT 日曆」需手動切換；網頁版則由網址的 src 指定「FT 日曆」。
 function openCalendarEvent(webUrl, ev) {
   if (/Android/i.test(navigator.userAgent)) {
     const utc = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); // 整天活動用 UTC 午夜
@@ -574,8 +574,8 @@ function openCalendarEvent(webUrl, ev) {
 
 // 「加入日曆」：待辦沒有週期，所以每次都問一次要用哪個週期，只用來產生這次的日曆連結。
 // 建好日曆連結後，這項的任務已經轉移到 Google 日曆，直接把 Google Tasks 裡這項標記完成（從清單移除，Tasks 仍留完成紀錄）。
-// 所有「加入日曆」新增的行程都登錄在「整合日曆」
-const INTEGRATED_CALENDAR_ID = '4a3fca26ef63c8c76efbc13cac22e4320d3448f271cdd3933273b496d055146a@group.calendar.google.com';
+// 所有「加入日曆」新增的行程都登錄在「FT 日曆」
+const FT_CALENDAR_ID = '4a3fca26ef63c8c76efbc13cac22e4320d3448f271cdd3933273b496d055146a@group.calendar.google.com';
 
 armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   if (itemsCache.length === 0) return;
@@ -600,7 +600,7 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     dates: `${fmt(start)}/${fmt(end)}`,
     details: item.text || '',
     recur: rrule,
-    src: INTEGRATED_CALENDAR_ID
+    src: FT_CALENDAR_ID
   });
   openCalendarEvent('https://calendar.google.com/calendar/render?' + params.toString(), { title, details: item.text || '', rrule, start, end });
 
