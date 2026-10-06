@@ -1379,7 +1379,7 @@ function getDefaultTaskListIdOrNull_() {
  * 如果 oauthScopes 的 tasks 寫入權限沒有正確授權，這一步才會觸發授權畫面或丟出權限錯誤。
  * 確認權限問題解決後，這個函式可以刪掉。
  */
-function testTasksWritePermission_() {
+function testTasksWritePermission() {
   const listId = getDefaultTaskListIdOrNull_();
   if (!listId) {
     Logger.log('找不到 Google Tasks 清單');
