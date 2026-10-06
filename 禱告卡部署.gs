@@ -1373,6 +1373,24 @@ function getDefaultTaskListIdOrNull_() {
   return id;
 }
 
+/**
+ * 診斷用：手動在 Apps Script 編輯器選這個函式執行，測試 Google Tasks 的「寫入」權限夠不夠。
+ * 跟 getTodayTasksList 這種唯讀操作不一樣，這裡會真的新增一筆任務再刪掉（不會留下垃圾資料），
+ * 如果 oauthScopes 的 tasks 寫入權限沒有正確授權，這一步才會觸發授權畫面或丟出權限錯誤。
+ * 確認權限問題解決後，這個函式可以刪掉。
+ */
+function testTasksWritePermission_() {
+  const listId = getDefaultTaskListIdOrNull_();
+  if (!listId) {
+    Logger.log('找不到 Google Tasks 清單');
+    return;
+  }
+  const created = Tasks.Tasks.insert({ title: '__permission_test__，可以刪掉' }, listId);
+  Logger.log('新增測試任務成功，id=' + created.id);
+  Tasks.Tasks.remove(listId, created.id);
+  Logger.log('刪除測試任務成功，寫入權限正常');
+}
+
 function getDefaultTaskListId_() {
   const id = getDefaultTaskListIdOrNull_();
   if (!id) throw new Error('找不到 Google Tasks 清單');
