@@ -1323,9 +1323,19 @@ function resolveCycleRrule(input) {
   return '';
 }
 
-// 開啟 Google 日曆新增活動網頁版（src 指定登錄到「整合日曆」）。
+// 開啟 Google 日曆新增活動：Android 先試著用已安裝的 Google 日曆 APP 開（intent 網址，帶入標題／內容／整天／重複規則），
+// 沒裝 APP 或 APP 不接受時，Android 會自動退回網頁版（S.browser_fallback_url）；其他裝置（電腦、iPhone）維持開網頁版。
+// 注意：APP intent 無法指定日曆，APP 內若預設不是「整合日曆」需手動切換；網頁版則由網址的 src 指定「整合日曆」。
 function openCalendarEvent(webUrl, ev) {
-  // Android 的 APP intent 無法指定日曆，一律開網頁版（網址帶 src 指定「整合日曆」）
+  if (/Android/i.test(navigator.userAgent)) {
+    const utc = d => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); // 整天活動用 UTC 午夜
+    const e = encodeURIComponent;
+    window.location.href = 'intent:#Intent;action=android.intent.action.INSERT;type=vnd.android.cursor.dir/event;package=com.google.android.calendar;'
+      + 'S.title=' + e(ev.title) + ';S.description=' + e(ev.details) + ';S.rrule=' + e(ev.rrule.replace(/^RRULE:/, ''))
+      + ';B.allDay=true;l.beginTime=' + utc(ev.start) + ';l.endTime=' + utc(ev.end)
+      + ';S.browser_fallback_url=' + e(webUrl) + ';end';
+    return;
+  }
   window.open(webUrl, '_blank');
 }
 
