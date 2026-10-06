@@ -1353,11 +1353,11 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   if (!rrule) {
     const options = Object.values(CYCLE_MAP);
     const input = prompt(isTask
-      ? '請輸入下面其中一個週期文字（只用來產生這次的日曆連結）：\n\n' + Object.keys(CYCLE_RRULE_MAP).join('、')
-      : '這項還沒有設定週期，請輸入下面其中一個週期文字（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
+      ? '請輸入下面其中一個週期文字，留白＝不重複（只用來產生這次的日曆連結）：\n\n' + Object.keys(CYCLE_RRULE_MAP).join('、')
+      : '這項還沒有設定週期，請輸入下面其中一個週期文字，留白＝不重複（只用來產生這次的日曆連結，不會存回禱告卡片，也不會標記完成）：\n\n' + options.join('、'));
     if (input === null) return; // 使用者取消
     rrule = resolveCycleRrule(input);
-    if (!rrule) { showStatus('沒有找到這個週期，請輸入像「每週」或「W每週」這樣的文字', true); return; }
+    if (!rrule && input.trim()) { showStatus('沒有找到這個週期，請輸入像「每週」或「W每週」這樣的文字', true); return; }
   }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
@@ -1372,9 +1372,9 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     text: title,
     dates: `${fmt(start)}/${fmt(end)}`,
     details: item.text || '',
-    recur: rrule,
     src: FT_CALENDAR_ID
   });
+  if (rrule) params.set('recur', rrule);
   openCalendarEvent('https://calendar.google.com/calendar/render?' + params.toString(), { title, details: item.text || '', rrule, start, end });
 
   stopSpeakingIfNeeded();
