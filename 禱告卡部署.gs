@@ -1040,6 +1040,9 @@ function doGet(e) {
       case 'completeTaskItem':
         result = completeTaskItem(e.parameter.taskId, e.parameter.listId);
         break;
+      case 'moveTaskToWorkdayList':
+        result = moveTaskToWorkdayList(e.parameter.taskId);
+        break;
       case 'searchGoogleTasks':
         result = searchGoogleTasks(e.parameter.keyword);
         break;
