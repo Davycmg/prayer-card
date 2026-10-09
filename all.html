@@ -338,6 +338,7 @@
 <div class="quad-actions" id="quadActionsRow" style="display:none;">
   <button class="quad-btn" id="copyToTasksBtn">📋 複製到 Tasks</button>
   <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
+  <button class="quad-btn" id="workdayBtn">💼 工作日</button>
   <button class="quad-btn" id="setWeekdayBtn">📅 平日禱告</button>
   <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
 </div>
@@ -609,6 +610,7 @@ const el = {
   quadActionsRow: document.getElementById('quadActionsRow'),
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
   addToCalendarBtn: document.getElementById('addToCalendarBtn'),
+  workdayBtn: document.getElementById('workdayBtn'),
   setWeekdayBtn: document.getElementById('setWeekdayBtn'),
   setWeekendBtn: document.getElementById('setWeekendBtn'),
   exportToFormBtn: document.getElementById('exportToFormBtn'),
@@ -975,6 +977,7 @@ function renderFromView(pos) {
   // 「加入日曆」待辦（task）也支援：用前端產生日曆連結，不需要多方禱告的後端 action，所以待辦只顯示這一顆
   const isTask = item.source === 'task';
   el.quadActionsRow.style.display = (isMulti || isTask) ? 'flex' : 'none';
+  el.workdayBtn.style.display = isTask ? '' : 'none';
   [el.copyToTasksBtn, el.setWeekdayBtn, el.setWeekendBtn].forEach(b => { b.style.display = isMulti ? '' : 'none'; });
   el.prayMoreLessRow.style.display = isMulti ? 'flex' : 'none';
 
@@ -1401,6 +1404,22 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
       allItems.push(item);
       applyFilter();
     });
+});
+
+// 「工作日」：把這個待辦從預設清單搬到「工作日」清單（每週一凌晨由後端觸發器搬回預設清單）
+armConfirmButton(el.workdayBtn, '再按一次確認移到工作日', () => {
+  const item = currentItem();
+  if (!item || item.source !== 'task') return;
+  stopSpeakingIfNeeded();
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  removeItemFromLists(item);
+  showStatus('已移到「工作日」清單');
+  apiCallWithRetry(MULTI_API_URL, { action: 'moveTaskToWorkdayList', taskId: item.id }).catch(err => {
+    showStatus('移到工作日失敗：' + err.message, true);
+    allItems.push(item);
+    applyFilter();
+  });
 });
 
 // 「平日禱告／週末禱告」：把到期日改到最近的平日／週末。
