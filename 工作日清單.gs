@@ -7,11 +7,27 @@
 const WORKDAY_LIST_NAME = '工作日';
 
 // Tasks API 沒有跨清單搬移的功能，所以用「在目標清單新增一份 + 刪掉原本那份」達成。
+// 連續大量呼叫會碰到 Quota Exceeded（短時間內請求太密），所以每次呼叫遇到錯誤就等一下重試，
+// 每搬完一項也稍微停一下。
+function withRetry_(fn) {
+  let wait = 2000;
+  for (let i = 0; i < 6; i++) {
+    try {
+      return fn();
+    } catch (err) {
+      if (i === 5 || !/quota|rate|limit|backend|503|500/i.test(String(err))) throw err;
+      Utilities.sleep(wait);
+      wait *= 2;
+    }
+  }
+}
+
 function moveTaskBetweenLists_(task, fromListId, toListId) {
   const copy = { title: task.title || '（無標題）', notes: task.notes || '' };
   if (task.due) copy.due = task.due;
-  Tasks.Tasks.insert(copy, toListId);
-  Tasks.Tasks.remove(fromListId, task.id);
+  withRetry_(() => Tasks.Tasks.insert(copy, toListId));
+  withRetry_(() => Tasks.Tasks.remove(fromListId, task.id));
+  Utilities.sleep(300);
 }
 
 // 前端 action: moveTaskToWorkdayList
