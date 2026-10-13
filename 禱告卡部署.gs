@@ -1052,6 +1052,10 @@ function doGet(e) {
       case 'drawRandomTask':
         result = drawRandomTask();
         break;
+      case 'logDrawnTask':
+        logDrawnTaskToCalendar_(e.parameter.text || '');
+        result = { success: true };
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1499,7 +1503,8 @@ function logDrawnTaskToCalendar_(taskText) {
 /**
  * 從 Google Tasks 預設清單的未完成項目裡隨機抽一筆，抽過的記住（存在 PropertiesService），
  * 下次抽選會排除已抽過的，直到全部都抽完才自動重新開始一輪。
- * 每次抽到的任務也會記錄到 DRAW_TASK_CALENDAR_ID（見 logDrawnTaskToCalendar_）。
+ * 抽到的任務記錄到 DRAW_TASK_CALENDAR_ID 由前端另外呼叫 logDrawnTask（見 logDrawnTaskToCalendar_），
+ * 不放在這裡是為了讓抽選結果能立刻回傳。
  */
 function drawRandomTask() {
   const defaultListId = getDefaultTaskListIdOrNull_();
@@ -1539,7 +1544,8 @@ function drawRandomTask() {
   drawnIds.push(picked.id);
   props.setProperty(DRAWN_TASK_IDS_PROP_KEY, JSON.stringify(drawnIds));
 
-  logDrawnTaskToCalendar_(picked.text);
+  // 日曆記錄要打兩次 Calendar API（patch + insert），放在這裡會讓抽選多等好幾秒；
+  // 改由前端拿到結果、顯示畫面之後，另外呼叫 logDrawnTask action 在背景補記錄。
 
   return {
     task: picked,

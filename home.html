@@ -226,6 +226,7 @@ const TASKS_API_URL = MULTI_API_URL;
 // 沒抽到任務（或還沒抽過）時是 null，這時 drawTaskText 不能編輯。
 let drawnTaskId = null;
 let drawTaskSaveTimer = null;
+let drawLogChain = Promise.resolve();
 
 const drawTaskTextEl = document.getElementById('drawTaskText');
 
@@ -286,6 +287,11 @@ document.getElementById('drawTaskBtn').addEventListener('click', async function 
     }
     resultBox.style.display = 'block';
     autoResizeDrawTaskText();
+    if (data.task) {
+      // 日曆記錄不擋畫面：結果已顯示，背景補記錄（接在上一筆後面，避免兩次點擊同時改「上一筆事件」）
+      const logUrl = TASKS_API_URL + '?' + new URLSearchParams({ action: 'logDrawnTask', text: data.task.text, _t: Date.now() }).toString();
+      drawLogChain = drawLogChain.then(() => fetch(logUrl, { cache: 'no-store' })).catch(() => {});
+    }
   } catch (err) {
     alert('抽選失敗：' + err.message);
   } finally {
