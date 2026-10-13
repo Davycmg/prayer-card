@@ -1049,12 +1049,11 @@ function doGet(e) {
       case 'getAllGoogleTasksAllLists':
         result = getAllGoogleTasksAllLists();
         break;
-      case 'drawRandomTask':
-        result = drawRandomTask();
+      case 'getDrawState':
+        result = getDrawState();
         break;
-      case 'logDrawnTask':
-        logDrawnTaskToCalendar_(e.parameter.text || '');
-        result = { success: true };
+      case 'recordDrawnTask':
+        result = recordDrawnTask(e.parameter.taskId, e.parameter.text, e.parameter.reset);
         break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
@@ -1501,57 +1500,52 @@ function logDrawnTaskToCalendar_(taskText) {
 }
 
 /**
- * 從 Google Tasks 預設清單的未完成項目裡隨機抽一筆，抽過的記住（存在 PropertiesService），
- * 下次抽選會排除已抽過的，直到全部都抽完才自動重新開始一輪。
- * 抽到的任務記錄到 DRAW_TASK_CALENDAR_ID 由前端另外呼叫 logDrawnTask（見 logDrawnTaskToCalendar_），
- * 不放在這裡是為了讓抽選結果能立刻回傳。
+ * 禱告首頁「隨機抽任務」用：回傳 Google Tasks 預設清單的未完成項目，以及目前這一輪已抽過的 Task ID。
+ * 前端載入頁面時先抓一次，之後點按鈕直接在前端抽（不用等 Apps Script 來回），
+ * 抽完再呼叫 recordDrawnTask 把結果存回來。
  */
-function drawRandomTask() {
+function getDrawState() {
   const defaultListId = getDefaultTaskListIdOrNull_();
-  if (!defaultListId) {
-    return { task: null, remaining: 0, total: 0 };
-  }
+  if (!defaultListId) return { items: [], drawnIds: [] };
 
   const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
   const items = (tasksResult.items || []).map(function (t) {
     return { id: t.id, text: t.title || '(無標題)', note: t.notes || '' };
   });
 
-  if (items.length === 0) {
-    return { task: null, remaining: 0, total: 0 };
-  }
-
-  const props = PropertiesService.getDocumentProperties();
   let drawnIds = [];
   try {
-    drawnIds = JSON.parse(props.getProperty(DRAWN_TASK_IDS_PROP_KEY) || '[]');
+    drawnIds = JSON.parse(PropertiesService.getDocumentProperties().getProperty(DRAWN_TASK_IDS_PROP_KEY) || '[]');
   } catch (err) {
     drawnIds = [];
   }
-
-  const currentIds = items.map(function (t) { return t.id; });
   // 只保留仍然存在於目前清單裡的已抽 ID，避免任務被刪除後永遠佔著「已抽過」的名額
+  const currentIds = items.map(function (t) { return t.id; });
   drawnIds = drawnIds.filter(function (id) { return currentIds.indexOf(id) !== -1; });
 
-  let candidates = items.filter(function (t) { return drawnIds.indexOf(t.id) === -1; });
-  if (candidates.length === 0) {
-    // 全部都抽過了，重新開始一輪
-    drawnIds = [];
-    candidates = items;
-  }
+  return { items: items, drawnIds: drawnIds };
+}
 
-  const picked = candidates[Math.floor(Math.random() * candidates.length)];
-  drawnIds.push(picked.id);
+/**
+ * 前端抽完任務後呼叫：把抽到的 Task ID 記進已抽清單（reset=true 代表整輪抽完、重新開始一輪），
+ * 並把這次抽選記錄到 DRAW_TASK_CALENDAR_ID（見 logDrawnTaskToCalendar_）。
+ */
+function recordDrawnTask(taskId, text, reset) {
+  if (!taskId) throw new Error('缺少 Task ID');
+  const props = PropertiesService.getDocumentProperties();
+  let drawnIds = [];
+  if (reset !== 'true') {
+    try {
+      drawnIds = JSON.parse(props.getProperty(DRAWN_TASK_IDS_PROP_KEY) || '[]');
+    } catch (err) {
+      drawnIds = [];
+    }
+  }
+  if (drawnIds.indexOf(taskId) === -1) drawnIds.push(taskId);
   props.setProperty(DRAWN_TASK_IDS_PROP_KEY, JSON.stringify(drawnIds));
 
-  // 日曆記錄要打兩次 Calendar API（patch + insert），放在這裡會讓抽選多等好幾秒；
-  // 改由前端拿到結果、顯示畫面之後，另外呼叫 logDrawnTask action 在背景補記錄。
-
-  return {
-    task: picked,
-    remaining: items.length - drawnIds.length,
-    total: items.length
-  };
+  logDrawnTaskToCalendar_(text || '');
+  return { success: true };
 }
 
 /**
