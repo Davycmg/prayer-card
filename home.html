@@ -283,6 +283,7 @@ drawTaskTextEl.addEventListener('input', () => {
 let drawItems = [];
 let drawnIds = [];
 let drawStateReady = null;
+const completedTaskIds = new Set();
 
 function loadDrawState() {
   const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'getDrawState', _t: Date.now() }).toString();
@@ -290,7 +291,8 @@ function loadDrawState() {
     .then(res => res.json())
     .then(data => {
       if (data.error) throw new Error(data.error);
-      drawItems = data.items || [];
+      // 剛完成的任務可能還在較早送出的請求結果裡，濾掉避免又出現
+      drawItems = (data.items || []).filter(t => !completedTaskIds.has(t.id));
       drawnIds = data.drawnIds || [];
     });
   drawStateReady.catch(() => {});
@@ -321,6 +323,36 @@ function showDrawResult(task, total, remaining) {
   autoResizeDrawTaskText();
 }
 
+// 從本地清單抽下一個任務並顯示（抽選按鈕、完成任務後的「接著抽下一個」共用）。
+function drawNextTask() {
+  if (drawItems.length === 0) {
+    showDrawResult(null, 0, 0);
+    return;
+  }
+
+  let candidates = drawItems.filter(t => drawnIds.indexOf(t.id) === -1);
+  let reset = false;
+  if (candidates.length === 0) {
+    // 全部都抽過了，重新開始一輪
+    drawnIds = [];
+    candidates = drawItems;
+    reset = true;
+  }
+  const picked = candidates[Math.floor(Math.random() * candidates.length)];
+  drawnIds.push(picked.id);
+  showDrawResult(picked, drawItems.length, drawItems.length - drawnIds.length);
+
+  // 存回後端（已抽清單＋日曆記錄）放背景做，接在上一筆後面避免同時改「上一筆事件」；
+  // 做完順便重抓一次，讓清單跟 Google Tasks 的變動保持同步。
+  const recordUrl = TASKS_API_URL + '?' + new URLSearchParams({
+    action: 'recordDrawnTask', taskId: picked.id, text: picked.text, reset: reset ? 'true' : 'false', _t: Date.now()
+  }).toString();
+  drawLogChain = drawLogChain
+    .then(() => fetch(recordUrl, { cache: 'no-store' }))
+    .then(() => loadDrawState())
+    .catch(() => {});
+}
+
 document.getElementById('drawTaskBtn').addEventListener('click', async function (e) {
   e.preventDefault();
   const btn = e.currentTarget;
@@ -331,32 +363,7 @@ document.getElementById('drawTaskBtn').addEventListener('click', async function 
       btn.textContent = '抽選中...';
       await (drawStateReady || loadDrawState()).catch(() => loadDrawState());
     }
-    if (drawItems.length === 0) {
-      showDrawResult(null, 0, 0);
-      return;
-    }
-
-    let candidates = drawItems.filter(t => drawnIds.indexOf(t.id) === -1);
-    let reset = false;
-    if (candidates.length === 0) {
-      // 全部都抽過了，重新開始一輪
-      drawnIds = [];
-      candidates = drawItems;
-      reset = true;
-    }
-    const picked = candidates[Math.floor(Math.random() * candidates.length)];
-    drawnIds.push(picked.id);
-    showDrawResult(picked, drawItems.length, drawItems.length - drawnIds.length);
-
-    // 存回後端（已抽清單＋日曆記錄）放背景做，接在上一筆後面避免同時改「上一筆事件」；
-    // 做完順便重抓一次，讓清單跟 Google Tasks 的變動保持同步。
-    const recordUrl = TASKS_API_URL + '?' + new URLSearchParams({
-      action: 'recordDrawnTask', taskId: picked.id, text: picked.text, reset: reset ? 'true' : 'false', _t: Date.now()
-    }).toString();
-    drawLogChain = drawLogChain
-      .then(() => fetch(recordUrl, { cache: 'no-store' }))
-      .then(() => loadDrawState())
-      .catch(() => {});
+    drawNextTask();
   } catch (err) {
     alert('抽選失敗：' + err.message);
   } finally {
@@ -364,35 +371,28 @@ document.getElementById('drawTaskBtn').addEventListener('click', async function 
   }
 });
 
-document.getElementById('completeTaskBtn').addEventListener('click', async function () {
+document.getElementById('completeTaskBtn').addEventListener('click', function () {
   if (!drawnTaskId) return;
-  const btn = this;
   const taskId = drawnTaskId;
-  const statusEl = document.getElementById('drawTaskSaveStatus');
-  btn.disabled = true;
-  statusEl.textContent = '完成中...';
-  try {
-    const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'completeTaskItem', taskId: taskId, _t: Date.now() }).toString();
-    const res = await fetch(url, { cache: 'no-store' });
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    // 本地清單同步移除，下次抽選不會再抽到；任務在 Google Tasks 只是標記完成
-    drawItems = drawItems.filter(t => t.id !== taskId);
-    drawnIds = drawnIds.filter(id => id !== taskId);
-    drawnTaskId = null;
-    drawTaskTextEl.value = '✅ 已完成';
-    btn.style.display = 'none';
-    drawTaskTextEl.disabled = true;
-    document.getElementById('drawTaskNote').textContent = '';
-    document.getElementById('drawTaskProgress').textContent = `剩 ${drawItems.length - drawnIds.length} 個未抽`;
-    statusEl.textContent = '';
-    autoResizeDrawTaskText();
-    drawLogChain = drawLogChain.then(() => loadDrawState()).catch(() => {});
-  } catch (err) {
-    statusEl.textContent = '完成失敗：' + err.message;
-  } finally {
-    btn.disabled = false;
-  }
+  const taskText = drawTaskTextEl.value;
+
+  // 先在本地移除並立刻抽下一個（不等後端），標記完成放背景做；
+  // 任務在 Google Tasks 只是標記完成、不是刪除。
+  completedTaskIds.add(taskId);
+  drawItems = drawItems.filter(t => t.id !== taskId);
+  drawnIds = drawnIds.filter(id => id !== taskId);
+  drawNextTask();
+
+  const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'completeTaskItem', taskId: taskId, _t: Date.now() }).toString();
+  fetch(url, { cache: 'no-store' })
+    .then(res => res.json())
+    .then(data => { if (data.error) throw new Error(data.error); })
+    .catch(err => {
+      // 失敗就放回清單，避免畫面上看起來完成了、實際沒完成
+      completedTaskIds.delete(taskId);
+      loadDrawState();
+      alert('「' + taskText + '」標記完成失敗：' + err.message);
+    });
 });
 
 document.getElementById('exportTasksBtn').addEventListener('click', async function (e) {
