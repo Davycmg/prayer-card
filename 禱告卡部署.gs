@@ -968,6 +968,9 @@ function doGet(e) {
       case 'deleteByRow':
         result = deleteByRow(parseInt(e.parameter.row, 10));
         break;
+      case 'trashMultiDuplicatesOfTasks':
+        result = trashMultiDuplicatesOfTasks(e.parameter.dryRun === 'true');
+        break;
       case 'getTrashList':
         result = getTrashList();
         break;
@@ -1800,6 +1803,40 @@ function deleteByRow(row) {
 
   sheet.deleteRow(row);
   return { success: true, deletedRow: row };
+}
+
+/**
+ * 多方禱告（表單回覆1）裡，事項文字跟 Google Tasks 預設清單「未完成」任務標題一樣的項目，
+ * 一次全部丟進垃圾桶（軟刪除，可從垃圾桶救回），Google Tasks 那邊保留不動。
+ * 比對方式跟 all.html 的「重複，也在」提示一致：連續空白視為一個、忽略前後空白，其餘要完全相同。
+ * dryRun 為真時只回報會被丟掉的項目，不實際刪除（前端先給使用者確認用）。
+ * 由下往上刪，避免刪掉一列後後面的列號位移。
+ */
+function trashMultiDuplicatesOfTasks(dryRun) {
+  const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+  const taskTitles = {};
+  getTodayTasksList().items.forEach(function (t) {
+    const n = norm(t.text);
+    if (n) taskTitles[n] = true;
+  });
+
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { success: true, count: 0, items: [] };
+
+  const texts = sheet.getRange(2, COL.TEXT, lastRow - 1, 1).getValues();
+  const matches = [];
+  for (let i = 0; i < texts.length; i++) {
+    const n = norm(texts[i][0]);
+    if (n && taskTitles[n]) matches.push({ row: i + 2, text: String(texts[i][0]) });
+  }
+
+  if (!dryRun) {
+    for (let k = matches.length - 1; k >= 0; k--) {
+      deleteByRow(matches[k].row);
+    }
+  }
+  return { success: true, count: matches.length, items: matches.map(function (m) { return m.text; }) };
 }
 
 /**

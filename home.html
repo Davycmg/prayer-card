@@ -237,6 +237,7 @@
   <a class="btn" href="index.html">🙏 多方禱告</a>
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
+  <a class="btn" href="#" id="dedupeMultiBtn">🧹 清除重複（保留待辦，多方禱告重複的丟垃圾桶）</a>
 </div>
 
 <script>
@@ -393,6 +394,40 @@ document.getElementById('completeTaskBtn').addEventListener('click', function ()
       loadDrawState();
       alert('「' + taskText + '」標記完成失敗：' + err.message);
     });
+});
+
+// 一鍵清除「重複，也在：今日待辦禱告」：Google Tasks 預設清單保留，多方禱告裡一樣文字的項目丟垃圾桶。
+document.getElementById('dedupeMultiBtn').addEventListener('click', async function (e) {
+  e.preventDefault();
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  const call = async function (dryRun) {
+    const url = MULTI_API_URL + '?' + new URLSearchParams({ action: 'trashMultiDuplicatesOfTasks', dryRun: dryRun ? 'true' : 'false', _t: Date.now() }).toString();
+    const res = await fetch(url, { cache: 'no-store' });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    return data;
+  };
+  try {
+    btn.textContent = '檢查中...';
+    const preview = await call(true);
+    if (!preview.count) {
+      btn.textContent = '沒有重複項目 ✓';
+      return;
+    }
+    const sample = preview.items.slice(0, 10).join('\n') + (preview.count > 10 ? '\n…' : '');
+    if (!confirm('找到 ' + preview.count + ' 筆多方禱告跟 Google Tasks 重複，要丟進垃圾桶嗎？（可從垃圾桶救回）\n\n' + sample)) {
+      btn.textContent = originalText;
+      return;
+    }
+    btn.textContent = '清除中...';
+    const done = await call(false);
+    btn.textContent = '已把 ' + done.count + ' 筆丟進垃圾桶 ✓';
+  } catch (err) {
+    btn.textContent = '清除失敗：' + err.message;
+  } finally {
+    setTimeout(function () { btn.textContent = originalText; }, 3000);
+  }
 });
 
 document.getElementById('exportTasksBtn').addEventListener('click', async function (e) {
