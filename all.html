@@ -734,10 +734,10 @@ function rowMutation(baseUrl, params) {
     if (data && data.success === false) throw new Error('伺服器沒有處理這一列（列號無效）');
     return data;
   });
-  run.catch(() => {
+  run.catch((err) => {
     if (isDelete) {
       mutationEpoch++; // 要在後面排隊的請求開始前遞增（同一輪 microtask 內，先註冊先執行）
-      scheduleResync();
+      scheduleResync(err && err.message);
     }
   });
   mutationQueues[baseUrl] = run.catch(() => {});
@@ -746,11 +746,15 @@ function rowMutation(baseUrl, params) {
 
 // 刪除失敗後，等排隊中的請求都跑完（或作廢）再重新載入，讓本地列號回到跟試算表一致
 let resyncTimer = null;
-function scheduleResync() {
+let resyncReasons = [];
+function scheduleResync(reason) {
+  if (reason && resyncReasons.indexOf(reason) === -1) resyncReasons.push(reason);
   clearTimeout(resyncTimer);
   resyncTimer = setTimeout(() => {
     Promise.all(Object.values(mutationQueues)).then(() => {
-      showStatus('已重新載入清單，請確認項目狀態', true);
+      // 把真正的失敗原因一併顯示，不然只看到「已重新載入」不知道為什麼
+      showStatus('刪除失敗：' + resyncReasons.join('；') + '（已重新載入清單，請確認項目狀態）', true);
+      resyncReasons = [];
       loadAll();
     });
   }, 500);
