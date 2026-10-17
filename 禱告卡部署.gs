@@ -963,10 +963,10 @@ function doGet(e) {
         result = getInitData();
         break;
       case 'completeByRow':
-        result = completeByRow(parseInt(e.parameter.row, 10));
+        result = completeByRow(parseInt(e.parameter.row, 10), e.parameter.expect);
         break;
       case 'deleteByRow':
-        result = deleteByRow(parseInt(e.parameter.row, 10));
+        result = deleteByRow(parseInt(e.parameter.row, 10), e.parameter.expect);
         break;
       case 'trashMultiDuplicatesOfTasks':
         result = trashMultiDuplicatesOfTasks(e.parameter.dryRun === 'true');
@@ -1774,11 +1774,25 @@ function searchItems(keyword) {
 }
 
 /**
+ * 列號防呆：前端（all.html）會一併帶上它看到的事項文字（expect），這裡確認該列的文字真的一樣才動手，
+ * 避免列號因為別處刪除／排序而位移時，對到別的列（完成錯項目、刪錯項目）。沒帶 expect 就不檢查（舊行為）。
+ */
+function assertRowTextMatches_(sheet, row, expect) {
+  if (expect === undefined || expect === null || expect === '') return;
+  const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+  const actual = sheet.getRange(row, COL.TEXT).getValue();
+  if (norm(actual) !== norm(expect)) {
+    throw new Error('第 ' + row + ' 列的內容跟畫面上不一致（列號可能已位移），已取消動作');
+  }
+}
+
+/**
  * 用實際列號標記完成（F欄打Y→推進E欄→清空F欄）。
  * 不需要重新掃描今日清單，前端可以背景呼叫，不阻塞畫面。
  */
-function completeByRow(row) {
+function completeByRow(row, expect) {
   if (!row || row < 2) return { success: false };
+  assertRowTextMatches_(getSheet_(), row, expect);
   markDone_(getSheet_(), row);
   return { success: true, row: row };
 }
@@ -1790,9 +1804,10 @@ function completeByRow(row) {
  * 會自動校正本地暫存區裡所有列號 > 這個 row 的項目（各減1）。
  * 真的要永久刪除，要另外對垃圾桶呼叫 deleteTrashItem 或 emptyTrash。
  */
-function deleteByRow(row) {
+function deleteByRow(row, expect) {
   if (!row || row < 2) return { success: false };
   const sheet = getSheet_();
+  assertRowTextMatches_(sheet, row, expect);
   const lastCol = sheet.getLastColumn();
   const rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
 
