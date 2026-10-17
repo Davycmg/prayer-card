@@ -23,11 +23,62 @@ function withRetry_(fn) {
 }
 
 function moveTaskBetweenLists_(task, fromListId, toListId) {
+  // 從 Google Chat／文件指派來的任務，Tasks API 不允許刪除；先擋下，免得「複本建好了、原本刪不掉」留下重複項
+  if (task.assignmentInfo) {
+    throw new Error('這是從 Google Chat 或文件指派來的待辦，Google 不允許程式搬移，請到 Google Tasks 裡手動拖到「工作日」清單');
+  }
   const copy = { title: task.title || '（無標題）', notes: task.notes || '' };
   if (task.due) copy.due = task.due;
-  withRetry_(() => Tasks.Tasks.insert(copy, toListId));
-  withRetry_(() => Tasks.Tasks.remove(fromListId, task.id));
+  const inserted = withRetry_(() => Tasks.Tasks.insert(copy, toListId));
+  try {
+    withRetry_(() => Tasks.Tasks.remove(fromListId, task.id));
+  } catch (err) {
+    // 原本那項刪不掉：把剛建的複本撤掉，維持「沒搬」的狀態，不要兩邊各一份
+    try { Tasks.Tasks.remove(toListId, inserted.id); } catch (e) { /* 撤不掉就算了，下面照樣報錯 */ }
+    if (String(err).indexOf('permission') !== -1) {
+      throw new Error('Google 不允許程式搬移這個待辦（通常是從 Google Chat 或文件指派來的任務），請到 Google Tasks 裡手動拖到「工作日」清單');
+    }
+    throw err;
+  }
   Utilities.sleep(300);
+}
+
+/**
+ * 手動執行一次：清掉之前「移到工作日」失敗時留在「工作日」清單的重複複本。
+ * 判斷方式：「工作日」清單裡未完成的任務，標題跟預設清單裡某個未完成任務完全相同 → 視為複本刪掉
+ * （原本那項還在預設清單，所以刪複本不會少任何東西）。同一標題在「工作日」裡有多份也全部刪掉。
+ * 預設先試算（dryRun）只印出會刪哪些，確認後改執行 cleanupWorkdayDuplicatesRun()。
+ */
+function cleanupWorkdayDuplicates(dryRun) {
+  if (dryRun === undefined) dryRun = true;
+  const defaultListId = getDefaultTaskListId_();
+  const workdayList = (Tasks.Tasklists.list({ maxResults: 100 }).items || [])
+    .find(l => l.title === WORKDAY_LIST_NAME);
+  if (!workdayList || workdayList.id === defaultListId) { Logger.log('找不到「工作日」清單'); return 0; }
+
+  const listAll = (listId) => {
+    let items = [], pageToken;
+    do {
+      const res = Tasks.Tasks.list(listId, { showCompleted: false, maxResults: 100, pageToken: pageToken });
+      items = items.concat(res.items || []);
+      pageToken = res.nextPageToken;
+    } while (pageToken);
+    return items;
+  };
+  const defaultTitles = {};
+  listAll(defaultListId).forEach(t => { defaultTitles[(t.title || '').trim()] = true; });
+
+  const dupes = listAll(workdayList.id).filter(t => defaultTitles[(t.title || '').trim()]);
+  dupes.forEach(t => {
+    Logger.log((dryRun ? '將刪除：' : '已刪除：') + t.title);
+    if (!dryRun) { withRetry_(() => Tasks.Tasks.remove(workdayList.id, t.id)); Utilities.sleep(200); }
+  });
+  Logger.log((dryRun ? '試算完成，會刪除 ' : '完成，共刪除 ') + dupes.length + ' 項');
+  return dupes.length;
+}
+
+function cleanupWorkdayDuplicatesRun() {
+  return cleanupWorkdayDuplicates(false);
 }
 
 // 前端 action: moveTaskToWorkdayList
