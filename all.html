@@ -1318,9 +1318,10 @@ el.completeBtn.addEventListener('click', () => {
   stopSpeakingIfNeeded();
 
   removeItemFromLists(item);
-  showStatus('已標記完成');
+  // 畫面先移除只是樂觀更新，要等伺服器真的回應成功才顯示「已」完成，失敗則維持紅字
+  showStatus('完成中…（等待伺服器確認）', true);
 
-  config.complete(item).catch(err => {
+  config.complete(item).then(() => showStatus('已標記完成 ✓')).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message, true);
     allItems.push(item);
     applyFilter();
@@ -1339,10 +1340,12 @@ el.deleteBtn.addEventListener('click', () => {
   stopSpeakingIfNeeded();
 
   removeItemFromLists(item);
-  showStatus('已刪除');
+  // 畫面先移除只是樂觀更新，要等伺服器真的回應成功才顯示「已刪除」，失敗則維持紅字
+  showStatus('刪除中…（等待伺服器確認）', true);
 
   // 本地列號的校正已在 rowMutation() 送出請求的當下做掉了，這裡不用再 reindex
   config.delete.run(item)
+    .then(() => showStatus('已刪除 ✓'))
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
       allItems.push(item);
