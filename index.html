@@ -940,7 +940,7 @@ el.addTagBtn.addEventListener('click', async () => {
   const rowRef = item.row;
 
   // 套用到目前這項，背景同步（不阻塞畫面）
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         showStatus('已複製到對應 Google Tasks 清單');
@@ -1003,7 +1003,7 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   if (itemsCache.length === 0) return;
   const item = itemsCache[cachePos];
 
-  apiCall({ action: 'copyToTasks', row: item.row })
+  apiCall({ action: 'copyToTasks', row: item.row, expect: item.text })
     .then(data => {
       if (data && data.copied) {
         if ((item.text || '').trim().startsWith('S')) {
@@ -1091,7 +1091,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
     }
   }
 
-  apiCall({ action: action, row: item.row })
+  apiCall({ action: action, row: item.row, expect: item.text })
     .then(() => showStatus(doneMsg))
     .catch(err => {
       showStatus('同步失敗，請重新再按一次：' + err.message);
@@ -1189,7 +1189,7 @@ function shiftCycleAndComplete(direction) {
   }
 
   // 先更新週期，再標記完成：完成時後端會依「新」週期往後推算下次禱告日期
-  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
+  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle, expect: item.text })
     .then(() => apiCall({ action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
 
@@ -1458,7 +1458,7 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
 
   setLoading(true);
   try {
-    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText });
+    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText, expect: target.text });
     // 從列號大到小依序丟進垃圾桶，避免刪除造成的列號位移影響到還沒處理的項目
     const toTrash = others.slice().sort((a, b) => b.row - a.row);
     for (const item of toTrash) {
@@ -1480,8 +1480,9 @@ el.prayerText.addEventListener('input', () => {
   saveTimer = setTimeout(() => {
     if (itemsCache.length === 0) return;
     const item = itemsCache[cachePos];
+    const prevText = item.text; // 改之前的文字，後端用它確認／找回正確的列
     item.text = el.prayerText.value;
-    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text })
+    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text, expect: prevText })
       .then(() => showStatus('已同步'))
       .catch(err => showStatus('同步失敗：' + err.message));
   }, 1000);
@@ -1505,7 +1506,7 @@ el.cycleSelect.addEventListener('change', () => {
     renderFromCache(cachePos);
   }
 
-  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
+  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle, expect: item.text })
     .then(() => apiCall({ action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
 
@@ -1521,7 +1522,7 @@ el.tagSelect.addEventListener('change', () => {
   el.weekdaySelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
   updateTagWarning();
   const rowRef = item.row;
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         moveCurrentItemToTrash();
@@ -1542,7 +1543,7 @@ el.weekdaySelect.addEventListener('change', () => {
   el.tagSelect.value = ''; // 兩個下拉選單對應同一個標籤欄位，切換時互相清空避免顯示錯亂
   updateTagWarning();
   const rowRef = item.row;
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         moveCurrentItemToTrash();

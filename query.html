@@ -1222,11 +1222,12 @@ el.editText.addEventListener('input', () => {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     if (!editingItem) return;
+    const prevText = editingItem.text; // 改之前的文字，後端用它確認／找回正確的列
     editingItem.text = el.editText.value;
 
     const action = editingItem.source === 'googleTasks'
       ? apiCall({ action: 'updateTaskTitle', taskId: editingItem.taskId, listId: editingItem.listId, value: editingItem.text })
-      : apiCall({ action: 'updateTextByRow', row: editingItem.row, value: editingItem.text });
+      : apiCall({ action: 'updateTextByRow', row: editingItem.row, value: editingItem.text, expect: prevText });
 
     action
       .then(() => showStatus(el.editStatus, '已同步'))
@@ -1237,7 +1238,7 @@ el.editText.addEventListener('input', () => {
 el.editCycleSelect.addEventListener('change', () => {
   if (!editingItem || !el.editCycleSelect.value) return;
   editingItem.cycle = el.editCycleSelect.value;
-  apiCall({ action: 'updateCycleByRow', row: editingItem.row, value: editingItem.cycle })
+  apiCall({ action: 'updateCycleByRow', row: editingItem.row, value: editingItem.cycle, expect: editingItem.text })
     .then(() => showStatus(el.editStatus, '週期已更新'))
     .catch(err => showStatus(el.editStatus, '更新失敗：' + err.message));
 });
@@ -1246,7 +1247,7 @@ el.editTagSelect.addEventListener('change', () => {
   if (!editingItem || !el.editTagSelect.value) return;
   editingItem.tag = el.editTagSelect.value;
   el.editWeekdaySelect.value = '';
-  apiCall({ action: 'updateTagByRow', row: editingItem.row, value: editingItem.tag })
+  apiCall({ action: 'updateTagByRow', row: editingItem.row, value: editingItem.tag, expect: editingItem.text })
     .then(() => showStatus(el.editStatus, '標籤已更新'))
     .catch(err => showStatus(el.editStatus, '更新失敗：' + err.message));
 });
@@ -1255,7 +1256,7 @@ el.editWeekdaySelect.addEventListener('change', () => {
   if (!editingItem || !el.editWeekdaySelect.value) return;
   editingItem.tag = el.editWeekdaySelect.value;
   el.editTagSelect.value = '';
-  apiCall({ action: 'updateTagByRow', row: editingItem.row, value: editingItem.tag })
+  apiCall({ action: 'updateTagByRow', row: editingItem.row, value: editingItem.tag, expect: editingItem.text })
     .then(() => showStatus(el.editStatus, '標籤已更新'))
     .catch(err => showStatus(el.editStatus, '更新失敗：' + err.message));
 });
@@ -1356,7 +1357,7 @@ el.tcAddTagBtn.addEventListener('click', async () => {
   el.tcWeekdaySelect.value = '';
   const rowRef = item.row;
 
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: newTag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');
@@ -1406,7 +1407,7 @@ el.tcRemoveTagBtn.addEventListener('click', () => {
     el.tcWeekdaySelect.value = '';
   }
 
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: '' })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: '', expect: item.text })
     .then(() => showStatus(el.tcStatus, '標籤已移除'))
     .catch(err => showStatus(el.tcStatus, '移除失敗：' + err.message));
 });
@@ -1445,7 +1446,7 @@ armConfirmButton(el.tcCopyToTasksBtn, '再按一次確認複製', () => {
   if (tcItemsCache.length === 0) return;
   const item = tcItemsCache[tcCachePos];
 
-  apiCall({ action: 'copyToTasks', row: item.row })
+  apiCall({ action: 'copyToTasks', row: item.row, expect: item.text })
     .then(data => {
       if (data && data.copied) {
         tcMoveCurrentItemToTrash();
@@ -1575,7 +1576,7 @@ function tcShiftCycleAndComplete(direction) {
   }
 
   // 先更新週期，再標記完成：完成時後端會依「新」週期往後推算下次禱告日期
-  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
+  apiCall({ action: 'updateCycleByRow', row: row, value: newCycle, expect: item.text })
     .then(() => apiCall({ action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => showStatus(el.tcStatus, '同步失敗，請檢查網路：' + err.message));
 
@@ -1824,7 +1825,7 @@ armConfirmButton(el.tcMergeSearchBtn, '再按一次確認合併', async () => {
 
   setLoading(true);
   try {
-    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText });
+    await apiCall({ action: 'updateTextByRow', row: target.row, value: mergedText, expect: target.text });
     // 從列號大到小依序丟進垃圾桶，避免刪除造成的列號位移影響到還沒處理的項目
     const toTrash = others.slice().sort((a, b) => b.row - a.row);
     for (const item of toTrash) {
@@ -1851,8 +1852,9 @@ el.tcPrayerText.addEventListener('input', () => {
   tcSaveTimer = setTimeout(() => {
     if (tcItemsCache.length === 0) return;
     const item = tcItemsCache[tcCachePos];
+    const prevText = item.text; // 改之前的文字，後端用它確認／找回正確的列
     item.text = el.tcPrayerText.value;
-    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text })
+    apiCall({ action: 'updateTextByRow', row: item.row, value: item.text, expect: prevText })
       .then(() => showStatus(el.tcStatus, '已同步'))
       .catch(err => showStatus(el.tcStatus, '同步失敗：' + err.message));
   }, 1000);
@@ -1863,7 +1865,7 @@ el.tcCycleSelect.addEventListener('change', () => {
   const item = tcItemsCache[tcCachePos];
   item.cycle = el.tcCycleSelect.value;
   tcUpdateCycleWarning();
-  apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle })
+  apiCall({ action: 'updateCycleByRow', row: item.row, value: item.cycle, expect: item.text })
     .then(() => showStatus(el.tcStatus, '週期已更新'))
     .catch(err => showStatus(el.tcStatus, '更新失敗：' + err.message));
 });
@@ -1874,7 +1876,7 @@ el.tcTagSelect.addEventListener('change', () => {
   item.tag = el.tcTagSelect.value;
   el.tcWeekdaySelect.value = '';
   const rowRef = item.row;
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');
@@ -1893,7 +1895,7 @@ el.tcWeekdaySelect.addEventListener('change', () => {
   item.tag = el.tcWeekdaySelect.value;
   el.tcTagSelect.value = '';
   const rowRef = item.row;
-  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag })
+  apiCall({ action: 'updateTagByRow', row: rowRef, value: item.tag, expect: item.text })
     .then(data => {
       if (data && data.exported) {
         showStatus(el.tcStatus, '已複製到對應 Google Tasks 清單');

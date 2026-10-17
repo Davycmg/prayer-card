@@ -955,6 +955,11 @@ function doGet(e) {
   const action = (e.parameter.action || 'getAllItems');
   let result;
   try {
+    // 用列號操作「表單回覆 1」的動作：前端有帶 expect（它看到的事項文字）時，先用文字確認／找回正確的列，
+    // 避免頁面開著期間試算表被刪列（例如清除重複、自動合併）導致列號位移，改到別人那一列。
+    if (ROW_TEXT_CHECKED_ACTIONS_.indexOf(action) !== -1 && e.parameter.expect) {
+      e.parameter.row = String(resolveRowByText_(getSheet_(), parseInt(e.parameter.row, 10), e.parameter.expect));
+    }
     switch (action) {
       case 'getAllItems':
         result = getAllItems();
@@ -1779,6 +1784,11 @@ function searchItems(keyword) {
  * 在整欄找文字完全相同的列，多個相同時取離原列號最近的一列，找不到才報錯（並附上該列現在的內容方便除錯）。
  * 沒帶 expect 就不檢查，直接用傳進來的列號（舊行為）。
  */
+const ROW_TEXT_CHECKED_ACTIONS_ = [
+  'completeByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'setDateToNearestWeekday', 'setDateToNearestWeekend', 'copyToTasks'
+];
+
 function resolveRowByText_(sheet, row, expect) {
   if (expect === undefined || expect === null || expect === '') return row;
   const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
