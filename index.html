@@ -1158,7 +1158,7 @@ el.completeBtn.addEventListener('click', () => {
     renderFromCache(cachePos); // 移除後原位置自然遞補成下一項
   }
 
-  apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+  apiCall({ action: 'completeByRow', row: item.row, expect: item.text }).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message);
   });
 });
@@ -1190,7 +1190,7 @@ function shiftCycleAndComplete(direction) {
 
   // 先更新週期，再標記完成：完成時後端會依「新」週期往後推算下次禱告日期
   apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
-    .then(() => apiCall({ action: 'completeByRow', row: row }))
+    .then(() => apiCall({ action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
 
   showStatus('週期已調整為「' + newCycle + '」，已完成');
@@ -1218,7 +1218,7 @@ function moveCurrentItemToTrash() {
     renderFromCache(cachePos); // 移除後原位置自然遞補成下一項
   }
 
-  apiCall({ action: 'deleteByRow', row: deletedRow }).catch(err => {
+  apiCall({ action: 'deleteByRow', row: deletedRow, expect: item.text }).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message);
   });
 }
@@ -1244,7 +1244,7 @@ function moveCurrentItemToComplete() {
     renderFromCache(cachePos);
   }
 
-  apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+  apiCall({ action: 'completeByRow', row: item.row, expect: item.text }).catch(err => {
     showStatus('同步失敗，請檢查網路：' + err.message);
   });
 }
@@ -1462,7 +1462,7 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
     // 從列號大到小依序丟進垃圾桶，避免刪除造成的列號位移影響到還沒處理的項目
     const toTrash = others.slice().sort((a, b) => b.row - a.row);
     for (const item of toTrash) {
-      await apiCall({ action: 'deleteByRow', row: item.row });
+      await apiCall({ action: 'deleteByRow', row: item.row, expect: item.text });
     }
     showStatus('已合併 ' + selected.length + ' 項為一項');
     await performSearch();
@@ -1506,7 +1506,7 @@ el.cycleSelect.addEventListener('change', () => {
   }
 
   apiCall({ action: 'updateCycleByRow', row: row, value: newCycle })
-    .then(() => apiCall({ action: 'completeByRow', row: row }))
+    .then(() => apiCall({ action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => showStatus('同步失敗，請檢查網路：' + err.message));
 
   showStatus('週期已更新為「' + newCycle + '」，已完成');
@@ -1655,7 +1655,7 @@ async function runAutoPray() {
       const item = itemsCache[cachePos];
       itemsCache.splice(cachePos, 1);
 
-      apiCall({ action: 'completeByRow', row: item.row }).catch(err => {
+      apiCall({ action: 'completeByRow', row: item.row, expect: item.text }).catch(err => {
         showStatus('同步失敗：' + err.message);
       });
 
