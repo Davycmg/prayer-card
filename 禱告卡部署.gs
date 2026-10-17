@@ -2113,6 +2113,16 @@ function extractCyclePrefixFromTitle_(title) {
   return { cycle: cycle, text: text };
 }
 
+// 帶這些前綴的任務是 apps-script-projects 的 google-task-shuffle／google-task-weekday-scheduler 管理的常駐任務
+// （1＝本來就是從這份表「複製到 Tasks」出去的、H＝非工作事務、A/E＝工作區輪替、E每天／E週X／每天＝例行），
+// 每天 05:00 匯入時要跳過，否則會把同一件事又寫回多方禱告，變成跟 Google Tasks 重複
+const TASK_IMPORT_SKIP_PREFIXES_ = ['1', 'H', 'A', 'E', '每天'];
+
+function isSkippedTaskImportTitle_(title) {
+  const t = String(title || '').normalize('NFKC').replace(/^\s+/, '').toUpperCase();
+  return TASK_IMPORT_SKIP_PREFIXES_.some(p => t.indexOf(p) === 0);
+}
+
 function importGoogleTasksToday_() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
@@ -2140,11 +2150,12 @@ function importGoogleTasksToday_() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let updatedCount = 0, addedCount = 0;
+  let updatedCount = 0, addedCount = 0, skippedCount = 0;
 
   tasks.forEach(task => {
     const rawTitle = (task.title || '').trim();
     if (!rawTitle) return;
+    if (isSkippedTaskImportTitle_(rawTitle)) { skippedCount++; return; }
 
     // 標題若帶「週期-」前綴（例如「每季-同工會：...」），歸檔時拆掉前綴、
     // 同步把週期欄設成對應代碼（例如 S每季），並用去掉前綴後的文字比對既有列
@@ -2185,7 +2196,7 @@ function importGoogleTasksToday_() {
     }
   });
 
-  console.log(`✅ Google Tasks 匯入完成：更新 ${updatedCount} 筆、新增 ${addedCount} 筆。`);
+  console.log(`✅ Google Tasks 匯入完成：更新 ${updatedCount} 筆、新增 ${addedCount} 筆、跳過前綴任務 ${skippedCount} 筆。`);
 }
 
 /**
