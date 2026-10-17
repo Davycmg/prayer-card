@@ -661,18 +661,18 @@ function showStatus(msg, persistent) {
   }
 }
 
-async function apiCall(baseUrl, params) {
+async function apiCall(baseUrl, params, timeoutMs) {
   params._t = Date.now();
   const url = baseUrl + '?' + new URLSearchParams(params).toString();
   // Apps Script 偶爾會整個掛住不回應（尤其是 dg-network 那個獨立部署），沒有逾時的話畫面會一直卡在
   // 「載入中」等到瀏覽器自己放棄，體感非常久。這裡主動設 12 秒逾時，逾時就當失敗，讓重試機制介入。
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs || 12000);
   let res;
   try {
     res = await fetch(url, { cache: 'no-store', signal: controller.signal });
   } catch (err) {
-    if (err.name === 'AbortError') throw new Error('連線逾時（超過 12 秒沒有回應）');
+    if (err.name === 'AbortError') throw new Error('連線逾時（超過 ' + Math.round((timeoutMs || 12000) / 1000) + ' 秒沒有回應）');
     throw new Error('連線失敗：' + err.message);
   } finally {
     clearTimeout(timeoutId);
@@ -727,8 +727,9 @@ function rowMutation(baseUrl, params) {
   const prev = mutationQueues[baseUrl] || Promise.resolve();
   const run = prev.then(async () => {
     if (epoch !== mutationEpoch) throw new Error('前面有一筆刪除失敗，為避免對錯列，這個動作已取消，請等清單重新載入後再操作一次');
+    // 不重試的請求只有一次機會，逾時要放寬（Apps Script 偶爾會慢到十幾秒才回，12 秒就放棄會誤判成失敗）
     const data = NO_RETRY_ACTIONS.has(params.action)
-      ? await apiCall(baseUrl, Object.assign({}, params))
+      ? await apiCall(baseUrl, Object.assign({}, params), 45000)
       : await apiCallRetrying(baseUrl, params);
     if (data && data.success === false) throw new Error('伺服器沒有處理這一列（列號無效）');
     return data;
@@ -807,6 +808,7 @@ function loadSource(generation, source, label, promise, normalize) {
       if (generation !== loadGeneration) return;
       lastFailedSources = lastFailedSources.filter(f => f.source !== source);
       lastFailedSources.push({ source, label, message: err.message });
+      showStatus(label + '載入失敗：' + err.message, true);
       updateBreakdown();
     });
 }
