@@ -955,6 +955,11 @@ function doGet(e) {
   const action = (e.parameter.action || 'getAllItems');
   let result;
   try {
+    // 用列號操作「表單回覆 1」的動作：前端有帶 expect（它看到的事項文字）時，先用文字確認／找回正確的列，
+    // 避免頁面開著期間試算表被刪列（例如清除重複、自動合併）導致列號位移，改到別人那一列。
+    if (ROW_TEXT_CHECKED_ACTIONS_.indexOf(action) !== -1 && e.parameter.expect) {
+      e.parameter.row = String(resolveRowByText_(getSheet_(), parseInt(e.parameter.row, 10), e.parameter.expect));
+    }
     switch (action) {
       case 'getAllItems':
         result = getAllItems();
@@ -1774,16 +1779,37 @@ function searchItems(keyword) {
 }
 
 /**
- * 列號防呆：前端（all.html）會一併帶上它看到的事項文字（expect），這裡確認該列的文字真的一樣才動手，
- * 避免列號因為別處刪除／排序而位移時，對到別的列（完成錯項目、刪錯項目）。沒帶 expect 就不檢查（舊行為）。
+ * 列號防呆＋自動校正：前端（all.html）會帶上它看到的列號（row）跟事項文字（expect）。
+ * 該列文字跟 expect 一樣就直接用；不一樣（列號因別處刪除／排序／自動合併而位移）時，
+ * 在整欄找文字完全相同的列，多個相同時取離原列號最近的一列，找不到才報錯（並附上該列現在的內容方便除錯）。
+ * 沒帶 expect 就不檢查，直接用傳進來的列號（舊行為）。
  */
-function assertRowTextMatches_(sheet, row, expect) {
-  if (expect === undefined || expect === null || expect === '') return;
+const ROW_TEXT_CHECKED_ACTIONS_ = [
+  'completeByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'setDateToNearestWeekday', 'setDateToNearestWeekend', 'copyToTasks'
+];
+
+function resolveRowByText_(sheet, row, expect) {
+  if (expect === undefined || expect === null || expect === '') return row;
   const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
-  const actual = sheet.getRange(row, COL.TEXT).getValue();
-  if (norm(actual) !== norm(expect)) {
-    throw new Error('第 ' + row + ' 列的內容跟畫面上不一致（列號可能已位移），已取消動作');
+  const want = norm(expect);
+  const lastRow = sheet.getLastRow();
+  const actual = row <= lastRow ? norm(sheet.getRange(row, COL.TEXT).getValue()) : '';
+  if (actual === want) return row;
+
+  let best = -1;
+  if (lastRow >= 2) {
+    const texts = sheet.getRange(2, COL.TEXT, lastRow - 1, 1).getValues();
+    for (let i = 0; i < texts.length; i++) {
+      if (norm(texts[i][0]) !== want) continue;
+      const r = i + 2;
+      if (best === -1 || Math.abs(r - row) < Math.abs(best - row)) best = r;
+    }
   }
+  if (best === -1) {
+    throw new Error('找不到內容為「' + want.slice(0, 30) + '」的項目（第 ' + row + ' 列現在是「' + actual.slice(0, 30) + '」），可能已被刪除或改過');
+  }
+  return best;
 }
 
 /**
@@ -1792,7 +1818,7 @@ function assertRowTextMatches_(sheet, row, expect) {
  */
 function completeByRow(row, expect) {
   if (!row || row < 2) return { success: false };
-  assertRowTextMatches_(getSheet_(), row, expect);
+  row = resolveRowByText_(getSheet_(), row, expect);
   markDone_(getSheet_(), row);
   return { success: true, row: row };
 }
@@ -1807,7 +1833,7 @@ function completeByRow(row, expect) {
 function deleteByRow(row, expect) {
   if (!row || row < 2) return { success: false };
   const sheet = getSheet_();
-  assertRowTextMatches_(sheet, row, expect);
+  row = resolveRowByText_(sheet, row, expect);
   const lastCol = sheet.getLastColumn();
   const rowValues = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
 

@@ -515,15 +515,15 @@ const SOURCE_CONFIG = {
     label: '🙏 多方禱告', badgeClass: 'multi',
     text: {
       editable: true,
-      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: item.row, value })
+      save: (item, value, prevText) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: item.row, value, expect: prevText })
     },
     cycle: {
       show: true, options: Object.values(CYCLE_MAP),
-      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: item.row, value, expect: item.text })
     },
     tag: {
       show: true,
-      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value, expect: item.text })
     },
     note: { editable: false }, // index.html 本身也沒有讓備註可編輯，維持唯讀
     complete: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: item.row, expect: item.text }),
@@ -1133,8 +1133,10 @@ el.noteText.addEventListener('input', () => {
 });
 
 function flushSave(item, config, field, value) {
+  // 改文字時把「改之前」的文字一起送出，後端用它確認／找回正確的列（列號可能已經位移）
+  const prevValue = item[field];
   item[field] = value;
-  fieldSave(config, field)(item, value)
+  fieldSave(config, field)(item, value, prevValue)
     .then(() => showStatus('已同步'))
     .catch(err => showStatus('同步失敗：' + err.message, true));
 }
@@ -1174,7 +1176,7 @@ el.cycleSelect.addEventListener('change', () => {
     item.cycle = newCycle;
     removeItemFromLists(item);
     showStatus('週期已更新為「' + newCycle + '」，已完成');
-    apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+    apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle, expect: item.text })
       .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row, expect: item.text }))
       .catch(err => {
         // 重試 3 次都失敗，代表這項其實沒有真的完成，加回清單裡，不然畫面上顯示「已完成」
@@ -1364,7 +1366,7 @@ el.deleteBtn.addEventListener('click', () => {
 armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
   const item = currentItem();
   if (!item || item.source !== 'multi') return;
-  apiCallWithRetry(MULTI_API_URL, { action: 'copyToTasks', row: item.row })
+  apiCallWithRetry(MULTI_API_URL, { action: 'copyToTasks', row: item.row, expect: item.text })
     .then(async (data) => {
       if (!data || !data.copied) { showStatus('複製失敗，請稍後再試'); return; }
       if ((item.text || '').trim().startsWith('S')) {
@@ -1515,7 +1517,7 @@ function setDueDateAndMaybeRemove(action, computeNewDate, doneMsg) {
 
   if (!staysDue) removeItemFromLists(item);
 
-  apiCallWithRetry(MULTI_API_URL, { action: action, row: item.row })
+  apiCallWithRetry(MULTI_API_URL, { action: action, row: item.row, expect: item.text })
     .then(() => showStatus(doneMsg))
     .catch(err => {
       showStatus('同步失敗，請重新再按一次：' + err.message, true);
@@ -1584,7 +1586,7 @@ function shiftCycleAndComplete(direction) {
   removeItemFromLists(item);
   showStatus('週期已調整為「' + newCycle + '」，已完成');
 
-  apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
+  apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle, expect: item.text })
     .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
@@ -1996,7 +1998,7 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
 
   setLoading(true);
   try {
-    await apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: target.row, value: mergedText });
+    await apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: target.row, value: mergedText, expect: target.text });
     const toTrash = others.slice().sort((a, b) => b.row - a.row);
     for (const item of toTrash) {
       await apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row, expect: item.text });
