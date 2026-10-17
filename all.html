@@ -1432,11 +1432,13 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
   }
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
+  // 不用全天：時間取最接近現在的下一個 15 分鐘整點（例如 17:28 → 17:30），耗時 0 分鐘（開始＝結束）
   const start = new Date();
-  start.setDate(start.getDate() + 1);
+  start.setSeconds(0, 0);
+  start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15);
   const end = new Date(start);
-  end.setDate(end.getDate() + 1);
-  const fmt = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+  // 用 UTC 格式（結尾 Z），不管日曆設定哪個時區都會落在正確的時間
+  const fmt = d => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
   const params = new URLSearchParams({
     action: 'TEMPLATE',
