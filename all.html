@@ -526,13 +526,13 @@ const SOURCE_CONFIG = {
       save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateTagByRow', row: item.row, value })
     },
     note: { editable: false }, // index.html 本身也沒有讓備註可編輯，維持唯讀
-    complete: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: item.row }),
+    complete: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: item.row, expect: item.text }),
     delete: {
       show: true,
       // 跟 index.html 一致：多方禱告的刪除是軟刪除（先進垃圾桶，可救回），不用跳確認對話框，
       // 按下去本地立刻移除（跟「完成」按鈕一樣的優化樂觀更新）
       confirmBeforeDelete: false,
-      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
+      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row, expect: item.text })
     }
   },
   task: {
@@ -693,6 +693,69 @@ async function apiCall(baseUrl, params) {
 // 打不到就再試幾次（Apps Script 偶爾會出現暫時性錯誤或整個掛住，尤其是 dg-network 那個獨立部署），
 // 每次重試間隔拉長一點（1.2秒／2.5秒），總共試 3 次都失敗才真的算這個來源載入失敗。
 async function apiCallWithRetry(baseUrl, params) {
+  if (isRowMutation(baseUrl, params)) return rowMutation(baseUrl, params);
+  return apiCallRetrying(baseUrl, params);
+}
+
+// ===== 以「列號」操作試算表的請求（完成／刪除／改文字…）一律排隊，照點擊順序一個一個送 =====
+// 為什麼要排隊：刪除一列後，後面所有列號都會往前移一位。以前每次點擊都立刻平行送出，
+// 連點幾次刪除／完成時，Apps Script 先處理哪一個不一定，後面的請求就會對到錯的列——
+// 變成「畫面顯示已刪除／已完成，其實那一列根本沒動（或動到別的列）」，重新整理後項目又跑回來。
+// 做法：點擊當下就先把本地列號校正好（跟「已經刪掉」的狀態一致），請求照順序排隊，
+// 每個請求排到時，伺服器的列號狀態剛好就是它點擊當下看到的狀態。
+const ROW_MUTATION_ACTIONS = new Set([
+  'deleteByRow', 'completeByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'updateNoteByRow', 'copyToTasks', 'setDateToNearestWeekday', 'setDateToNearestWeekend'
+]);
+// 刪除、完成不能重試：請求逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
+const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow']);
+const mutationQueues = {};
+let mutationEpoch = 0; // 有刪除失敗就遞增，後面排隊中（列號假設已經位移）的請求全部作廢，避免對錯列
+
+function isRowMutation(baseUrl, params) {
+  return params.row !== undefined && ROW_MUTATION_ACTIONS.has(params.action)
+    && (baseUrl === MULTI_API_URL || baseUrl === NETWORK_API_URL);
+}
+
+function rowMutation(baseUrl, params) {
+  const source = baseUrl === NETWORK_API_URL ? 'network' : 'multi';
+  const row = params.row;
+  const isDelete = params.action === 'deleteByRow';
+  const epoch = mutationEpoch;
+  if (isDelete) reindexRowsAfterDelete(source, row);
+
+  const prev = mutationQueues[baseUrl] || Promise.resolve();
+  const run = prev.then(async () => {
+    if (epoch !== mutationEpoch) throw new Error('前面有一筆刪除失敗，為避免對錯列，這個動作已取消，請等清單重新載入後再操作一次');
+    const data = NO_RETRY_ACTIONS.has(params.action)
+      ? await apiCall(baseUrl, Object.assign({}, params))
+      : await apiCallRetrying(baseUrl, params);
+    if (data && data.success === false) throw new Error('伺服器沒有處理這一列（列號無效）');
+    return data;
+  });
+  run.catch(() => {
+    if (isDelete) {
+      mutationEpoch++; // 要在後面排隊的請求開始前遞增（同一輪 microtask 內，先註冊先執行）
+      scheduleResync();
+    }
+  });
+  mutationQueues[baseUrl] = run.catch(() => {});
+  return run;
+}
+
+// 刪除失敗後，等排隊中的請求都跑完（或作廢）再重新載入，讓本地列號回到跟試算表一致
+let resyncTimer = null;
+function scheduleResync() {
+  clearTimeout(resyncTimer);
+  resyncTimer = setTimeout(() => {
+    Promise.all(Object.values(mutationQueues)).then(() => {
+      showStatus('已重新載入清單，請確認項目狀態', true);
+      loadAll();
+    });
+  }, 500);
+}
+
+async function apiCallRetrying(baseUrl, params) {
   const delays = [0, 1200, 2500];
   let lastErr;
   for (const delay of delays) {
@@ -1106,7 +1169,7 @@ el.cycleSelect.addEventListener('change', () => {
     removeItemFromLists(item);
     showStatus('週期已更新為「' + newCycle + '」，已完成');
     apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
-      .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row }))
+      .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row, expect: item.text }))
       .catch(err => {
         // 重試 3 次都失敗，代表這項其實沒有真的完成，加回清單裡，不然畫面上顯示「已完成」
         // 但試算表其實沒改到，重新整理後這項又跑回來，會誤以為出了怪異的 bug
@@ -1143,9 +1206,8 @@ function applyTagChange(value) {
       // Google Tasks 星期清單（回傳 exported=true），複製完這項在這裡就算做完了，直接丟垃圾桶
       if (data && data.exported) {
         showStatus('已複製到對應 Google Tasks 清單，並丟進垃圾桶');
-        apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row })
+        apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row, expect: item.text })
           .then(() => {
-            reindexRowsAfterDelete('multi', item.row);
             removeItemFromLists(item);
           })
           .catch(err => showStatus('丟進垃圾桶失敗，請到 index.html 手動處理：' + err.message, true));
@@ -1277,12 +1339,8 @@ el.deleteBtn.addEventListener('click', () => {
   removeItemFromLists(item);
   showStatus('已刪除');
 
+  // 本地列號的校正已在 rowMutation() 送出請求的當下做掉了，這裡不用再 reindex
   config.delete.run(item)
-    .then(() => {
-      if (item.source === 'multi' || item.source === 'network') {
-        reindexRowsAfterDelete(item.source, item.row);
-      }
-    })
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
       allItems.push(item);
@@ -1306,7 +1364,6 @@ armConfirmButton(el.copyToTasksBtn, '再按一次確認複製', () => {
         showStatus('已複製到 Google Tasks 預設清單，並標記完成（S開頭不丟垃圾桶）');
       } else {
         await SOURCE_CONFIG.multi.delete.run(item);
-        reindexRowsAfterDelete('multi', item.row);
         removeItemFromLists(item);
         showStatus('已複製到 Google Tasks 預設清單，並丟進垃圾桶');
       }
@@ -1394,11 +1451,9 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     });
     return;
   }
-  const row = item.row;
   removeItemFromLists(item);
   showStatus('已開啟日曆連結，並從「表單回覆 1」刪除這項');
   SOURCE_CONFIG.multi.delete.run(item)
-    .then(() => reindexRowsAfterDelete('multi', row))
     .catch(err => {
       showStatus('日曆連結已開啟，但刪除失敗，請到 index.html 手動刪除：' + err.message, true);
       allItems.push(item);
@@ -1488,7 +1543,6 @@ armConfirmButton(el.exportToFormBtn, '再按一次確認匯出並刪除原始資
       showStatus('已匯出到表單回覆1，正在刪除原始資料...');
       return SOURCE_CONFIG[source].delete.run(item)
         .then(() => {
-          if (source === 'network') reindexRowsAfterDelete('network', item.row);
           removeItemFromLists(item);
           showStatus('已匯出到表單回覆1，並刪除原始資料');
         })
@@ -1522,7 +1576,7 @@ function shiftCycleAndComplete(direction) {
   showStatus('週期已調整為「' + newCycle + '」，已完成');
 
   apiCallWithRetry(MULTI_API_URL, { action: 'updateCycleByRow', row: row, value: newCycle })
-    .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row }))
+    .then(() => apiCallWithRetry(MULTI_API_URL, { action: 'completeByRow', row: row, expect: item.text }))
     .catch(err => {
       showStatus('同步失敗，請檢查網路：' + err.message, true);
       allItems.push(item);
@@ -1933,10 +1987,10 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
 
   setLoading(true);
   try {
-    await apiCall(MULTI_API_URL, { action: 'updateTextByRow', row: target.row, value: mergedText });
+    await apiCallWithRetry(MULTI_API_URL, { action: 'updateTextByRow', row: target.row, value: mergedText });
     const toTrash = others.slice().sort((a, b) => b.row - a.row);
     for (const item of toTrash) {
-      await apiCall(MULTI_API_URL, { action: 'deleteByRow', row: item.row });
+      await apiCallWithRetry(MULTI_API_URL, { action: 'deleteByRow', row: item.row, expect: item.text });
     }
     showStatus('已合併 ' + selected.length + ' 項為一項');
     await performSearch();
