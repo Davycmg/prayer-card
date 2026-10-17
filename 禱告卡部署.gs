@@ -1352,9 +1352,45 @@ function getPrefixTasksList(prefix) {
  */
 function updateTaskTitle(taskId, value, listId) {
   if (!taskId) throw new Error('缺少 Task ID');
-  const targetListId = listId || getDefaultTaskListId_();
-  Tasks.Tasks.patch({ title: value }, targetListId, taskId);
+  const targetListId = resolveTaskListId_(taskId, listId || getDefaultTaskListId_());
+  patchTaskFriendly_({ title: value }, targetListId, taskId);
   return { success: true };
+}
+
+/**
+ * 找出任務實際所在的清單：先試 preferredListId，不在那裡（頁面開著期間被移到「工作日」、
+ * 在手機上搬了清單、預設清單快取變動…）就掃所有清單找同一個 taskId。
+ * 找不到代表已經在別處完成／刪除，回報看得懂的訊息，不丟 Google 原始的「Task not found」。
+ */
+function resolveTaskListId_(taskId, preferredListId) {
+  if (preferredListId) {
+    try {
+      Tasks.Tasks.get(preferredListId, taskId);
+      return preferredListId;
+    } catch (err) { /* 不在這個清單，往下找 */ }
+  }
+  const lists = Tasks.Tasklists.list({ maxResults: 100 }).items || [];
+  for (let i = 0; i < lists.length; i++) {
+    if (lists[i].id === preferredListId) continue;
+    try {
+      Tasks.Tasks.get(lists[i].id, taskId);
+      return lists[i].id;
+    } catch (err) { /* 繼續找下一個清單 */ }
+  }
+  throw new Error('找不到這個待辦，可能已經在別處完成、刪除或移走了，請重新整理頁面');
+}
+
+// 從 Google 文件／Chat 指派來的任務，Tasks API 不允許修改（會回「The caller does not have permission」），
+// 改成看得懂的說明
+function patchTaskFriendly_(resource, listId, taskId) {
+  try {
+    return Tasks.Tasks.patch(resource, listId, taskId);
+  } catch (err) {
+    if (String(err).indexOf('permission') !== -1) {
+      throw new Error('Google 不允許程式修改這個待辦（通常是從 Google 文件或 Chat 指派來的任務），請到原本的文件／Chat 或 Google Tasks 裡直接完成');
+    }
+    throw err;
+  }
 }
 
 /**
@@ -1363,8 +1399,8 @@ function updateTaskTitle(taskId, value, listId) {
  */
 function completeTaskItem(taskId, listId) {
   if (!taskId) throw new Error('缺少 Task ID');
-  const targetListId = listId || getDefaultTaskListId_();
-  Tasks.Tasks.patch({ status: 'completed' }, targetListId, taskId);
+  const targetListId = resolveTaskListId_(taskId, listId || getDefaultTaskListId_());
+  patchTaskFriendly_({ status: 'completed' }, targetListId, taskId);
   return { success: true };
 }
 

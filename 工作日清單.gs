@@ -36,8 +36,11 @@ function moveTaskToWorkdayList(taskId) {
   const defaultListId = getDefaultTaskListId_();
   const workdayList = findOrCreateTaskList_(WORKDAY_LIST_NAME);
   if (workdayList.id === defaultListId) throw new Error('「工作日」清單不能是預設清單');
-  const task = Tasks.Tasks.get(defaultListId, taskId);
-  moveTaskBetweenLists_(task, defaultListId, workdayList.id);
+  // 任務可能已經不在預設清單（頁面開著期間被搬走），先找出它實際所在的清單
+  const sourceListId = resolveTaskListId_(taskId, defaultListId);
+  if (sourceListId === workdayList.id) return { success: true, alreadyThere: true };
+  const task = Tasks.Tasks.get(sourceListId, taskId);
+  moveTaskBetweenLists_(task, sourceListId, workdayList.id);
   return { success: true };
 }
 
