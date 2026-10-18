@@ -237,7 +237,7 @@
   <a class="btn" href="index.html">🙏 多方禱告</a>
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
-  <a class="btn" href="#" id="dedupeMultiBtn">🧹 清除重複（保留待辦，多方禱告重複的丟垃圾桶）</a>
+  <a class="btn" href="#" id="dedupeMultiBtn">🧹 清除重複（多方禱告跟待辦重複的丟垃圾桶；Google Tasks 同清單重複的標記完成）</a>
 </div>
 
 <script>
@@ -415,14 +415,22 @@ document.getElementById('dedupeMultiBtn').addEventListener('click', async functi
       btn.textContent = '沒有重複項目 ✓';
       return;
     }
-    const sample = preview.items.slice(0, 10).join('\n') + (preview.count > 10 ? '\n…' : '');
-    if (!confirm('找到 ' + preview.count + ' 筆多方禱告跟 Google Tasks 重複，要丟進垃圾桶嗎？（可從垃圾桶救回）\n\n' + sample)) {
+    const multiItems = preview.items || [];
+    const taskItems = preview.taskDupItems || [];
+    const sampleOf = function (arr) { return arr.slice(0, 8).join('\n') + (arr.length > 8 ? '\n…' : ''); };
+    let msg = '找到以下重複項目，要清除嗎？\n';
+    if (multiItems.length) msg += '\n【多方禱告跟待辦重複 ' + multiItems.length + ' 筆 → 丟進垃圾桶（可救回）】\n' + sampleOf(multiItems) + '\n';
+    if (taskItems.length) msg += '\n【Google Tasks 同一清單重複 ' + taskItems.length + ' 筆 → 標記完成，每組留一個】\n' + sampleOf(taskItems) + '\n';
+    if (!confirm(msg)) {
       btn.textContent = originalText;
       return;
     }
     btn.textContent = '清除中...';
     const done = await call(false);
-    btn.textContent = '已把 ' + done.count + ' 筆丟進垃圾桶 ✓';
+    const failed = done.taskDupFailed || [];
+    btn.textContent = '已清除：多方禱告 ' + (done.multiCount || 0) + ' 筆、Google Tasks ' + (done.taskDupItems || []).length + ' 筆 ✓'
+      + (failed.length ? '（' + failed.length + ' 筆無法處理）' : '');
+    if (failed.length) alert('以下 Google Tasks 項目無法標記完成，請到 Google Tasks 手動處理：\n\n' + failed.join('\n'));
   } catch (err) {
     btn.textContent = '清除失敗：' + err.message;
   } finally {

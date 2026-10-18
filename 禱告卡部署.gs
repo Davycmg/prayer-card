@@ -1913,7 +1913,60 @@ function trashMultiDuplicatesOfTasks(dryRun) {
       deleteByRow(matches[k].row);
     }
   }
-  return { success: true, count: matches.length, items: matches.map(function (m) { return m.text; }) };
+  const taskDup = completeDuplicateTasksInEachList_(dryRun, norm);
+  return {
+    success: true,
+    count: matches.length + taskDup.items.length,
+    multiCount: matches.length,
+    items: matches.map(function (m) { return m.text; }),
+    taskDupItems: taskDup.items,
+    taskDupFailed: taskDup.failed
+  };
+}
+
+/**
+ * Google Tasks 每個清單各自檢查：同一個清單裡未完成、標題一樣（比對方式同上）的任務，只留一個，
+ * 其餘「標記完成」（不刪除，Google Tasks 的已完成紀錄裡還找得到，可以取消勾選救回）。
+ * 留哪一個：備註最長的（資訊最多），一樣長就留清單裡排最前面的。不同清單之間的同名任務不算重複。
+ * 從其他 App 建立、Google 不允許這個專案修改的任務會標記失敗，回報在 failed 裡，不中斷其他項目。
+ */
+function completeDuplicateTasksInEachList_(dryRun, norm) {
+  const items = [];
+  const failed = [];
+  const lists = Tasks.Tasklists.list({ maxResults: 100 }).items || [];
+  lists.forEach(function (list) {
+    let all = [];
+    let pageToken;
+    do {
+      const res = Tasks.Tasks.list(list.id, { showCompleted: false, maxResults: 100, pageToken: pageToken });
+      all = all.concat(res.items || []);
+      pageToken = res.nextPageToken;
+    } while (pageToken);
+
+    const groups = {};
+    all.forEach(function (t) {
+      const n = norm(t.title);
+      if (n) (groups[n] = groups[n] || []).push(t);
+    });
+    Object.keys(groups).forEach(function (key) {
+      const g = groups[key];
+      if (g.length < 2) return;
+      let keep = g[0];
+      g.forEach(function (t) { if ((t.notes || '').length > (keep.notes || '').length) keep = t; });
+      g.forEach(function (t) {
+        if (t === keep) return;
+        const label = '（' + (list.title || '未命名清單') + '）' + (t.title || '');
+        if (dryRun) { items.push(label); return; }
+        try {
+          Tasks.Tasks.patch({ status: 'completed' }, list.id, t.id);
+          items.push(label);
+        } catch (err) {
+          failed.push(label + '：' + (String(err).indexOf('permission') !== -1 ? 'Google 不允許這個專案修改（其他 App 建立的任務）' : String(err)));
+        }
+      });
+    });
+  });
+  return { items: items, failed: failed };
 }
 
 /**
