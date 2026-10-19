@@ -339,6 +339,7 @@
   <button class="quad-btn" id="copyToTasksBtn">📋 複製到 Tasks</button>
   <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
   <button class="quad-btn" id="workdayBtn">💼 工作日</button>
+  <button class="quad-btn" id="weekendBtn">🛌 週末</button>
   <button class="quad-btn" id="setWeekdayBtn">📅 平日禱告</button>
   <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
 </div>
@@ -611,6 +612,7 @@ const el = {
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
   addToCalendarBtn: document.getElementById('addToCalendarBtn'),
   workdayBtn: document.getElementById('workdayBtn'),
+  weekendBtn: document.getElementById('weekendBtn'),
   setWeekdayBtn: document.getElementById('setWeekdayBtn'),
   setWeekendBtn: document.getElementById('setWeekendBtn'),
   exportToFormBtn: document.getElementById('exportToFormBtn'),
@@ -1047,6 +1049,7 @@ function renderFromView(pos) {
   const isTask = item.source === 'task';
   el.quadActionsRow.style.display = (isMulti || isTask) ? 'flex' : 'none';
   el.workdayBtn.style.display = isTask ? '' : 'none';
+  el.weekendBtn.style.display = isTask ? '' : 'none';
   [el.copyToTasksBtn, el.setWeekdayBtn, el.setWeekendBtn].forEach(b => { b.style.display = isMulti ? '' : 'none'; });
   el.prayMoreLessRow.style.display = isMulti ? 'flex' : 'none';
 
@@ -1474,21 +1477,26 @@ armConfirmButton(el.addToCalendarBtn, '再按一次確認加入日曆', () => {
     });
 });
 
-// 「工作日」：把這個待辦從預設清單搬到「工作日」清單（每週一凌晨由後端觸發器搬回預設清單）
-armConfirmButton(el.workdayBtn, '再按一次確認移到工作日', () => {
-  const item = currentItem();
-  if (!item || item.source !== 'task') return;
-  stopSpeakingIfNeeded();
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  removeItemFromLists(item);
-  showStatus('已移到「工作日」清單');
-  apiCallWithRetry(MULTI_API_URL, { action: 'moveTaskToWorkdayList', taskId: item.id }).catch(err => {
-    showStatus('移到工作日失敗：' + err.message, true);
-    allItems.push(item);
-    applyFilter();
+// 「工作日」／「週末」：把這個待辦從預設清單搬到對應清單
+// （工作日每週一凌晨、週末每週六凌晨由後端觸發器搬回預設清單）
+function bindMoveToListButton(btn, label, action) {
+  armConfirmButton(btn, '再按一次確認移到' + label, () => {
+    const item = currentItem();
+    if (!item || item.source !== 'task') return;
+    stopSpeakingIfNeeded();
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    removeItemFromLists(item);
+    showStatus('已移到「' + label + '」清單');
+    apiCallWithRetry(MULTI_API_URL, { action: action, taskId: item.id }).catch(err => {
+      showStatus('移到' + label + '失敗：' + err.message, true);
+      allItems.push(item);
+      applyFilter();
+    });
   });
-});
+}
+bindMoveToListButton(el.workdayBtn, '工作日', 'moveTaskToWorkdayList');
+bindMoveToListButton(el.weekendBtn, '週末', 'moveTaskToWeekendList');
 
 // 「平日禱告／週末禱告」：把到期日改到最近的平日／週末。
 // 前端先算出新日期，如果換算後還是「今天或更早」就留在清單裡，否則本地立刻移除、畫面瞬間更新；
