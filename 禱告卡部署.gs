@@ -1051,6 +1051,9 @@ function doGet(e) {
       case 'moveTaskToWorkdayList':
         result = moveTaskToWorkdayList(e.parameter.taskId);
         break;
+      case 'moveTaskToWeekendList':
+        result = moveTaskToWeekendList(e.parameter.taskId);
+        break;
       case 'searchGoogleTasks':
         result = searchGoogleTasks(e.parameter.keyword);
         break;
