@@ -68,3 +68,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 - 這個專案的部署網址公開寫在 GitHub Pages 頁面裡，所以 `doPost` 必須帶 `?key=金鑰`；金鑰存在指令碼屬性 `LINELOG_KEY`（不進 repo）。第一次在編輯器執行 `setupLinelogKey()`，執行記錄會印出要貼進 App 的網址。
 - App 的網址要改成 `<禱告卡部署網址>/exec?key=<金鑰>`；舊的獨立 linelog 專案先留著，有問題可以把 App 網址改回去。
 - 舊專案建立、這個專案改不動的任務：收到同一個人的新訊息時會改開新任務（舊的留著，需手動完成）。
+
+## home.html「今天的 Highlight」
+
+取代原本首頁的「今日待辦禱告」卡片（today.html 連結移到下方按鈕列）。「設定」可輸入最多 7 個 Highlight（第 1 個固定是 Google Task，可取消勾選）和每次計時分鐘數，存在瀏覽器 localStorage（`homeHtml_highlightSettings`，每台裝置各自一份）。「Highlight 抽籤」隨機抽一個（抽到 Google Task 會再從預設清單未完成待辦隨機抽一個），開始倒數計時，並記錄到「隨機抽待辦任務」同一個日曆（`DRAW_TASK_CALENDAR_ID`）：開始時 `startHighlightSession` 建事件（結束時間先填預計結束），時間到／提前結束後選結果（完成／有進度／沒做到），`finishHighlightSession` 回填實際結束時間和結果。計時中狀態存在 `homeHtml_highlightSession`，重新整理頁面可接續。
