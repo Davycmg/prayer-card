@@ -716,10 +716,50 @@ function formatRemaining(ms) {
   return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
 }
 
+// 瀏覽器（尤其 iPhone Safari）只允許在使用者點擊時啟用聲音，
+// 所以在按「抽籤」時先建立並解鎖 AudioContext，時間到才響得起來。
+let highlightAudioCtx = null;
+function unlockHighlightAudio() {
+  try {
+    if (!highlightAudioCtx) highlightAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (highlightAudioCtx.state === 'suspended') highlightAudioCtx.resume();
+    // 播一段無聲的音，iOS 才算真的解鎖
+    const osc = highlightAudioCtx.createOscillator();
+    const gain = highlightAudioCtx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(highlightAudioCtx.destination);
+    osc.start();
+    osc.stop(highlightAudioCtx.currentTime + 0.05);
+  } catch (err) {}
+}
+
+// 計時中讓螢幕保持亮著，避免手機鎖屏後倒數暫停、時間到不響
+let highlightWakeLock = null;
+async function setHighlightWakeLock(on) {
+  try {
+    if (on && !highlightWakeLock && navigator.wakeLock) {
+      highlightWakeLock = await navigator.wakeLock.request('screen');
+      highlightWakeLock.addEventListener('release', () => { highlightWakeLock = null; });
+    } else if (!on && highlightWakeLock) {
+      await highlightWakeLock.release();
+      highlightWakeLock = null;
+    }
+  } catch (err) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  // 切回頁面時，螢幕常亮會被瀏覽器自動取消，要重新申請
+  if (document.visibilityState !== 'visible') return;
+  const session = loadHighlightSession();
+  if (session && !session.stoppedMs) setHighlightWakeLock(true);
+});
+
 function playHighlightBeep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    [0, 0.4, 0.8].forEach(offset => {
+    const ctx = highlightAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') ctx.resume();
+    [0, 0.4, 0.8, 1.6, 2.0, 2.4].forEach(offset => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = 880;
@@ -740,6 +780,7 @@ function renderHighlightSession() {
   clearInterval(highlightTickTimer);
   if (!session) {
     panel.style.display = 'none';
+    setHighlightWakeLock(false);
     return;
   }
   panel.style.display = 'block';
@@ -758,6 +799,7 @@ function renderHighlightSession() {
     }
     if (session.stoppedMs) {
       clearInterval(highlightTickTimer);
+      setHighlightWakeLock(false);
       timerEl.textContent = '時間到 ⏰';
       running.style.display = 'none';
       outcome.style.display = '';
@@ -769,7 +811,10 @@ function renderHighlightSession() {
     outcome.style.display = 'none';
   };
   tick();
-  if (!session.stoppedMs) highlightTickTimer = setInterval(tick, 500);
+  if (!session.stoppedMs) {
+    highlightTickTimer = setInterval(tick, 500);
+    setHighlightWakeLock(true);
+  }
 }
 
 // 在日曆建一筆事件（先填預計結束時間），把事件 ID 存進計時狀態，結束時才能回填。
@@ -800,6 +845,7 @@ function startHighlightCalendarEvent(session) {
 
 document.getElementById('highlightDrawBtn').addEventListener('click', async function (e) {
   e.preventDefault();
+  unlockHighlightAudio();
   const existing = loadHighlightSession();
   if (existing) {
     if (!confirm('目前有一個 Highlight 還沒結束（' + existing.text + '），要放棄它重新抽嗎？')) {
