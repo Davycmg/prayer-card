@@ -945,6 +945,8 @@ document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
   btn.addEventListener('click', async function () {
     const session = loadHighlightSession();
     if (!session) return;
+    // 日曆事件的結束時間＝按下結果按鈕的這一刻（不是時間到／提前結束的時間）
+    const clickedMs = Date.now();
     const statusEl = document.getElementById('highlightStatus');
     const buttons = document.querySelectorAll('#highlightOutcomeActions button');
     buttons.forEach(b => b.disabled = true);
@@ -955,7 +957,7 @@ document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
       if (!eventId && highlightEventReady) eventId = await highlightEventReady;
       if (!eventId) throw new Error('日曆事件沒有建立成功');
       const url = TASKS_API_URL + '?' + new URLSearchParams({
-        action: 'finishHighlightSession', eventId: eventId, endMs: String(session.stoppedMs || Date.now()),
+        action: 'finishHighlightSession', eventId: eventId, endMs: String(clickedMs),
         minutes: String(session.minutes), outcome: btn.dataset.outcome, _t: Date.now()
       }).toString();
       const res = await fetch(url, { cache: 'no-store' });
