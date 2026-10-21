@@ -297,9 +297,9 @@
   <div class="column">
     <div class="icon">⭐</div>
     <h2>今天的 Highlight</h2>
-    <p id="highlightSummary">設定今天的 Highlight（最多 7 個），抽一個來計時，結果記錄到日曆</p>
+    <p id="highlightSummary">設定今天的 Highlight（最多 7 個），抽一個或指定一個來計時，結果記錄到日曆</p>
     <div class="btn-pair">
-      <a class="btn btn-outline" href="#" id="highlightSettingsBtn">設定</a>
+      <a class="btn btn-outline" href="#" id="highlightPickBtn">指定</a>
       <a class="btn" href="#" id="highlightDrawBtn">Highlight 抽籤</a>
     </div>
   </div>
@@ -345,6 +345,14 @@
   </div>
 </div>
 
+<div id="highlightPick" class="panel" style="display:none;">
+  <h3>🎯 指定今天的 Highlight</h3>
+  <div id="highlightPickList" class="panel-actions"></div>
+  <div class="panel-actions">
+    <button type="button" class="panel-btn secondary" id="highlightPickCancel">取消</button>
+  </div>
+</div>
+
 <div id="highlightResult" class="panel" style="display:none;">
   <div id="highlightPicked" class="hl-picked"></div>
   <div id="highlightPickedSub" class="hl-sub"></div>
@@ -372,6 +380,7 @@
 </div>
 
 <div class="query-row">
+  <a class="btn" href="#" id="highlightSettingsBtn">⚙️ 今天的 Highlight 設定</a>
   <a class="btn" href="today.html">📋 今日待辦禱告</a>
   <a class="btn" href="calendar.html">🔁 為習慣禱告</a>
   <a class="btn" href="https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec?view=card">🌐 為網絡禱告</a>
@@ -633,7 +642,7 @@ function renderHighlightSummary() {
   const pool = highlightPool(settings);
   document.getElementById('highlightSummary').textContent = pool.length
     ? pool.join('、') + `（每次 ${settings.minutes} 分鐘）`
-    : '還沒設定，先按「設定」輸入今天的 Highlight';
+    : '還沒設定，先按下方「今天的 Highlight 設定」輸入';
 }
 
 function openHighlightSettings() {
@@ -843,29 +852,25 @@ function startHighlightCalendarEvent(session) {
 }
 
 
-document.getElementById('highlightDrawBtn').addEventListener('click', async function (e) {
-  e.preventDefault();
-  unlockHighlightAudio();
+// 目前有計時中的 Highlight 時，先問要不要放棄它；回傳 false 代表使用者選擇保留
+function confirmReplaceHighlight(verb) {
   const existing = loadHighlightSession();
-  if (existing) {
-    if (!confirm('目前有一個 Highlight 還沒結束（' + existing.text + '），要放棄它重新抽嗎？')) {
-      renderHighlightSession();
-      return;
-    }
-    saveHighlightSession(null);
+  if (!existing) return true;
+  if (!confirm('目前有一個 Highlight 還沒結束（' + existing.text + '），要放棄它' + verb + '嗎？')) {
+    renderHighlightSession();
+    return false;
   }
+  saveHighlightSession(null);
+  return true;
+}
+
+// 開始一段 Highlight 計時（抽籤、指定共用）：Google Task 會再從未完成待辦隨機抽一個
+// （不影響「隨機抽待辦任務」的已抽記錄），接著建立日曆事件、開始倒數。
+async function beginHighlight(text, btn) {
   const settings = loadHighlightSettings();
-  const pool = highlightPool(settings);
-  if (!pool.length) {
-    openHighlightSettings();
-    return;
-  }
-  const btn = e.currentTarget;
-  const originalText = btn.textContent;
-  let text = pool[Math.floor(Math.random() * pool.length)];
   let sub = '';
   if (text === HIGHLIGHT_GOOGLE_TASK) {
-    // 抽到 Google Task：再從 Google Tasks 未完成的待辦隨機抽一個（不影響「隨機抽待辦任務」的已抽記錄）
+    const originalText = btn.textContent;
     try {
       if (!drawItems.length) {
         btn.textContent = '抽選中...';
@@ -881,6 +886,51 @@ document.getElementById('highlightDrawBtn').addEventListener('click', async func
   highlightEventReady = startHighlightCalendarEvent(session);
   renderHighlightSession();
   document.getElementById('highlightResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+document.getElementById('highlightDrawBtn').addEventListener('click', function (e) {
+  e.preventDefault();
+  unlockHighlightAudio();
+  const pool = highlightPool(loadHighlightSettings());
+  if (!pool.length) {
+    openHighlightSettings();
+    return;
+  }
+  if (!confirmReplaceHighlight('重新抽')) return;
+  document.getElementById('highlightPick').style.display = 'none';
+  beginHighlight(pool[Math.floor(Math.random() * pool.length)], e.currentTarget);
+});
+
+// 指定：列出設定好的 Highlight，自己選一個開始計時（不抽籤）
+document.getElementById('highlightPickBtn').addEventListener('click', function (e) {
+  e.preventDefault();
+  const pool = highlightPool(loadHighlightSettings());
+  if (!pool.length) {
+    openHighlightSettings();
+    return;
+  }
+  const list = document.getElementById('highlightPickList');
+  list.innerHTML = '';
+  pool.forEach(text => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'panel-btn';
+    b.textContent = text;
+    b.addEventListener('click', function () {
+      unlockHighlightAudio();
+      if (!confirmReplaceHighlight('改做這個')) return;
+      document.getElementById('highlightPick').style.display = 'none';
+      beginHighlight(text, b);
+    });
+    list.appendChild(b);
+  });
+  const panel = document.getElementById('highlightPick');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+document.getElementById('highlightPickCancel').addEventListener('click', function () {
+  document.getElementById('highlightPick').style.display = 'none';
 });
 
 document.getElementById('highlightStopBtn').addEventListener('click', function () {
