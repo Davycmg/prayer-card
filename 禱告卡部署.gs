@@ -1066,6 +1066,12 @@ function doGet(e) {
       case 'recordDrawnTask':
         result = recordDrawnTask(e.parameter.taskId, e.parameter.text, e.parameter.reset);
         break;
+      case 'startHighlightSession':
+        result = startHighlightSession(e.parameter.text, e.parameter.startMs, e.parameter.minutes);
+        break;
+      case 'finishHighlightSession':
+        result = finishHighlightSession(e.parameter.eventId, e.parameter.endMs, e.parameter.minutes, e.parameter.outcome);
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1592,6 +1598,45 @@ function recordDrawnTask(taskId, text, reset) {
   props.setProperty(DRAWN_TASK_IDS_PROP_KEY, JSON.stringify(drawnIds));
 
   logDrawnTaskToCalendar_(text || '');
+  return { success: true };
+}
+
+/**
+ * 禱告首頁「今天的 Highlight」抽籤計時：開始計時時先在 DRAW_TASK_CALENDAR_ID 建一筆事件，
+ * 結束時間先填預計結束（開始 + 計時分鐘數），計時結束再用 finishHighlightSession 回填實際結束時間和結果。
+ * 這樣就算計時中途關掉頁面，日曆上也至少留著預計的那段時間。
+ */
+function startHighlightSession(text, startMs, minutes) {
+  if (!text) throw new Error('缺少 Highlight 內容');
+  const mins = Math.max(1, parseInt(minutes, 10) || 1);
+  const start = startMs ? new Date(Number(startMs)) : new Date();
+  const end = new Date(start.getTime() + mins * 60 * 1000);
+  const event = Calendar.Events.insert({
+    summary: '⭐ ' + text,
+    description: '計時 ' + mins + ' 分鐘（進行中）',
+    start: { dateTime: start.toISOString() },
+    end: { dateTime: end.toISOString() }
+  }, DRAW_TASK_CALENDAR_ID);
+  return { success: true, eventId: event.id };
+}
+
+/**
+ * 「今天的 Highlight」計時結束（或提前結束）：回填實際結束時間，描述寫上計時／實際分鐘數和這階段的結果。
+ */
+function finishHighlightSession(eventId, endMs, minutes, outcome) {
+  if (!eventId) throw new Error('缺少事件 ID');
+  const event = Calendar.Events.get(DRAW_TASK_CALENDAR_ID, eventId);
+  const start = new Date(event.start.dateTime);
+  let end = endMs ? new Date(Number(endMs)) : new Date();
+  // 至少保留 1 分鐘，避免結束時間早於開始時間讓日曆拒絕
+  if (end.getTime() - start.getTime() < 60 * 1000) end = new Date(start.getTime() + 60 * 1000);
+  const actualMins = Math.round((end.getTime() - start.getTime()) / 60000);
+  const lines = ['計時 ' + (parseInt(minutes, 10) || '?') + ' 分鐘，實際 ' + actualMins + ' 分鐘'];
+  if (outcome) lines.push('結果：' + outcome);
+  Calendar.Events.patch({
+    end: { dateTime: end.toISOString() },
+    description: lines.join('\n')
+  }, DRAW_TASK_CALENDAR_ID, eventId);
   return { success: true };
 }
 

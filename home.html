@@ -168,6 +168,116 @@
     min-height: 14px;
     margin-top: 4px;
   }
+  .btn-pair {
+    width: 100%;
+    display: flex;
+    gap: 8px;
+  }
+  .btn-pair a.btn { flex: 1; }
+  .column a.btn.btn-outline {
+    background: white;
+    color: var(--purple);
+    border: 1px solid var(--purple);
+  }
+  .panel {
+    width: 100%;
+    max-width: 960px;
+    margin-top: 16px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 20px;
+    text-align: center;
+  }
+  .panel h3 {
+    margin: 0 0 12px;
+    font-size: 17px;
+    color: var(--purple);
+  }
+  .hl-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .hl-input-row .hl-num {
+    width: 20px;
+    font-size: 13px;
+    color: var(--text-sub);
+  }
+  .hl-input-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 15px;
+    font-family: inherit;
+  }
+  .hl-input-row input[type="text"]:disabled {
+    background: var(--gray-bg);
+    color: var(--text-main);
+  }
+  .hl-input-row label {
+    font-size: 13px;
+    color: var(--text-sub);
+    white-space: nowrap;
+  }
+  .hl-minutes {
+    display: block;
+    margin: 12px 0 4px;
+    font-size: 15px;
+  }
+  .hl-minutes input {
+    width: 72px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 16px;
+    text-align: center;
+    font-family: inherit;
+  }
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+  .panel-btn {
+    padding: 12px 22px;
+    border: 1px solid var(--purple);
+    border-radius: 12px;
+    background: var(--purple);
+    color: white;
+    font-size: 16px;
+    font-weight: bold;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .panel-btn.secondary {
+    background: white;
+    color: var(--purple);
+  }
+  .panel-btn:active { opacity: 0.7; }
+  .panel-btn:disabled { opacity: 0.5; }
+  .hl-picked {
+    font-size: 20px;
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+  .hl-sub {
+    font-size: 13px;
+    color: var(--text-sub);
+    min-height: 16px;
+  }
+  .hl-timer {
+    font-size: 48px;
+    font-weight: bold;
+    font-variant-numeric: tabular-nums;
+    color: var(--purple);
+    margin: 10px 0 4px;
+  }
 </style>
 </head>
 <body>
@@ -185,10 +295,13 @@
   </div>
 
   <div class="column">
-    <div class="icon">📋</div>
-    <h2>今日待辦禱告</h2>
-    <p>Google Tasks 未完成的待辦，進頁面自動打亂順序</p>
-    <a class="btn" href="today.html">開始</a>
+    <div class="icon">⭐</div>
+    <h2>今天的 Highlight</h2>
+    <p id="highlightSummary">設定今天的 Highlight（最多 7 個），抽一個來計時，結果記錄到日曆</p>
+    <div class="btn-pair">
+      <a class="btn btn-outline" href="#" id="highlightSettingsBtn">設定</a>
+      <a class="btn" href="#" id="highlightDrawBtn">Highlight 抽籤</a>
+    </div>
   </div>
 
   <div class="column">
@@ -220,6 +333,33 @@
   </div>
 </div>
 
+<div id="highlightSettings" class="panel" style="display:none;">
+  <h3>⚙️ 今天的 Highlight 設定</h3>
+  <div id="highlightInputs"></div>
+  <label class="hl-minutes">每次計時
+    <input type="number" id="highlightMinutes" min="1" max="240" inputmode="numeric"> 分鐘
+  </label>
+  <div class="panel-actions">
+    <button type="button" class="panel-btn secondary" id="highlightSettingsCancel">取消</button>
+    <button type="button" class="panel-btn" id="highlightSettingsSave">儲存</button>
+  </div>
+</div>
+
+<div id="highlightResult" class="panel" style="display:none;">
+  <div id="highlightPicked" class="hl-picked"></div>
+  <div id="highlightPickedSub" class="hl-sub"></div>
+  <div id="highlightTimer" class="hl-timer"></div>
+  <div id="highlightStatus" class="hl-sub"></div>
+  <div class="panel-actions" id="highlightRunningActions">
+    <button type="button" class="panel-btn secondary" id="highlightStopBtn">⏹ 提前結束</button>
+  </div>
+  <div class="panel-actions" id="highlightOutcomeActions" style="display:none;">
+    <button type="button" class="panel-btn" data-outcome="完成">✅ 完成</button>
+    <button type="button" class="panel-btn secondary" data-outcome="有進度">🔜 有進度</button>
+    <button type="button" class="panel-btn secondary" data-outcome="沒做到">❌ 沒做到</button>
+  </div>
+</div>
+
 <div id="drawTaskResult" style="display:none; width:100%; max-width:960px; margin-top:16px; background:white; border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,0.08); padding:20px; text-align:center;">
   <div class="draw-task-row">
     <span class="draw-task-icon">🎯</span>
@@ -232,6 +372,7 @@
 </div>
 
 <div class="query-row">
+  <a class="btn" href="today.html">📋 今日待辦禱告</a>
   <a class="btn" href="calendar.html">🔁 為習慣禱告</a>
   <a class="btn" href="https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec?view=card">🌐 為網絡禱告</a>
   <a class="btn" href="index.html">🙏 多方禱告</a>
@@ -458,6 +599,285 @@ document.getElementById('exportTasksBtn').addEventListener('click', async functi
     setTimeout(function () { btn.textContent = originalText; }, 2000);
   }
 });
+
+// ===== 今天的 Highlight：設定（最多 7 個，第 1 個固定是 Google Task）＋抽籤計時，結果記錄到日曆 =====
+// 設定只存在這台裝置的瀏覽器（localStorage）；計時中的狀態也存著，重新整理頁面可以接續。
+const HIGHLIGHT_SETTINGS_KEY = 'homeHtml_highlightSettings';
+const HIGHLIGHT_SESSION_KEY = 'homeHtml_highlightSession';
+const HIGHLIGHT_MAX = 7;
+const HIGHLIGHT_GOOGLE_TASK = 'Google Task';
+
+function loadHighlightSettings() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(HIGHLIGHT_SETTINGS_KEY) || 'null'); } catch (err) {}
+  const items = (saved && Array.isArray(saved.items)) ? saved.items.slice(0, HIGHLIGHT_MAX - 1) : [];
+  return {
+    googleTask: !saved || saved.googleTask !== false,
+    items: items,
+    minutes: (saved && saved.minutes) || 25
+  };
+}
+
+function saveHighlightSettings(settings) {
+  try { localStorage.setItem(HIGHLIGHT_SETTINGS_KEY, JSON.stringify(settings)); } catch (err) {}
+}
+
+function highlightPool(settings) {
+  const pool = settings.items.filter(t => t && t.trim());
+  if (settings.googleTask) pool.unshift(HIGHLIGHT_GOOGLE_TASK);
+  return pool;
+}
+
+function renderHighlightSummary() {
+  const settings = loadHighlightSettings();
+  const pool = highlightPool(settings);
+  document.getElementById('highlightSummary').textContent = pool.length
+    ? pool.join('、') + `（每次 ${settings.minutes} 分鐘）`
+    : '還沒設定，先按「設定」輸入今天的 Highlight';
+}
+
+function openHighlightSettings() {
+  const settings = loadHighlightSettings();
+  const box = document.getElementById('highlightInputs');
+  box.innerHTML = '';
+  for (let i = 0; i < HIGHLIGHT_MAX; i++) {
+    const row = document.createElement('div');
+    row.className = 'hl-input-row';
+    const num = document.createElement('span');
+    num.className = 'hl-num';
+    num.textContent = (i + 1) + '.';
+    const input = document.createElement('input');
+    input.type = 'text';
+    row.appendChild(num);
+    row.appendChild(input);
+    if (i === 0) {
+      // 第 1 個固定是 Google Task（抽到時再從 Google Tasks 未完成的待辦隨機抽一個），可以取消勾選不參加抽籤
+      input.value = HIGHLIGHT_GOOGLE_TASK;
+      input.disabled = true;
+      const label = document.createElement('label');
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.id = 'highlightGoogleTaskCheck';
+      check.checked = settings.googleTask;
+      label.appendChild(check);
+      label.appendChild(document.createTextNode(' 參加抽籤'));
+      row.appendChild(label);
+    } else {
+      input.className = 'hl-item-input';
+      input.placeholder = `Highlight ${i + 1}`;
+      input.value = settings.items[i - 1] || '';
+    }
+    box.appendChild(row);
+  }
+  document.getElementById('highlightMinutes').value = settings.minutes;
+  document.getElementById('highlightSettings').style.display = 'block';
+  document.getElementById('highlightSettings').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('highlightSettingsBtn').addEventListener('click', function (e) {
+  e.preventDefault();
+  openHighlightSettings();
+});
+
+document.getElementById('highlightSettingsCancel').addEventListener('click', function () {
+  document.getElementById('highlightSettings').style.display = 'none';
+});
+
+document.getElementById('highlightSettingsSave').addEventListener('click', function () {
+  const items = Array.from(document.querySelectorAll('.hl-item-input')).map(el => el.value.trim());
+  const minutes = Math.min(240, Math.max(1, parseInt(document.getElementById('highlightMinutes').value, 10) || 25));
+  saveHighlightSettings({
+    googleTask: document.getElementById('highlightGoogleTaskCheck').checked,
+    items: items,
+    minutes: minutes
+  });
+  document.getElementById('highlightSettings').style.display = 'none';
+  renderHighlightSummary();
+});
+
+let highlightTickTimer = null;
+let highlightEventReady = null;
+
+function loadHighlightSession() {
+  try { return JSON.parse(localStorage.getItem(HIGHLIGHT_SESSION_KEY) || 'null'); } catch (err) { return null; }
+}
+
+function saveHighlightSession(session) {
+  try {
+    if (session) localStorage.setItem(HIGHLIGHT_SESSION_KEY, JSON.stringify(session));
+    else localStorage.removeItem(HIGHLIGHT_SESSION_KEY);
+  } catch (err) {}
+}
+
+function formatRemaining(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+function playHighlightBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.4, 0.8].forEach(offset => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.value = 0.2;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + offset);
+      osc.stop(ctx.currentTime + offset + 0.25);
+    });
+  } catch (err) {}
+  if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+}
+
+// 依目前的計時狀態更新畫面（計時中→倒數；時間到或提前結束→選這階段的結果）
+function renderHighlightSession() {
+  const session = loadHighlightSession();
+  const panel = document.getElementById('highlightResult');
+  clearInterval(highlightTickTimer);
+  if (!session) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  document.getElementById('highlightPicked').textContent = '⭐ ' + session.text;
+  document.getElementById('highlightPickedSub').textContent = session.sub || '';
+
+  const timerEl = document.getElementById('highlightTimer');
+  const running = document.getElementById('highlightRunningActions');
+  const outcome = document.getElementById('highlightOutcomeActions');
+  const tick = function () {
+    const remaining = session.startMs + session.minutes * 60000 - Date.now();
+    if (!session.stoppedMs && remaining <= 0) {
+      session.stoppedMs = session.startMs + session.minutes * 60000;
+      saveHighlightSession(session);
+      playHighlightBeep();
+    }
+    if (session.stoppedMs) {
+      clearInterval(highlightTickTimer);
+      timerEl.textContent = '時間到 ⏰';
+      running.style.display = 'none';
+      outcome.style.display = '';
+      document.getElementById('highlightStatus').textContent = '這階段的結果？選了就記錄到日曆';
+      return;
+    }
+    timerEl.textContent = formatRemaining(remaining);
+    running.style.display = '';
+    outcome.style.display = 'none';
+  };
+  tick();
+  if (!session.stoppedMs) highlightTickTimer = setInterval(tick, 500);
+}
+
+// 在日曆建一筆事件（先填預計結束時間），把事件 ID 存進計時狀態，結束時才能回填。
+function startHighlightCalendarEvent(session) {
+  const statusEl = document.getElementById('highlightStatus');
+  const url = TASKS_API_URL + '?' + new URLSearchParams({
+    action: 'startHighlightSession', text: session.text + (session.sub ? '：' + session.sub : ''),
+    startMs: String(session.startMs), minutes: String(session.minutes), _t: Date.now()
+  }).toString();
+  return fetch(url, { cache: 'no-store' })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      const current = loadHighlightSession();
+      if (current && current.startMs === session.startMs) {
+        current.eventId = data.eventId;
+        saveHighlightSession(current);
+      }
+      if (current && !current.stoppedMs) statusEl.textContent = '已記錄到日曆 ✓';
+      return data.eventId;
+    })
+    .catch(err => {
+      statusEl.textContent = '日曆記錄失敗：' + err.message;
+      return null;
+    });
+}
+
+
+document.getElementById('highlightDrawBtn').addEventListener('click', async function (e) {
+  e.preventDefault();
+  const existing = loadHighlightSession();
+  if (existing) {
+    if (!confirm('目前有一個 Highlight 還沒結束（' + existing.text + '），要放棄它重新抽嗎？')) {
+      renderHighlightSession();
+      return;
+    }
+    saveHighlightSession(null);
+  }
+  const settings = loadHighlightSettings();
+  const pool = highlightPool(settings);
+  if (!pool.length) {
+    openHighlightSettings();
+    return;
+  }
+  const btn = e.currentTarget;
+  const originalText = btn.textContent;
+  let text = pool[Math.floor(Math.random() * pool.length)];
+  let sub = '';
+  if (text === HIGHLIGHT_GOOGLE_TASK) {
+    // 抽到 Google Task：再從 Google Tasks 未完成的待辦隨機抽一個（不影響「隨機抽待辦任務」的已抽記錄）
+    try {
+      if (!drawItems.length) {
+        btn.textContent = '抽選中...';
+        await (drawStateReady || loadDrawState()).catch(() => loadDrawState());
+      }
+    } catch (err) {}
+    btn.textContent = originalText;
+    if (drawItems.length) sub = drawItems[Math.floor(Math.random() * drawItems.length)].text;
+  }
+  const session = { text: text, sub: sub, minutes: settings.minutes, startMs: Date.now() };
+  saveHighlightSession(session);
+  document.getElementById('highlightStatus').textContent = '記錄到日曆中...';
+  highlightEventReady = startHighlightCalendarEvent(session);
+  renderHighlightSession();
+  document.getElementById('highlightResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+document.getElementById('highlightStopBtn').addEventListener('click', function () {
+  const session = loadHighlightSession();
+  if (!session) return;
+  session.stoppedMs = Date.now();
+  saveHighlightSession(session);
+  renderHighlightSession();
+});
+
+document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
+  btn.addEventListener('click', async function () {
+    const session = loadHighlightSession();
+    if (!session) return;
+    const statusEl = document.getElementById('highlightStatus');
+    const buttons = document.querySelectorAll('#highlightOutcomeActions button');
+    buttons.forEach(b => b.disabled = true);
+    statusEl.textContent = '記錄中...';
+    try {
+      // 剛抽完馬上結束的話，建立事件的請求可能還沒回來，先等它
+      let eventId = session.eventId;
+      if (!eventId && highlightEventReady) eventId = await highlightEventReady;
+      if (!eventId) throw new Error('日曆事件沒有建立成功');
+      const url = TASKS_API_URL + '?' + new URLSearchParams({
+        action: 'finishHighlightSession', eventId: eventId, endMs: String(session.stoppedMs || Date.now()),
+        minutes: String(session.minutes), outcome: btn.dataset.outcome, _t: Date.now()
+      }).toString();
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      saveHighlightSession(null);
+      highlightEventReady = null;
+      renderHighlightSession();
+    } catch (err) {
+      statusEl.textContent = '記錄失敗：' + err.message;
+    } finally {
+      buttons.forEach(b => b.disabled = false);
+    }
+  });
+});
+
+renderHighlightSummary();
+renderHighlightSession();
 </script>
 
 </body>
