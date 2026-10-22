@@ -1072,6 +1072,12 @@ function doGet(e) {
       case 'finishHighlightSession':
         result = finishHighlightSession(e.parameter.eventId, e.parameter.endMs, e.parameter.minutes, e.parameter.outcome);
         break;
+      case 'getHighlightSettings':
+        result = getHighlightSettings();
+        break;
+      case 'saveHighlightSettings':
+        result = saveHighlightSettings(e.parameter.settings);
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
@@ -1618,6 +1624,34 @@ function startHighlightSession(text, startMs, minutes) {
     end: { dateTime: end.toISOString() }
   }, DRAW_TASK_CALENDAR_ID);
   return { success: true, eventId: event.id };
+}
+
+// 「今天的 Highlight」設定（Highlight 清單、是否含 Google Task、計時分鐘數），存在 PropertiesService 讓各裝置同步
+const HIGHLIGHT_SETTINGS_PROP_KEY = 'highlightSettings';
+const HIGHLIGHT_MAX_ITEMS = 6; // 另外第 1 個固定是 Google Task，合計最多 7 個
+
+/** 回傳已存的 Highlight 設定；還沒存過時 settings 是 null（前端會改用自己的預設值）。 */
+function getHighlightSettings() {
+  const raw = PropertiesService.getDocumentProperties().getProperty(HIGHLIGHT_SETTINGS_PROP_KEY);
+  return { settings: raw ? JSON.parse(raw) : null };
+}
+
+function saveHighlightSettings(json) {
+  let input;
+  try {
+    input = JSON.parse(json || '');
+  } catch (err) {
+    throw new Error('設定格式錯誤');
+  }
+  const settings = {
+    googleTask: input.googleTask !== false,
+    items: (Array.isArray(input.items) ? input.items : []).slice(0, HIGHLIGHT_MAX_ITEMS).map(function (t) {
+      return String(t || '').trim();
+    }),
+    minutes: Math.min(240, Math.max(1, parseInt(input.minutes, 10) || 25))
+  };
+  PropertiesService.getDocumentProperties().setProperty(HIGHLIGHT_SETTINGS_PROP_KEY, JSON.stringify(settings));
+  return { success: true, settings: settings };
 }
 
 /**
