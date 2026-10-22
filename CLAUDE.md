@@ -71,4 +71,4 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 
 ## home.html「今天的 Highlight」
 
-取代原本首頁的「今日待辦禱告」卡片（today.html 連結移到下方按鈕列）。「設定」（在頁面下方按鈕列）可輸入最多 7 個 Highlight（第 1 個固定是 Google Task，可取消勾選）和每次計時分鐘數，存在瀏覽器 localStorage（`homeHtml_highlightSettings`，每台裝置各自一份）。卡片上兩個按鈕：「指定」自己選一個、「Highlight 抽籤」隨機抽一個（抽到 Google Task 會再從預設清單未完成待辦隨機抽一個），開始倒數計時，並記錄到「隨機抽待辦任務」同一個日曆（`DRAW_TASK_CALENDAR_ID`）：開始時 `startHighlightSession` 建事件（結束時間先填預計結束），時間到／提前結束後選結果（完成／有進度／沒做到），`finishHighlightSession` 回填結束時間（＝按下結果按鈕的時間）和結果。計時中狀態存在 `homeHtml_highlightSession`，重新整理頁面可接續。
+取代原本首頁的「今日待辦禱告」卡片（today.html 連結移到下方按鈕列）。「設定」（在頁面下方按鈕列）可輸入最多 7 個 Highlight（第 1 個固定是 Google Task，可取消勾選）和每次計時分鐘數，存在後端 PropertiesService（action `getHighlightSettings`／`saveHighlightSettings`，各裝置同步；頁面載入時抓最新的，localStorage `homeHtml_highlightSettings` 只當快取）。卡片上兩個按鈕：「指定」自己選一個、「Highlight 抽籤」隨機抽一個（抽到 Google Task 會再從預設清單未完成待辦隨機抽一個），開始倒數計時，並記錄到「隨機抽待辦任務」同一個日曆（`DRAW_TASK_CALENDAR_ID`）：開始時 `startHighlightSession` 建事件（結束時間先填預計結束），時間到／提前結束後選結果（完成／有進度／沒做到），`finishHighlightSession` 回填結束時間（＝按下結果按鈕的時間）和結果。計時中狀態存在 `homeHtml_highlightSession`，重新整理頁面可接續。

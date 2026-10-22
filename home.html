@@ -610,7 +610,8 @@ document.getElementById('exportTasksBtn').addEventListener('click', async functi
 });
 
 // ===== 今天的 Highlight：設定（最多 7 個，第 1 個固定是 Google Task）＋抽籤計時，結果記錄到日曆 =====
-// 設定只存在這台裝置的瀏覽器（localStorage）；計時中的狀態也存著，重新整理頁面可以接續。
+// 設定存在後端（PropertiesService）讓各裝置同步，localStorage 只是快取，讓頁面一打開就有東西顯示；
+// 計時中的狀態只存在這台裝置（localStorage），重新整理頁面可以接續。
 const HIGHLIGHT_SETTINGS_KEY = 'homeHtml_highlightSettings';
 const HIGHLIGHT_SESSION_KEY = 'homeHtml_highlightSession';
 const HIGHLIGHT_MAX = 7;
@@ -627,8 +628,37 @@ function loadHighlightSettings() {
   };
 }
 
-function saveHighlightSettings(settings) {
+function cacheHighlightSettings(settings) {
   try { localStorage.setItem(HIGHLIGHT_SETTINGS_KEY, JSON.stringify(settings)); } catch (err) {}
+}
+
+async function saveHighlightSettings(settings) {
+  cacheHighlightSettings(settings);
+  const url = TASKS_API_URL + '?' + new URLSearchParams({
+    action: 'saveHighlightSettings', settings: JSON.stringify(settings), _t: Date.now()
+  }).toString();
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  cacheHighlightSettings(data.settings);
+}
+
+// 頁面載入時從後端抓最新設定（別台裝置改過的會在這裡同步過來）；
+// 後端還沒有設定、這台裝置有舊的本機設定時，把本機的推上去當作初始值。
+function syncHighlightSettings() {
+  const url = TASKS_API_URL + '?' + new URLSearchParams({ action: 'getHighlightSettings', _t: Date.now() }).toString();
+  return fetch(url, { cache: 'no-store' })
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) throw new Error(data.error);
+      if (data.settings) {
+        cacheHighlightSettings(data.settings);
+        renderHighlightSummary();
+      } else if (localStorage.getItem(HIGHLIGHT_SETTINGS_KEY)) {
+        return saveHighlightSettings(loadHighlightSettings());
+      }
+    })
+    .catch(() => {});
 }
 
 function highlightPool(settings) {
@@ -692,16 +722,26 @@ document.getElementById('highlightSettingsCancel').addEventListener('click', fun
   document.getElementById('highlightSettings').style.display = 'none';
 });
 
-document.getElementById('highlightSettingsSave').addEventListener('click', function () {
+document.getElementById('highlightSettingsSave').addEventListener('click', async function () {
+  const saveBtn = this;
   const items = Array.from(document.querySelectorAll('.hl-item-input')).map(el => el.value.trim());
   const minutes = Math.min(240, Math.max(1, parseInt(document.getElementById('highlightMinutes').value, 10) || 25));
-  saveHighlightSettings({
-    googleTask: document.getElementById('highlightGoogleTaskCheck').checked,
-    items: items,
-    minutes: minutes
-  });
-  document.getElementById('highlightSettings').style.display = 'none';
-  renderHighlightSummary();
+  saveBtn.disabled = true;
+  saveBtn.textContent = '儲存中...';
+  try {
+    await saveHighlightSettings({
+      googleTask: document.getElementById('highlightGoogleTaskCheck').checked,
+      items: items,
+      minutes: minutes
+    });
+    document.getElementById('highlightSettings').style.display = 'none';
+  } catch (err) {
+    alert('同步到其他裝置失敗（這台裝置已先存好）：' + err.message);
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = '儲存';
+    renderHighlightSummary();
+  }
 });
 
 let highlightTickTimer = null;
@@ -976,6 +1016,7 @@ document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
 
 renderHighlightSummary();
 renderHighlightSession();
+syncHighlightSettings();
 </script>
 
 </body>
