@@ -1527,12 +1527,18 @@ const DRAW_TASK_CALENDAR_ID = '84bd77a44cae8733190797728561b22f16a8458aa1ea4e012
 const DRAW_TASK_DEFAULT_DURATION_MINUTES = 1;
 // 上一筆「抽任務」事件的 ID，存在 PropertiesService，讓下一次點擊可以回填它的結束時間
 const LAST_DRAW_TASK_EVENT_ID_PROP_KEY = 'lastDrawTaskEventId';
+// 上一筆「抽任務」事件的開始時間（毫秒），回填結束時間時用來判斷是不是隔太久
+const LAST_DRAW_TASK_EVENT_START_PROP_KEY = 'lastDrawTaskEventStart';
+// 一筆記錄最長多久：下一次點擊離開始時間超過這個長度（例如隔夜才再抽），
+// 上一筆就只記到「開始 + 這個分鐘數」，不會變成跨好幾個小時、甚至隔夜的行程
+const DRAW_TASK_MAX_DURATION_MINUTES = 60;
 
 /**
  * 把這次點擊「隨機抽任務」的時間記錄到 DRAW_TASK_CALENDAR_ID：
  * 這個時間是新任務的開始時間，同時也是「上一個任務」事件的結束時間（回填上一筆事件的 end）。
  * 新事件預設結束時間是開始時間 + 1 分鐘，等下一次點擊時會被回填成真正的結束時間；
- * 如果之後都沒有再點擊，最後一筆事件就會維持這個預設 1 分鐘的長度。
+ * 如果之後都沒有再點擊，最後一筆事件就會維持這個預設 1 分鐘的長度；
+ * 隔太久才點擊（超過 DRAW_TASK_MAX_DURATION_MINUTES，例如隔夜）時，上一筆只記到開始 + 這個上限。
  */
 function logDrawnTaskToCalendar_(taskText) {
   const now = new Date();
@@ -1542,7 +1548,12 @@ function logDrawnTaskToCalendar_(taskText) {
   if (lastEventId) {
     try {
       // patch 是局部更新，不用先 get 整筆事件再改欄位送回去——省一次來回，「隨機抽任務」明顯變快
-      Calendar.Events.patch({ end: { dateTime: now.toISOString() } }, DRAW_TASK_CALENDAR_ID, lastEventId);
+      let lastStart = Number(props.getProperty(LAST_DRAW_TASK_EVENT_START_PROP_KEY));
+      // 舊版沒存開始時間：只有這一次多 get 一次事件
+      if (!lastStart) lastStart = new Date(Calendar.Events.get(DRAW_TASK_CALENDAR_ID, lastEventId).start.dateTime).getTime();
+      const maxEnd = lastStart + DRAW_TASK_MAX_DURATION_MINUTES * 60 * 1000;
+      const end = new Date(Math.min(now.getTime(), maxEnd));
+      Calendar.Events.patch({ end: { dateTime: end.toISOString() } }, DRAW_TASK_CALENDAR_ID, lastEventId);
     } catch (err) {
       // 上一筆事件可能已被刪除或找不到，忽略，直接建立新的一筆
     }
@@ -1555,7 +1566,10 @@ function logDrawnTaskToCalendar_(taskText) {
     end: { dateTime: defaultEnd.toISOString() }
   }, DRAW_TASK_CALENDAR_ID);
 
-  props.setProperty(LAST_DRAW_TASK_EVENT_ID_PROP_KEY, newEvent.id);
+  props.setProperties({
+    [LAST_DRAW_TASK_EVENT_ID_PROP_KEY]: newEvent.id,
+    [LAST_DRAW_TASK_EVENT_START_PROP_KEY]: String(now.getTime())
+  });
 }
 
 /**
@@ -1662,6 +1676,9 @@ function finishHighlightSession(eventId, endMs, minutes, outcome) {
   const event = Calendar.Events.get(DRAW_TASK_CALENDAR_ID, eventId);
   const start = new Date(event.start.dateTime);
   let end = endMs ? new Date(Number(endMs)) : new Date();
+  // 結果按鈕隔很久才按（例如隔天）時，最多只記到預計結束時間再加 DRAW_TASK_MAX_DURATION_MINUTES，避免隔夜的行程
+  const maxEnd = start.getTime() + ((parseInt(minutes, 10) || 0) + DRAW_TASK_MAX_DURATION_MINUTES) * 60 * 1000;
+  if (end.getTime() > maxEnd) end = new Date(maxEnd);
   // 至少保留 1 分鐘，避免結束時間早於開始時間讓日曆拒絕
   if (end.getTime() - start.getTime() < 60 * 1000) end = new Date(start.getTime() + 60 * 1000);
   const actualMins = Math.round((end.getTime() - start.getTime()) / 60000);
