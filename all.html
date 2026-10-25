@@ -2014,11 +2014,13 @@ armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
   try {
     const data = await apiCall(LINELOG_API_URL, { action: 'mergeExisting' }, 6 * 60 * 1000);
     const merged = data.merged || [];
-    if (merged.length === 0) {
-      showStatus('沒有需要合併的 LINE 通知待辦');
-    } else {
-      showStatus('已合併 ' + merged.length + ' 組：' + merged.map(m => m.key + '（' + m.count + '→1）').join('、'));
-    }
+    const skipped = data.skipped || [];
+    // 其他專案（例如 prayer-card）建立的任務，linelog 專案沒權限改／刪，會留著需要手動完成
+    const leftCount = merged.reduce((n, m) => n + (m.left || 0), 0) + skipped.reduce((n, m) => n + m.count, 0);
+    let msg = merged.length === 0 ? '沒有需要合併的 LINE 通知待辦'
+      : '已合併 ' + merged.length + ' 組：' + merged.map(m => m.key + '（' + m.count + '→' + (1 + (m.left || 0)) + '）').join('、');
+    if (leftCount > 0) msg += '；另有 ' + leftCount + ' 個任務是其他專案建立的，沒權限改，請手動完成';
+    showStatus(msg);
     await loadAll(); // 待辦來源的任務有被刪除／改備註
   } catch (err) {
     showStatus('合併失敗：' + err.message, true);
