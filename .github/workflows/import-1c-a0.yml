@@ -23,12 +23,11 @@ jobs:
           mkdir -p _import-1c-a0
           cd _import-1c-a0
           echo '{"scriptId":"1c_A0sMVRFrtbGa3hFvHUTNnB_sD-NxehM8tRa5mm6hK_Sk0cMXreGohT","rootDir":"."}' > .clasp.json
-          clasp pull
-          ls -la
+          clasp deployments | tee ../deployments-1c-a0.txt
       - name: commit
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
-          git add _import-1c-a0
-          git commit -m "Import 1c_A0 project via clasp pull (temporary)"
+          git add deployments-1c-a0.txt
+          git commit -m "List 1c_A0 deployments (temporary)"
           git push origin HEAD:claude/amazing-dijkstra-ftxbmn
