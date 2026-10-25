@@ -381,6 +381,7 @@
 
 <button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出目前清單所有項目</button>
 <button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋（多方禱告）</button>
+<button class="copy-tasks-btn" id="mergeLinelogBtn">🔗 合併 LINE 通知待辦（同一人／群組合成一個）</button>
 
 <div class="danger-zone">
   <button id="openTrashBtn">🗑 查看垃圾桶（多方禱告）</button>
@@ -425,6 +426,8 @@
 const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 // dg-network 是完全獨立的另一個 Apps Script 專案（為網絡禱告）
 const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
+// LINE通知記錄（linelog/）獨立專案：Google Tasks 只允許建立任務的專案修改它，所以合併要打這個專案自己的部署
+const LINELOG_API_URL = 'https://script.google.com/macros/s/AKfycbxwHrhjumQbN5ylJ_L-fN8SHjHgReU_URxwsquNOFedwtudz9OYqTwvkLduSuKcUg30ug/exec';
 
 const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
@@ -635,6 +638,7 @@ const el = {
   jumpBtn: document.getElementById('jumpBtn'),
   exportAllBtn: document.getElementById('exportAllBtn'),
   openSearchBtn: document.getElementById('openSearchBtn'),
+  mergeLinelogBtn: document.getElementById('mergeLinelogBtn'),
   closeSearchBtn: document.getElementById('closeSearchBtn'),
   searchOverlay: document.getElementById('searchOverlay'),
   searchKeywordInput: document.getElementById('searchKeywordInput'),
@@ -1996,6 +2000,26 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
     showStatus('已合併 ' + selected.length + ' 項為一項');
     await performSearch();
     await loadAll(); // 多方禱告到期清單的列號/內容可能已變動，重新整理全部來源
+  } catch (err) {
+    showStatus('合併失敗：' + err.message, true);
+  } finally {
+    setLoading(false);
+  }
+});
+
+// 執行 linelog 專案的 mergeExisting()：同一個好友／群組的多個未完成「1 …」任務合併成一個。
+// 遇到頻率限制會在後端等待重試，可能跑好幾分鐘，所以逾時拉長、也不自動重試（重跑是安全的，訊息會去重）
+armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
+  setLoading(true);
+  try {
+    const data = await apiCall(LINELOG_API_URL, { action: 'mergeExisting' }, 6 * 60 * 1000);
+    const merged = data.merged || [];
+    if (merged.length === 0) {
+      showStatus('沒有需要合併的 LINE 通知待辦');
+    } else {
+      showStatus('已合併 ' + merged.length + ' 組：' + merged.map(m => m.key + '（' + m.count + '→1）').join('、'));
+    }
+    await loadAll(); // 待辦來源的任務有被刪除／改備註
   } catch (err) {
     showStatus('合併失敗：' + err.message, true);
   } finally {
