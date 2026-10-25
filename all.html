@@ -426,8 +426,6 @@
 const MULTI_API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw/exec';
 // dg-network 是完全獨立的另一個 Apps Script 專案（為網絡禱告）
 const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe/exec';
-// LINE通知記錄（linelog/）獨立專案：Google Tasks 只允許建立任務的專案修改它，所以合併要打這個專案自己的部署
-const LINELOG_API_URL = 'https://script.google.com/macros/s/AKfycbxwHrhjumQbN5ylJ_L-fN8SHjHgReU_URxwsquNOFedwtudz9OYqTwvkLduSuKcUg30ug/exec';
 
 const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
@@ -2007,19 +2005,19 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
   }
 });
 
-// 執行 linelog 專案的 mergeExisting()：同一個好友／群組的多個未完成「1 …」任務合併成一個。
+// 執行禱告卡專案的 linelogMergeExisting()（LINE App 現在打的是禱告卡，任務是禱告卡建立的）：同一個好友／群組的多個未完成「1 …」任務合併成一個。
 // 遇到頻率限制會在後端等待重試，可能跑好幾分鐘，所以逾時拉長、也不自動重試（重跑是安全的，訊息會去重）
 armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
   setLoading(true);
   try {
-    const data = await apiCall(LINELOG_API_URL, { action: 'mergeExisting' }, 6 * 60 * 1000);
+    const data = await apiCall(MULTI_API_URL, { action: 'mergeLinelogTasks' }, 6 * 60 * 1000);
     const merged = data.merged || [];
     const skipped = data.skipped || [];
-    // 其他專案（例如 prayer-card）建立的任務，linelog 專案沒權限改／刪，會留著需要手動完成
+    // 舊的獨立 linelog 專案建立的任務，禱告卡沒權限改／刪，會留著需要手動完成
     const leftCount = merged.reduce((n, m) => n + (m.left || 0), 0) + skipped.reduce((n, m) => n + m.count, 0);
     let msg = merged.length === 0 ? '沒有需要合併的 LINE 通知待辦'
       : '已合併 ' + merged.length + ' 組：' + merged.map(m => m.key + '（' + m.count + '→' + (1 + (m.left || 0)) + '）').join('、');
-    if (leftCount > 0) msg += '；另有 ' + leftCount + ' 個任務是其他專案建立的，沒權限改，請手動完成';
+    if (leftCount > 0) msg += '；另有 ' + leftCount + ' 個任務是舊 LINE 專案建立的，沒權限改，請手動完成';
     showStatus(msg);
     await loadAll(); // 待辦來源的任務有被刪除／改備註
   } catch (err) {

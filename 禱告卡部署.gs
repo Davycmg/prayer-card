@@ -1078,6 +1078,9 @@ function doGet(e) {
       case 'saveHighlightSettings':
         result = saveHighlightSettings(e.parameter.settings);
         break;
+      case 'mergeLinelogTasks':
+        result = mergeLinelogTasks();
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;

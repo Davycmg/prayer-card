@@ -4,9 +4,14 @@
  * （由其他專案建立的任務，這個專案修改時會收到「The caller does not have permission」）。
  *
  * 接收 App 傳來的資料，加入 Google Tasks「預設清單」：
- * - 標題：「1 寄件者：最新一則訊息」
- * - 同一個人（群組則為「[群組] 寄件者」）若在清單裡已有「未完成」的任務，就合併進去：
- *   備註累加每則訊息，標題更新為最新一則。把任務勾選完成後，下一則訊息會開新任務。
+ * - 個人聊天：標題「1 好友：最新一則訊息」；一個好友一個任務。
+ * - 群組聊天：標題「1 [群組]：寄件者：最新一則訊息」；一個群組一個任務（備註每行標示寄件者）。
+ * - 清單裡已有該好友／群組「未完成」的任務就合併進去：備註累加每則訊息，標題更新為最新一則。
+ *   把任務勾選完成後，下一則訊息會開新任務。
+ * （以上邏輯 2026-10-25 從舊的獨立 linelog 專案（linelog/）搬過來，那邊後來改得比這裡新）
+ *
+ * all.html「合併 LINE 通知待辦」按鈕 → doGet action mergeLinelogTasks → linelogMergeExisting()：
+ * 把同一個好友／群組的多個未完成任務合併成一個。
  *
  * 安全：禱告卡的部署網址公開寫在 GitHub Pages 頁面裡，所以 POST 必須帶 ?key=金鑰 才會處理。
  * 第一次使用：在編輯器執行 setupLinelogKey()，執行記錄會印出完整網址，貼進 App 即可。
@@ -69,8 +74,33 @@ function linelogRetry_(fn, delays) {
   }
 }
 
-function linelogWhoOf_(r) {
-  return r.type === '群組' ? '[' + r.chat + '] ' + r.sender : r.sender;
+// 清掉看不見的方向標記／零寬字元，空白一律壓成單一半形空格
+function linelogClean_(s) {
+  return String(s || '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g, '')
+    .replace(/[\u00a0\u3000]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// 整理寄件者：LINE 群組的寄件者常是「群組名：人名」，一律只取最後一個冒號後面的人名；
+// 沒有寄件者時，內文可能是「人名：訊息」。
+// key 內不可含全形冒號（標題以第一個「：」切出 key），所以一律換成半形。
+function linelogNormalize_(r) {
+  var chat = linelogClean_(r.chat);
+  var sender = linelogClean_(r.sender);
+  var message = String(r.message || '');
+  if (r.type === '群組') {
+    var k = Math.max(sender.lastIndexOf('：'), sender.lastIndexOf(':'));
+    if (k >= 0) sender = sender.substring(k + 1).trim();
+    if (!sender || sender === chat) {
+      sender = '';
+      var m = message.match(/^([^:：\n]{1,30}?)\s*[:：]\s*([\s\S]+)$/);
+      if (m) { sender = linelogClean_(m[1]); message = m[2]; }
+    }
+  }
+  var who = r.type === '群組' ? '[' + chat + ']' : (sender || chat);
+  return { who: who.replace(/：/g, ':'), sender: r.type === '群組' ? sender : '', message: message };
 }
 
 function linelogKeyOf_(title) {
@@ -78,6 +108,12 @@ function linelogKeyOf_(title) {
   var i = title.indexOf(LINELOG_SEP);
   if (i < 0) return null;
   return title.substring(LINELOG_PREFIX.length, i);
+}
+
+// 舊版的 key 是「[群組] 人名」；統一成「[群組]」，讓同一個群組的任務歸成一組
+function linelogGroupKey_(key) {
+  var m = /^(\[.*?\])(?: |$)/.exec(key);
+  return m ? m[1] : key;
 }
 
 function linelogListOpen_() {
@@ -98,33 +134,81 @@ function linelogLoadOpenTasks_() {
   var map = {};
   linelogListOpen_().forEach(function (t) {
     var key = linelogKeyOf_(t.title);
-    if (key && !map[key]) map[key] = t;
+    if (!key) return;
+    t.__key = key;                                       // 原始 key（舊格式含人名）
+    var gk = linelogGroupKey_(key);
+    if (!map[gk]) map[gk] = t;
   });
   return map;
 }
 
+// 記住「群組／好友 → 任務 ID」。短時間連續進來的訊息，Tasks 清單可能還沒反映剛建立的任務，
+// 只靠清單會重複建立；這裡用快取補上（6 小時內有效）。
+function linelogCacheKey_(who) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, who, Utilities.Charset.UTF_8);
+  return 'task:' + Utilities.base64EncodeWebSafe(d);
+}
+
+function linelogCacheGetTask_(who) {
+  try {
+    var id = CacheService.getScriptCache().get(linelogCacheKey_(who));
+    if (!id) return null;
+    var t = Tasks.Tasks.get('@default', id);
+    if (!t || t.deleted || t.status === 'completed') return null;
+    t.__key = linelogKeyOf_(t.title) || who;
+    return t;
+  } catch (err) {
+    return null;                                         // 任務已被刪除等：當作沒有
+  }
+}
+
+function linelogCachePutTask_(who, t) {
+  try {
+    CacheService.getScriptCache().put(linelogCacheKey_(who), t.id, 21600);
+  } catch (err) {}
+}
+
 function linelogAddMessage_(open, r) {
-  var who = linelogWhoOf_(r);
-  var title = (LINELOG_PREFIX + who + LINELOG_SEP + r.message).substring(0, 1000);
-  var line = String(r.time).substring(5, 16) + ' ' + r.message;
-  var t = open[who];
+  var n = linelogNormalize_(r);
+  var who = n.who;
+  var body = n.sender ? n.sender + LINELOG_SEP + n.message : n.message;
+  var title = (LINELOG_PREFIX + who + LINELOG_SEP + body).substring(0, 1000);
+  var line = String(r.time).substring(5, 16) + ' ' + body;
+  // 先用快取的任務 ID 抓「最新」內容（清單可能落後，備註會是舊的）；沒有才用清單
+  var t = linelogCacheGetTask_(who);
+  var how = t ? '快取' : '';
+  if (!t) {
+    t = open[who];
+    if (t) how = '清單';
+  }
+  console.log('收到 ' + JSON.stringify({ chat: r.chat, sender: r.sender, who: who,
+    比對: how || '新建', 清單任務數: Object.keys(open).length }));
+  var patched = false;
   if (t) {
+    var notes = t.notes;
+    if (who.charAt(0) === '[' && t.__key && t.__key !== who) {   // 併入舊格式任務：先補寄件者
+      var p = linelogParseTask_(t, t.__key, who);
+      notes = p.header + '\n' + p.lines.join('\n');
+    }
     try {
       open[who] = linelogRetry_(function () {
         return Tasks.Tasks.patch(
-          { title: title, notes: linelogAppendLine_(t.notes, line) }, '@default', t.id);
+          { title: title, notes: linelogAppendLine_(notes, line) }, '@default', t.id);
       }, [1000, 3000]);
-      return;
+      patched = true;
     } catch (err) {
       // 舊的 linelog 專案建立的任務，這個專案改不動：改成開一個新任務（之後的訊息就會累加到新任務）
-      if (String(err).indexOf('permission') === -1) throw err;
+      if (!linelogIsNoPermission_(err)) throw err;
     }
   }
-  var header = '聊天室：' + r.chat + '（' + r.type + '）';
-  open[who] = linelogRetry_(function () {
-    return Tasks.Tasks.insert(
-      { title: title, notes: header + '\n' + line }, '@default');
-  }, [1000, 3000]);
+  if (!patched) {
+    var header = '聊天室：' + r.chat + '（' + r.type + '）';
+    open[who] = linelogRetry_(function () {
+      return Tasks.Tasks.insert(
+        { title: title, notes: header + '\n' + line }, '@default');
+    }, [1000, 3000]);
+  }
+  linelogCachePutTask_(who, open[who]);
 }
 
 // 保留第一行（標頭），超過長度就丟最舊的訊息
@@ -133,6 +217,143 @@ function linelogAppendLine_(notes, line) {
   lines.push(line);
   while (lines.join('\n').length > LINELOG_MAX_NOTES && lines.length > 2) lines.splice(1, 1);
   return lines.join('\n');
+}
+
+// 讀出任務備註：回傳 {header, lines}。
+// 舊版（以「[群組] 人名」為 key，或寄件者只出現在標題）建立的群組任務，備註沒有寄件者，這裡補上。
+function linelogParseTask_(t, key, gk) {
+  var isGroup = gk.charAt(0) === '[';
+  var chatName = isGroup ? gk.slice(1, -1) : '';
+  var n = t.notes || '';
+  var header;
+  var lines;
+  if (n.indexOf('聊天室：') === 0) {                     // 新格式：第一行是聊天室
+    var parts = n.split('\n');
+    header = parts[0];
+    lines = parts.slice(1);
+  } else {                                               // 最舊格式：時間／聊天室／空行／訊息
+    var tm = n.match(/時間：\d{4}-(\d\d-\d\d \d\d:\d\d)/);
+    var ch = n.match(/聊天室：[^\n]*/);
+    var i = n.indexOf('\n\n');
+    var msg = i >= 0 ? n.substring(i + 2) : t.title;
+    header = ch ? ch[0] : '聊天室：' + gk;
+    lines = [(tm ? tm[1] : '') + ' ' + msg];
+  }
+  if (isGroup && key !== gk) {
+    var person = key.substring(gk.length).trim();
+    if (person === chatName) person = '';
+    if (!person) {                                       // 寄件者在標題：「…群組名：人名：訊息」
+      var stamped = lines.filter(function (l) { return /^\d\d-\d\d \d\d:\d\d /.test(l); });
+      var rest = t.title.substring(t.title.indexOf(LINELOG_SEP) + 1);
+      var j = rest.indexOf(LINELOG_SEP);
+      if (stamped.length === 1 && j > 0) {
+        var after = rest.substring(j + 1);
+        if (stamped[0].substring(12).indexOf(after.substring(0, Math.min(10, after.length))) === 0) {
+          person = rest.substring(0, j).trim();
+        }
+      }
+    }
+    if (person) {
+      lines = lines.map(function (l) { return linelogPrefixLine_(l, person + LINELOG_SEP); });
+    }
+  }
+  return { header: header, lines: lines };
+}
+
+// 在「MM-dd HH:mm 」時間後面插入寄件者（續行不加）
+function linelogPrefixLine_(line, prefix) {
+  var m = /^(\d\d-\d\d \d\d:\d\d )([\s\S]*)$/.exec(line);
+  return m ? m[1] + prefix + m[2] : line;
+}
+
+/**
+ * all.html 按鈕／編輯器手動執行：把同一個好友／同一個群組的多個未完成任務合併成一個（保留最新的一個，其餘刪除）。
+ * 群組內不同人的舊任務也會合併，並在備註每行補上寄件者。
+ * 可重複執行：訊息會去重；遇到頻率限制會自動等待重試，若仍失敗，等幾分鐘再執行一次即可接續。
+ */
+function linelogMergeExisting() {
+  var groups = {};
+  linelogListOpen_().forEach(function (t) {
+    var key = linelogKeyOf_(t.title);
+    if (!key) return;
+    var gk = linelogGroupKey_(key);
+    (groups[gk] = groups[gk] || []).push({ t: t, key: key });
+  });
+  var WAIT = [5000, 15000, 30000, 60000];
+  var merged = [];
+  var skipped = [];
+  Object.keys(groups).forEach(function (gk) {
+    var g = groups[gk];
+    if (g.length < 2) return;
+    var isGroup = gk.charAt(0) === '[';
+    var chatName = isGroup ? gk.slice(1, -1) : '';
+    var header = null;
+    var lines = [];
+    var seen = {};
+    function add(line) {
+      if (!seen[line]) { seen[line] = true; lines.push(line); }
+    }
+    g.slice().reverse().forEach(function (item) {        // 舊 → 新
+      var p = linelogParseTask_(item.t, item.key, gk);
+      header = header || p.header;
+      p.lines.forEach(add);
+    });
+    while ((header + '\n' + lines.join('\n')).length > LINELOG_MAX_NOTES && lines.length > 1) lines.shift();
+    // 清單最上面＝最新，優先保留它；但由其他 Apps Script 專案（例如 prayer-card）建立的任務，
+    // 這個專案改不動（The caller does not have permission），就往下找第一個改得動的
+    var keep = null;
+    for (var i = 0; i < g.length && !keep; i++) {
+      var cand = g[i];
+      var upd = { notes: header + '\n' + lines.join('\n') };
+      if (isGroup && cand.key !== gk) {                  // 標題改成新格式「1 [群組]：寄件者：訊息」
+        var rest = cand.t.title.substring(cand.t.title.indexOf(LINELOG_SEP) + 1);
+        var kp = cand.key.substring(gk.length).trim();
+        upd.title = (LINELOG_PREFIX + gk + LINELOG_SEP + (kp && kp !== chatName ? kp + LINELOG_SEP : '') + rest).substring(0, 1000);
+      }
+      try {
+        linelogRetry_(function () {
+          return Tasks.Tasks.patch(upd, '@default', cand.t.id);
+        }, WAIT);
+        keep = cand;
+      } catch (err) {
+        if (!linelogIsNoPermission_(err)) throw err;
+      }
+    }
+    if (!keep) {
+      console.log('略過（全部都是其他專案建立的任務）：' + gk);
+      skipped.push({ key: gk, count: g.length });
+      return;
+    }
+    var left = 0;
+    g.forEach(function (item) {
+      if (item === keep) return;
+      try {
+        linelogRetry_(function () { Tasks.Tasks.remove('@default', item.t.id); }, WAIT);
+      } catch (err) {
+        if (!linelogIsNoPermission_(err)) throw err;
+        left++;                                          // 刪不掉的留著（內容已併進保留的任務），請手動完成
+      }
+      Utilities.sleep(700);                              // 放慢速度，避免觸發限制
+    });
+    console.log('已合併：' + gk + '（' + g.length + ' → ' + (1 + left) + '）');
+    merged.push({ key: gk, count: g.length, left: left });
+  });
+  return { ok: true, merged: merged, skipped: skipped };
+}
+
+// all.html 按鈕（doGet action mergeLinelogTasks）：跟 doPost 共用鎖，避免合併時剛好有新訊息進來改同一批任務
+function mergeLinelogTasks() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    return linelogMergeExisting();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function linelogIsNoPermission_(err) {
+  return /does not have permission/i.test(String(err));
 }
 
 function linelogOut_(obj) {
