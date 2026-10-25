@@ -261,6 +261,7 @@ function mergeExisting() {
   });
   var WAIT = [5000, 15000, 30000, 60000];
   var merged = [];
+  var skipped = [];
   Object.keys(groups).forEach(function (gk) {
     var g = groups[gk];
     if (g.length < 2) return;
@@ -278,24 +279,50 @@ function mergeExisting() {
       p.lines.forEach(add);
     });
     while ((header + '\n' + lines.join('\n')).length > MAX_NOTES && lines.length > 1) lines.shift();
-    var keep = g[0];                                     // 清單最上面＝最新
-    var upd = { notes: header + '\n' + lines.join('\n') };
-    if (isGroup && keep.key !== gk) {                    // 標題改成新格式「1 [群組]：寄件者：訊息」
-      var rest = keep.t.title.substring(keep.t.title.indexOf(SEP) + 1);
-      var kp = keep.key.substring(gk.length).trim();
-      upd.title = (PREFIX + gk + SEP + (kp && kp !== chatName ? kp + SEP : '') + rest).substring(0, 1000);
+    // 清單最上面＝最新，優先保留它；但由其他 Apps Script 專案（例如 prayer-card）建立的任務，
+    // 這個專案改不動（The caller does not have permission），就往下找第一個改得動的
+    var keep = null;
+    for (var i = 0; i < g.length && !keep; i++) {
+      var cand = g[i];
+      var upd = { notes: header + '\n' + lines.join('\n') };
+      if (isGroup && cand.key !== gk) {                  // 標題改成新格式「1 [群組]：寄件者：訊息」
+        var rest = cand.t.title.substring(cand.t.title.indexOf(SEP) + 1);
+        var kp = cand.key.substring(gk.length).trim();
+        upd.title = (PREFIX + gk + SEP + (kp && kp !== chatName ? kp + SEP : '') + rest).substring(0, 1000);
+      }
+      try {
+        retry_(function () {
+          return Tasks.Tasks.patch(upd, '@default', cand.t.id);
+        }, WAIT);
+        keep = cand;
+      } catch (err) {
+        if (!isNoPermission_(err)) throw err;
+      }
     }
-    retry_(function () {
-      return Tasks.Tasks.patch(upd, '@default', keep.t.id);
-    }, WAIT);
-    g.slice(1).forEach(function (item) {
-      retry_(function () { Tasks.Tasks.remove('@default', item.t.id); }, WAIT);
+    if (!keep) {
+      console.log('略過（全部都是其他專案建立的任務）：' + gk);
+      skipped.push({ key: gk, count: g.length });
+      return;
+    }
+    var left = 0;
+    g.forEach(function (item) {
+      if (item === keep) return;
+      try {
+        retry_(function () { Tasks.Tasks.remove('@default', item.t.id); }, WAIT);
+      } catch (err) {
+        if (!isNoPermission_(err)) throw err;
+        left++;                                          // 刪不掉的留著（內容已併進保留的任務），請手動完成
+      }
       Utilities.sleep(700);                              // 放慢速度，避免觸發限制
     });
-    console.log('已合併：' + gk + '（' + g.length + ' → 1）');
-    merged.push({ key: gk, count: g.length });
+    console.log('已合併：' + gk + '（' + g.length + ' → ' + (1 + left) + '）');
+    merged.push({ key: gk, count: g.length, left: left });
   });
-  return { ok: true, merged: merged };
+  return { ok: true, merged: merged, skipped: skipped };
+}
+
+function isNoPermission_(err) {
+  return /does not have permission/i.test(String(err));
 }
 
 function out(obj) {
