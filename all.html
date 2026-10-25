@@ -2009,10 +2009,19 @@ armConfirmButton(el.mergeSearchBtn, '再按一次確認合併', async () => {
 // 遇到頻率限制會在後端等待重試，可能跑好幾分鐘，所以逾時拉長、也不自動重試（重跑是安全的，訊息會去重）
 armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
   setLoading(true);
+  // 後端每批最多跑 4.5 分鐘，還沒做完會回 more: true，這裡自動接著呼叫下一批（最多 10 批）
+  const byKey = {};
+  const skippedByKey = {};
   try {
-    const data = await apiCall(MULTI_API_URL, { action: 'mergeLinelogTasks' }, 6 * 60 * 1000);
-    const merged = data.merged || [];
-    const skipped = data.skipped || [];
+    for (let batch = 1; batch <= 10; batch++) {
+      el.loadingOverlay.textContent = '合併中（第 ' + batch + ' 批，已合併 ' + Object.keys(byKey).length + ' 組）...';
+      const data = await apiCall(MULTI_API_URL, { action: 'mergeLinelogTasks' }, 6 * 60 * 1000);
+      (data.merged || []).forEach(m => { byKey[m.key] = m; });
+      (data.skipped || []).forEach(m => { skippedByKey[m.key] = m; });
+      if (!data.more) break;
+    }
+    const merged = Object.values(byKey);
+    const skipped = Object.values(skippedByKey);
     // 舊的獨立 linelog 專案建立的任務，禱告卡沒權限改／刪，會留著需要手動完成
     const leftCount = merged.reduce((n, m) => n + (m.left || 0), 0) + skipped.reduce((n, m) => n + m.count, 0);
     let msg = merged.length === 0 ? '沒有需要合併的 LINE 通知待辦'
@@ -2021,8 +2030,9 @@ armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
     showStatus(msg);
     await loadAll(); // 待辦來源的任務有被刪除／改備註
   } catch (err) {
-    showStatus('合併失敗：' + err.message, true);
+    showStatus('合併失敗：' + err.message + '（已合併的不會重複，可以再按一次接著做）', true);
   } finally {
+    el.loadingOverlay.textContent = '處理中...';
     setLoading(false);
   }
 });

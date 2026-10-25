@@ -282,7 +282,11 @@ function linelogMergeExisting() {
   var WAIT = [5000, 15000, 30000, 60000];
   var merged = [];
   var skipped = [];
+  // Apps Script 一次最多跑 6 分鐘：超過 4.5 分鐘就先收手回傳 more: true，all.html 會自動再呼叫一次接著做
+  var start = Date.now();
+  var more = false;
   Object.keys(groups).forEach(function (gk) {
+    if (more || Date.now() - start > 270000) { more = true; return; }
     var g = groups[gk];
     if (g.length < 2) return;
     var isGroup = gk.charAt(0) === '[';
@@ -338,7 +342,7 @@ function linelogMergeExisting() {
     console.log('已合併：' + gk + '（' + g.length + ' → ' + (1 + left) + '）');
     merged.push({ key: gk, count: g.length, left: left });
   });
-  return { ok: true, merged: merged, skipped: skipped };
+  return { ok: true, merged: merged, skipped: skipped, more: more };
 }
 
 // all.html 按鈕（doGet action mergeLinelogTasks）：跟 doPost 共用鎖，避免合併時剛好有新訊息進來改同一批任務
