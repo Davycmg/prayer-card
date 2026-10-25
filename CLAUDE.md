@@ -69,11 +69,12 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 - App 的網址要改成 `<禱告卡部署網址>/exec?key=<金鑰>`；舊的獨立 linelog 專案先留著，有問題可以把 App 網址改回去。
 - 舊專案建立、這個專案改不動的任務：收到同一個人的新訊息時會改開新任務（舊的留著，需手動完成）。
 
-### 舊的獨立 linelog 專案（`linelog/`）
+### 舊的獨立 linelog 專案（`linelog/`）與「合併 LINE 通知待辦」按鈕
 
-舊的獨立專案（scriptId `1c_A0sMVRFrtbGa3hFvHUTNnB_sD-NxehM8tRa5mm6hK_Sk0cMXreGohT`，2026-10-25 用一次性 workflow `clasp pull` 抓進 `linelog/`，內容含 `mergeExisting` 可對上）其實還在用，而且程式比 `LINE通知記錄.gs` 新（群組一個群組一個任務、CacheService 記任務 ID、`mergeExisting()` 合併同一人／群組的多個未完成任務）。`deploy.yml` 的 `push-linelog` job 會自動 `clasp push`，但跟主專案一樣**發布新版本要手動**（部署 → 管理部署作業 → 編輯 → 新版本），部署網址：`https://script.google.com/macros/s/AKfycbxwHrhjumQbN5ylJ_L-fN8SHjHgReU_URxwsquNOFedwtudz9OYqTwvkLduSuKcUg30ug/exec`。
+舊的獨立專案（scriptId `1c_A0sMVRFrtbGa3hFvHUTNnB_sD-NxehM8tRa5mm6hK_Sk0cMXreGohT`，部署 `AKfycbxwHrhj…`）2026-10-25 用一次性 workflow `clasp pull` 抓進 `linelog/`（`deploy.yml` 的 `push-linelog` job 自動 push，`.claspignore` 排除避免主專案多一個 `doPost`）。它在併進禱告卡之後還被改過（一個群組一個任務、CacheService 記任務 ID、`mergeExisting()`），所以同天把這些邏輯搬進 `LINE通知記錄.gs`（函式加 `linelog` 前綴）。
 
-- `all.html` 下方「🔗 合併 LINE 通知待辦」按鈕打這個部署的 `?action=mergeExisting`（`doGet`），不是打主專案——因為任務是這個專案建立的，只有它改得動／刪得掉。
+- LINE App 目前的網址是禱告卡的（帶 `?key=`，2026-10-25 使用者截圖確認），新任務都由禱告卡建立。
+- `all.html`「🔗 合併 LINE 通知待辦」按鈕打禱告卡的 `?action=mergeLinelogTasks` → `linelogMergeExisting()`。舊專案建立的任務禱告卡改不動：保留的任務選「由新到舊第一個改得動的」，刪不掉的留著並回報數量，請使用者手動完成。不要再把按鈕改回打舊專案（它改不動禱告卡建立的任務，2026-10-25 實際踩過）。
 
 ## home.html「今天的 Highlight」
 
