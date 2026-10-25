@@ -2030,7 +2030,12 @@ armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
     showStatus(msg);
     await loadAll(); // 待辦來源的任務有被刪除／改備註
   } catch (err) {
-    showStatus('合併失敗：' + err.message + '（已合併的不會重複，可以再按一次接著做）', true);
+    // 鎖定逾時＝上一次按的合併還在 Apps Script 背景跑（關掉頁面／逾時也不會中止，最多跑 6 分鐘）
+    if (/鎖定逾時|lock timeout|timed out waiting for lock/i.test(err.message)) {
+      showStatus('上一次的合併還在背景跑（最多 6 分鐘），請等幾分鐘再按一次', true);
+    } else {
+      showStatus('合併失敗：' + err.message + '（已合併的不會重複，可以再按一次接著做）', true);
+    }
   } finally {
     el.loadingOverlay.textContent = '處理中...';
     setLoading(false);
