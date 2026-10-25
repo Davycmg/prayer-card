@@ -8,6 +8,7 @@
  * 修改後要：部署 → 管理部署作業 → 編輯 → 版本：新版本（網址不變）。
  *
  * 一次性整理舊資料：在編輯器上方選函式 mergeExisting → 執行（會把同一個人的多個未完成任務合併成一個）。
+ * 也可以從 prayer-card 的 all.html「合併 LINE 通知待辦」按鈕執行（GET ?action=mergeExisting）。
  */
 var PREFIX = '1 ';
 var SEP = '：';
@@ -28,6 +29,21 @@ function doPost(e) {
   } catch (err) {
     // done = 已成功處理的筆數，APK 會據此避免重試時重複建立
     return out({ ok: false, done: done, error: String(err) });
+  } finally {
+    try { lock.releaseLock(); } catch (x) {}
+  }
+}
+
+// 給 all.html 的按鈕呼叫：?action=mergeExisting 執行 mergeExisting()，回傳合併結果
+function doGet(e) {
+  var action = e && e.parameter && e.parameter.action;
+  if (action !== 'mergeExisting') return out({ error: '未知的 action：' + action });
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(25000);                                // 避免跟 doPost 同時改同一批任務
+    return out(mergeExisting());
+  } catch (err) {
+    return out({ error: String(err) });
   } finally {
     try { lock.releaseLock(); } catch (x) {}
   }
@@ -244,6 +260,7 @@ function mergeExisting() {
     (groups[gk] = groups[gk] || []).push({ t: t, key: key });
   });
   var WAIT = [5000, 15000, 30000, 60000];
+  var merged = [];
   Object.keys(groups).forEach(function (gk) {
     var g = groups[gk];
     if (g.length < 2) return;
@@ -276,7 +293,9 @@ function mergeExisting() {
       Utilities.sleep(700);                              // 放慢速度，避免觸發限制
     });
     console.log('已合併：' + gk + '（' + g.length + ' → 1）');
+    merged.push({ key: gk, count: g.length });
   });
+  return { ok: true, merged: merged };
 }
 
 function out(obj) {
