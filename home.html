@@ -298,6 +298,7 @@
     <div class="icon">⭐</div>
     <h2>今天的 Highlight</h2>
     <p id="highlightSummary">設定今天的 Highlight（最多 7 個），抽一個或指定一個來計時，結果記錄到日曆</p>
+    <div id="highlightLogStatus" class="hl-sub" style="margin:-12px 0 12px;"></div>
     <div class="btn-pair">
       <a class="btn btn-outline" href="#" id="highlightPickBtn">指定</a>
       <a class="btn" href="#" id="highlightDrawBtn">Highlight 抽籤</a>
@@ -745,7 +746,6 @@ document.getElementById('highlightSettingsSave').addEventListener('click', async
 });
 
 let highlightTickTimer = null;
-let highlightEventReady = null;
 
 function loadHighlightSession() {
   try { return JSON.parse(localStorage.getItem(HIGHLIGHT_SESSION_KEY) || 'null'); } catch (err) { return null; }
@@ -866,31 +866,59 @@ function renderHighlightSession() {
   }
 }
 
-// 在日曆建一筆事件（先填預計結束時間），把事件 ID 存進計時狀態，結束時才能回填。
-function startHighlightCalendarEvent(session) {
-  const statusEl = document.getElementById('highlightStatus');
-  const url = TASKS_API_URL + '?' + new URLSearchParams({
-    action: 'startHighlightSession', text: session.text + (session.sub ? '：' + session.sub : ''),
-    startMs: String(session.startMs), minutes: String(session.minutes), _t: Date.now()
-  }).toString();
-  return fetch(url, { cache: 'no-store' })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) throw new Error(data.error);
-      const current = loadHighlightSession();
-      if (current && current.startMs === session.startMs) {
-        current.eventId = data.eventId;
-        saveHighlightSession(current);
-      }
-      if (current && !current.stoppedMs) statusEl.textContent = '已記錄到日曆 ✓';
-      return data.eventId;
-    })
-    .catch(err => {
-      statusEl.textContent = '日曆記錄失敗：' + err.message;
-      return null;
-    });
+// 日曆記錄改成「按下結果按鈕時才寫」，而且放背景做：按完馬上可以抽下一個，不用等 Apps Script。
+// 待送出的記錄存在 localStorage，送失敗或中途關掉頁面，下次打開首頁會自動補送。
+const HIGHLIGHT_PENDING_LOGS_KEY = 'homeHtml_highlightPendingLogs';
+let highlightFlushing = false;
+
+function loadHighlightPendingLogs() {
+  try { return JSON.parse(localStorage.getItem(HIGHLIGHT_PENDING_LOGS_KEY) || '[]'); } catch (err) { return []; }
 }
 
+function saveHighlightPendingLogs(logs) {
+  try { localStorage.setItem(HIGHLIGHT_PENDING_LOGS_KEY, JSON.stringify(logs)); } catch (err) {}
+}
+
+async function callHighlightApi(params) {
+  const url = TASKS_API_URL + '?' + new URLSearchParams(Object.assign({}, params, { _t: Date.now() })).toString();
+  const res = await fetch(url, { cache: 'no-store' });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+// 依序把待送出的記錄寫進日曆：先建事件（開始時間），再回填結束時間和結果。
+// 建好的事件 ID 會先存回待送清單，回填失敗重送時不會重複建事件。
+async function flushHighlightLogs() {
+  if (highlightFlushing) return;
+  highlightFlushing = true;
+  const statusEl = document.getElementById('highlightLogStatus');
+  try {
+    let logs = loadHighlightPendingLogs();
+    while (logs.length) {
+      const log = logs[0];
+      statusEl.textContent = '記錄到日曆中…（' + logs.length + ' 筆）';
+      if (!log.eventId) {
+        const started = await callHighlightApi({
+          action: 'startHighlightSession', text: log.text, startMs: String(log.startMs), minutes: String(log.minutes)
+        });
+        log.eventId = started.eventId;
+        saveHighlightPendingLogs(logs);
+      }
+      await callHighlightApi({
+        action: 'finishHighlightSession', eventId: log.eventId, endMs: String(log.endMs),
+        minutes: String(log.minutes), outcome: log.outcome
+      });
+      logs = loadHighlightPendingLogs().filter(l => l.startMs !== log.startMs);
+      saveHighlightPendingLogs(logs);
+    }
+    statusEl.textContent = '';
+  } catch (err) {
+    statusEl.textContent = '日曆記錄失敗（下次打開首頁會自動重送）：' + err.message;
+  } finally {
+    highlightFlushing = false;
+  }
+}
 
 // 目前有計時中的 Highlight 時，先問要不要放棄它；回傳 false 代表使用者選擇保留
 function confirmReplaceHighlight(verb) {
@@ -922,8 +950,7 @@ async function beginHighlight(text, btn) {
   }
   const session = { text: text, sub: sub, minutes: settings.minutes, startMs: Date.now() };
   saveHighlightSession(session);
-  document.getElementById('highlightStatus').textContent = '記錄到日曆中...';
-  highlightEventReady = startHighlightCalendarEvent(session);
+  document.getElementById('highlightStatus').textContent = '';
   renderHighlightSession();
   document.getElementById('highlightResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -982,41 +1009,27 @@ document.getElementById('highlightStopBtn').addEventListener('click', function (
 });
 
 document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
-  btn.addEventListener('click', async function () {
+  btn.addEventListener('click', function () {
     const session = loadHighlightSession();
     if (!session) return;
     // 日曆事件的結束時間＝按下結果按鈕的這一刻（不是時間到／提前結束的時間）
-    const clickedMs = Date.now();
-    const statusEl = document.getElementById('highlightStatus');
-    const buttons = document.querySelectorAll('#highlightOutcomeActions button');
-    buttons.forEach(b => b.disabled = true);
-    statusEl.textContent = '記錄中...';
-    try {
-      // 剛抽完馬上結束的話，建立事件的請求可能還沒回來，先等它
-      let eventId = session.eventId;
-      if (!eventId && highlightEventReady) eventId = await highlightEventReady;
-      if (!eventId) throw new Error('日曆事件沒有建立成功');
-      const url = TASKS_API_URL + '?' + new URLSearchParams({
-        action: 'finishHighlightSession', eventId: eventId, endMs: String(clickedMs),
-        minutes: String(session.minutes), outcome: btn.dataset.outcome, _t: Date.now()
-      }).toString();
-      const res = await fetch(url, { cache: 'no-store' });
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      saveHighlightSession(null);
-      highlightEventReady = null;
-      renderHighlightSession();
-    } catch (err) {
-      statusEl.textContent = '記錄失敗：' + err.message;
-    } finally {
-      buttons.forEach(b => b.disabled = false);
-    }
+    const logs = loadHighlightPendingLogs();
+    logs.push({
+      text: session.text + (session.sub ? '：' + session.sub : ''),
+      startMs: session.startMs, endMs: Date.now(), minutes: session.minutes, outcome: btn.dataset.outcome,
+      eventId: session.eventId // 舊版開始計時就建好事件的，沿用它，不重複建立
+    });
+    saveHighlightPendingLogs(logs);
+    saveHighlightSession(null);
+    renderHighlightSession();
+    flushHighlightLogs();
   });
 });
 
 renderHighlightSummary();
 renderHighlightSession();
 syncHighlightSettings();
+flushHighlightLogs();
 </script>
 
 </body>
