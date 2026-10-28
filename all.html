@@ -382,6 +382,7 @@
 <button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出目前清單所有項目</button>
 <button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋（多方禱告）</button>
 <button class="copy-tasks-btn" id="mergeLinelogBtn">🔗 合併 LINE 通知待辦（同一人／群組合成一個）</button>
+<button class="copy-tasks-btn" id="openBlacklistBtn">🚫 LINE 黑名單（查詢／解除）</button>
 
 <div class="danger-zone">
   <button id="openTrashBtn">🗑 查看垃圾桶（多方禱告）</button>
@@ -417,6 +418,19 @@
     <div class="trash-list" id="searchResultList"></div>
     <div class="trash-panel-footer">
       <button id="mergeSearchBtn" class="search-merge-btn">🔗 合併所選項目</button>
+    </div>
+  </div>
+</div>
+
+<div class="trash-overlay" id="blacklistOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>LINE 黑名單</h2>
+      <button id="closeBlacklistBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="trash-list" id="blacklistList"></div>
+    <div class="trash-panel-footer">
+      <div class="trash-item-meta">加入：Google Tasks 任務標題打「B名字：」（可直接勾完成），下一則 LINE 通知進來時生效</div>
     </div>
   </div>
 </div>
@@ -637,6 +651,10 @@ const el = {
   exportAllBtn: document.getElementById('exportAllBtn'),
   openSearchBtn: document.getElementById('openSearchBtn'),
   mergeLinelogBtn: document.getElementById('mergeLinelogBtn'),
+  openBlacklistBtn: document.getElementById('openBlacklistBtn'),
+  blacklistOverlay: document.getElementById('blacklistOverlay'),
+  closeBlacklistBtn: document.getElementById('closeBlacklistBtn'),
+  blacklistList: document.getElementById('blacklistList'),
   closeSearchBtn: document.getElementById('closeSearchBtn'),
   searchOverlay: document.getElementById('searchOverlay'),
   searchKeywordInput: document.getElementById('searchKeywordInput'),
@@ -2040,6 +2058,61 @@ armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
     el.loadingOverlay.textContent = '處理中...';
     setLoading(false);
   }
+});
+
+// LINE 黑名單（B 前綴任務加入的名單，存在禱告卡的指令碼屬性 LINELOG_BLACKLIST）：查詢、按「解除」移出名單
+function renderBlacklist(names) {
+  el.blacklistList.innerHTML = '';
+  if (!names || names.length === 0) {
+    el.blacklistList.innerHTML = '<div class="trash-empty-msg">黑名單是空的</div>';
+    return;
+  }
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+    const main = document.createElement('div');
+    main.className = 'trash-item-main';
+    const text = document.createElement('div');
+    text.className = 'trash-item-text';
+    text.textContent = name;
+    main.appendChild(text);
+    const actions = document.createElement('div');
+    actions.className = 'trash-item-actions';
+    const btn = document.createElement('button');
+    btn.className = 'trash-restore-btn';
+    btn.textContent = '解除';
+    armConfirmButton(btn, '確認解除', async () => {
+      btn.disabled = true;
+      try {
+        const data = await apiCall(MULTI_API_URL, { action: 'removeLinelogBlacklist', name: name }, 30000);
+        renderBlacklist(data.names);
+        showStatus('已解除：' + name + '，之後他的 LINE 訊息會再進 Google Tasks');
+      } catch (err) {
+        btn.disabled = false;
+        showStatus('解除失敗：' + err.message, true);
+      }
+    });
+    actions.appendChild(btn);
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.blacklistList.appendChild(row);
+  });
+}
+
+async function openBlacklistPanel() {
+  el.blacklistOverlay.classList.add('show');
+  el.blacklistList.innerHTML = '<div class="trash-empty-msg">載入中...</div>';
+  try {
+    const data = await apiCall(MULTI_API_URL, { action: 'getLinelogBlacklist' });
+    renderBlacklist(data.names);
+  } catch (err) {
+    el.blacklistList.innerHTML = '<div class="trash-empty-msg">載入失敗：' + err.message + '</div>';
+  }
+}
+el.openBlacklistBtn.addEventListener('click', openBlacklistPanel);
+el.closeBlacklistBtn.addEventListener('click', () => el.blacklistOverlay.classList.remove('show'));
+el.blacklistOverlay.addEventListener('click', (e) => {
+  if (e.target === el.blacklistOverlay) el.blacklistOverlay.classList.remove('show');
 });
 
 loadAll();

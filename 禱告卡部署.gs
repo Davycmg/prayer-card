@@ -1081,6 +1081,12 @@ function doGet(e) {
       case 'mergeLinelogTasks':
         result = mergeLinelogTasks();
         break;
+      case 'getLinelogBlacklist':
+        result = getLinelogBlacklist();
+        break;
+      case 'removeLinelogBlacklist':
+        result = removeLinelogBlacklist(e.parameter.name);
+        break;
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
