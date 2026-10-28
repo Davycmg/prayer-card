@@ -17,6 +17,8 @@
  * 會把「B」到第一個冒號之間的好友／群組名稱加入黑名單（指令碼屬性 LINELOG_BLACKLIST），
  * 這個 B 任務和該對象現有的未完成任務都標記完成；之後黑名單對象的訊息直接丟掉、不建任務。
  * 群組名稱可寫成「B[群組]：」或「B群組：」；寫人名的話，群組裡這個人的訊息也會被擋。
+ * 打完 B 自己馬上把任務勾完成也可以（會抓上次檢查後才完成的任務）。
+ * 解除：任務標題打「UB名字：」（同樣可以直接勾完成），下一則 LINE 通知進來時把名字移出黑名單。
  *
  * 安全：禱告卡的部署網址公開寫在 GitHub Pages 頁面裡，所以 POST 必須帶 ?key=金鑰 才會處理。
  * 第一次使用：在編輯器執行 setupLinelogKey()，執行記錄會印出完整網址，貼進 App 即可。
@@ -27,6 +29,8 @@ var LINELOG_MAX_NOTES = 7500;
 var LINELOG_KEY_PROP = 'LINELOG_KEY';
 var LINELOG_BLACKLIST_PROP = 'LINELOG_BLACKLIST';
 var LINELOG_BLOCK_PREFIX = 'B';
+var LINELOG_UNBLOCK_PREFIX = 'UB';
+var LINELOG_RULES_SINCE_PROP = 'LINELOG_RULES_SINCE';
 
 function doPost(e) {
   var expectedKey = PropertiesService.getScriptProperties().getProperty(LINELOG_KEY_PROP);
@@ -165,28 +169,64 @@ function linelogLoadBlacklist_() {
   }
 }
 
-// 「B名字：…」任務：名字加進黑名單，B 任務和該對象的未完成 LINE 任務都標記完成。回傳最新黑名單。
+// 解析黑名單規則任務：「B名字：…」→ { block: true }，「UB名字：…」→ { block: false }；不是規則回傳 null
+function linelogParseRule_(rawTitle) {
+  var title = linelogClean_(String(rawTitle || '').normalize('NFKC'));
+  var head = title.substring(0, 2).toUpperCase();
+  var plen = head === LINELOG_UNBLOCK_PREFIX ? 2 : (head.charAt(0) === LINELOG_BLOCK_PREFIX ? 1 : 0);
+  if (!plen) return null;
+  var i = title.indexOf(':');                            // NFKC 已把全形冒號轉成半形
+  if (i < plen) return null;
+  var name = linelogBlockName_(title.substring(plen, i));
+  return name ? { name: name, block: plen === 1 } : null;
+}
+
+// 最近被勾選完成的任務（打上 B／UB 後自己馬上勾完成的也要處理），從上次檢查的時間點開始抓
+function linelogListRecentCompleted_() {
+  var props = PropertiesService.getScriptProperties();
+  var since = props.getProperty(LINELOG_RULES_SINCE_PROP) || new Date(Date.now() - 3600000).toISOString();
+  var now = new Date().toISOString();
+  var out = [];
+  var token;
+  do {
+    var opts = { showCompleted: true, showHidden: true, updatedMin: since, maxResults: 100 };
+    if (token) opts.pageToken = token;
+    var res = Tasks.Tasks.list('@default', opts);
+    (res.items || []).forEach(function (t) { if (t.status === 'completed') out.push(t); });
+    token = res.nextPageToken;
+  } while (token);
+  props.setProperty(LINELOG_RULES_SINCE_PROP, now);
+  return out;
+}
+
+// 「B名字：…」任務：名字加進黑名單，該對象的未完成 LINE 任務標記完成；「UB名字：…」：名字移出黑名單。
+// 規則任務（未完成的）處理完標記完成；自己已經勾完成的也照樣生效。回傳最新黑名單。
 function linelogApplyBlockRules_(all) {
   var blacklist = linelogLoadBlacklist_();
-  var added = [];
-  all.forEach(function (t) {
-    var title = linelogClean_(String(t.title || '').normalize('NFKC'));
-    if (title.charAt(0).toUpperCase() !== LINELOG_BLOCK_PREFIX) return;
-    var i = title.indexOf(':');                          // NFKC 已把全形冒號轉成半形
-    if (i < 0) return;
-    var name = linelogBlockName_(title.substring(1, i));
-    if (!name) return;
-    if (blacklist.indexOf(name) < 0) { blacklist.push(name); added.push(name); }
-    t.__blockRule = true;
+  var before = JSON.stringify(blacklist);
+  var rules = [];
+  var seen = {};
+  all.concat(linelogListRecentCompleted_()).forEach(function (t) {
+    var rule = linelogParseRule_(t.title);
+    if (!rule || seen[t.id]) return;
+    seen[t.id] = true;
+    rules.push({ t: t, rule: rule });
   });
-  if (!added.length && !all.some(function (t) { return t.__blockRule; })) return blacklist;
-  if (added.length) {
+  if (!rules.length) return blacklist;
+  rules.sort(function (x, y) { return String(x.t.updated).localeCompare(String(y.t.updated)); });  // 依時間先後套用
+  rules.forEach(function (x) {
+    var k = blacklist.indexOf(x.rule.name);
+    if (x.rule.block && k < 0) blacklist.push(x.rule.name);
+    if (!x.rule.block && k >= 0) blacklist.splice(k, 1);
+    if (x.t.status !== 'completed') x.t.__rule = true;
+  });
+  if (JSON.stringify(blacklist) !== before) {
     PropertiesService.getScriptProperties().setProperty(LINELOG_BLACKLIST_PROP, JSON.stringify(blacklist));
-    console.log('加入 LINE 黑名單：' + added.join('、'));
+    console.log('LINE 黑名單更新為：' + (blacklist.join('、') || '（空）'));
   }
   all.forEach(function (t) {
     var key = linelogKeyOf_(t.title);
-    var hit = t.__blockRule || (key && blacklist.indexOf(linelogBlockName_(linelogGroupKey_(key))) >= 0);
+    var hit = t.__rule || (key && blacklist.indexOf(linelogBlockName_(linelogGroupKey_(key))) >= 0);
     if (!hit) return;
     try {
       linelogRetry_(function () {
