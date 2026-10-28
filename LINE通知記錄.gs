@@ -13,6 +13,11 @@
  * all.html「合併 LINE 通知待辦」按鈕 → doGet action mergeLinelogTasks → linelogMergeExisting()：
  * 把同一個好友／群組的多個未完成任務合併成一個。
  *
+ * 黑名單：把任務標題改成「B名字：…」（例如把「1 某某：訊息」的「1 」改成「B」），下一則 LINE 通知進來時
+ * 會把「B」到第一個冒號之間的好友／群組名稱加入黑名單（指令碼屬性 LINELOG_BLACKLIST），
+ * 這個 B 任務和該對象現有的未完成任務都標記完成；之後黑名單對象的訊息直接丟掉、不建任務。
+ * 群組名稱可寫成「B[群組]：」或「B群組：」；寫人名的話，群組裡這個人的訊息也會被擋。
+ *
  * 安全：禱告卡的部署網址公開寫在 GitHub Pages 頁面裡，所以 POST 必須帶 ?key=金鑰 才會處理。
  * 第一次使用：在編輯器執行 setupLinelogKey()，執行記錄會印出完整網址，貼進 App 即可。
  */
@@ -20,6 +25,8 @@ var LINELOG_PREFIX = '1 ';
 var LINELOG_SEP = '：';
 var LINELOG_MAX_NOTES = 7500;
 var LINELOG_KEY_PROP = 'LINELOG_KEY';
+var LINELOG_BLACKLIST_PROP = 'LINELOG_BLACKLIST';
+var LINELOG_BLOCK_PREFIX = 'B';
 
 function doPost(e) {
   var expectedKey = PropertiesService.getScriptProperties().getProperty(LINELOG_KEY_PROP);
@@ -31,10 +38,12 @@ function doPost(e) {
   try {
     lock.waitLock(25000);
     var rows = JSON.parse(e.postData.contents).rows || [];
-    var open = linelogLoadOpenTasks_();
+    var all = linelogListOpen_();
+    var blacklist = linelogApplyBlockRules_(all);
+    var open = linelogLoadOpenTasks_(all);
     rows.forEach(function (r) {
-      linelogAddMessage_(open, r);
-      done++;
+      if (!linelogIsBlocked_(blacklist, r)) linelogAddMessage_(open, r);
+      done++;                                            // 被擋的也算處理完，App 才不會重送
     });
     return linelogOut_({ ok: true, count: done });
   } catch (err) {
@@ -130,9 +139,9 @@ function linelogListOpen_() {
 }
 
 // key -> 最新（清單最上面）的未完成任務
-function linelogLoadOpenTasks_() {
+function linelogLoadOpenTasks_(all) {
   var map = {};
-  linelogListOpen_().forEach(function (t) {
+  all.forEach(function (t) {
     var key = linelogKeyOf_(t.title);
     if (!key) return;
     t.__key = key;                                       // 原始 key（舊格式含人名）
@@ -140,6 +149,66 @@ function linelogLoadOpenTasks_() {
     if (!map[gk]) map[gk] = t;
   });
   return map;
+}
+
+// 比對黑名單用：全形半形視為相同、不分大小寫、去掉群組的 []，全形冒號換成半形（同 linelogNormalize_）
+function linelogBlockName_(s) {
+  return linelogClean_(String(s || '').normalize('NFKC')).replace(/^\[(.*)\]$/, '$1')
+    .replace(/：/g, ':').trim().toLowerCase();
+}
+
+function linelogLoadBlacklist_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty(LINELOG_BLACKLIST_PROP) || '[]');
+  } catch (err) {
+    return [];
+  }
+}
+
+// 「B名字：…」任務：名字加進黑名單，B 任務和該對象的未完成 LINE 任務都標記完成。回傳最新黑名單。
+function linelogApplyBlockRules_(all) {
+  var blacklist = linelogLoadBlacklist_();
+  var added = [];
+  all.forEach(function (t) {
+    var title = linelogClean_(String(t.title || '').normalize('NFKC'));
+    if (title.charAt(0).toUpperCase() !== LINELOG_BLOCK_PREFIX) return;
+    var i = title.indexOf(':');                          // NFKC 已把全形冒號轉成半形
+    if (i < 0) return;
+    var name = linelogBlockName_(title.substring(1, i));
+    if (!name) return;
+    if (blacklist.indexOf(name) < 0) { blacklist.push(name); added.push(name); }
+    t.__blockRule = true;
+  });
+  if (!added.length && !all.some(function (t) { return t.__blockRule; })) return blacklist;
+  if (added.length) {
+    PropertiesService.getScriptProperties().setProperty(LINELOG_BLACKLIST_PROP, JSON.stringify(blacklist));
+    console.log('加入 LINE 黑名單：' + added.join('、'));
+  }
+  all.forEach(function (t) {
+    var key = linelogKeyOf_(t.title);
+    var hit = t.__blockRule || (key && blacklist.indexOf(linelogBlockName_(linelogGroupKey_(key))) >= 0);
+    if (!hit) return;
+    try {
+      linelogRetry_(function () {
+        return Tasks.Tasks.patch({ status: 'completed' }, '@default', t.id);
+      }, [1000, 3000]);
+    } catch (err) {
+      if (!linelogIsNoPermission_(err)) throw err;       // 舊專案建立的任務改不動，留著手動完成
+    }
+    t.__done = true;
+  });
+  for (var j = all.length - 1; j >= 0; j--) if (all[j].__done) all.splice(j, 1);
+  return blacklist;
+}
+
+// 好友名稱、群組名稱、群組裡的寄件者，任一個在黑名單上就擋
+function linelogIsBlocked_(blacklist, r) {
+  if (!blacklist.length) return false;
+  var n = linelogNormalize_(r);
+  return [n.who, n.sender].some(function (s) {
+    var name = linelogBlockName_(s);
+    return name && blacklist.indexOf(name) >= 0;
+  });
 }
 
 // 記住「群組／好友 → 任務 ID」。短時間連續進來的訊息，Tasks 清單可能還沒反映剛建立的任務，
