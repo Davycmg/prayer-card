@@ -18,7 +18,8 @@
  * 這個 B 任務和該對象現有的未完成任務都標記完成；之後黑名單對象的訊息直接丟掉、不建任務。
  * 群組名稱可寫成「B[群組]：」或「B群組：」；寫人名的話，群組裡這個人的訊息也會被擋。
  * 打完 B 自己馬上把任務勾完成也可以（會抓上次檢查後才完成的任務）。
- * 解除：任務標題打「UB名字：」（同樣可以直接勾完成），下一則 LINE 通知進來時把名字移出黑名單。
+ * 解除：任務標題打「UB名字：」（同樣可以直接勾完成），下一則 LINE 通知進來時把名字移出黑名單；
+ * 或在 all.html「🚫 LINE 黑名單」面板查詢、按「解除」（立即生效）。
  *
  * 安全：禱告卡的部署網址公開寫在 GitHub Pages 頁面裡，所以 POST 必須帶 ?key=金鑰 才會處理。
  * 第一次使用：在編輯器執行 setupLinelogKey()，執行記錄會印出完整網址，貼進 App 即可。
@@ -239,6 +240,29 @@ function linelogApplyBlockRules_(all) {
   });
   for (var j = all.length - 1; j >= 0; j--) if (all[j].__done) all.splice(j, 1);
   return blacklist;
+}
+
+// all.html「LINE 黑名單」面板（doGet action getLinelogBlacklist／removeLinelogBlacklist）
+function getLinelogBlacklist() {
+  return { ok: true, names: linelogLoadBlacklist_() };
+}
+
+// 跟 doPost 共用鎖，避免剛好有新訊息進來同時改黑名單
+function removeLinelogBlacklist(name) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    var blacklist = linelogLoadBlacklist_();
+    var k = blacklist.indexOf(linelogBlockName_(name));
+    if (k >= 0) {
+      blacklist.splice(k, 1);
+      PropertiesService.getScriptProperties().setProperty(LINELOG_BLACKLIST_PROP, JSON.stringify(blacklist));
+      console.log('LINE 黑名單更新為：' + (blacklist.join('、') || '（空）'));
+    }
+    return { ok: true, removed: k >= 0, names: blacklist };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // 好友名稱、群組名稱、群組裡的寄件者，任一個在黑名單上就擋
