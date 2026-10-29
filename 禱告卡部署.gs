@@ -113,6 +113,7 @@ function advancePrayerDate_(sheet, row) {
 
   dateCell.setValue(newDate);
   dateCell.setNumberFormat('yyyy/MM/dd');
+  return { oldDate: baseDate, newDate: newDate };
 }
 
 /**
@@ -121,9 +122,10 @@ function advancePrayerDate_(sheet, row) {
  */
 function markDone_(sheet, row) {
   sheet.getRange(row, COL.DONE).setValue('Y');
-  advancePrayerDate_(sheet, row);
+  const dates = advancePrayerDate_(sheet, row);
   sheet.getRange(row, COL.DONE).setValue('');
   recordPrayerCompleted_();
+  return dates;
 }
 
 // 今日完成計數器：存在 PropertiesService（跟試算表綁定），日期不是今天就視同歸零重算
@@ -1962,9 +1964,25 @@ function resolveRowByText_(sheet, row, expect) {
  */
 function completeByRow(row, expect) {
   if (!row || row < 2) return { success: false };
-  row = resolveRowByText_(getSheet_(), row, expect);
-  markDone_(getSheet_(), row);
-  return { success: true, row: row };
+  const sheet = getSheet_();
+  row = resolveRowByText_(sheet, row, expect);
+  const dates = markDone_(sheet, row);
+
+  // 寫完立刻讀回來確認（2026-10-29：all.html 操作歷程顯示「完成 成功」，重新整理後項目卻還在、
+  // E 欄日期沒變）。讀回來的日期不在今天之後就當失敗回報，不要再回「成功」騙前端。
+  SpreadsheetApp.flush();
+  const fmt = function (d) {
+    return d instanceof Date && !isNaN(d.getTime()) ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy/MM/dd') : String(d);
+  };
+  const saved = sheet.getRange(row, COL.DATE).getValue();
+  const text = String(sheet.getRange(row, COL.TEXT).getValue() || '');
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  console.log('completeByRow 第 ' + row + ' 列「' + text.slice(0, 30) + '」：' + fmt(dates.oldDate) + ' → ' + fmt(dates.newDate) + '，讀回 ' + fmt(saved));
+  if (!(saved instanceof Date) || saved.getTime() <= today.getTime()) {
+    throw new Error('寫入後讀回第 ' + row + ' 列日期仍是 ' + fmt(saved) + '（應為 ' + fmt(dates.newDate) + '），完成沒有生效');
+  }
+  return { success: true, row: row, oldDate: fmt(dates.oldDate), newDate: fmt(saved) };
 }
 
 /**
