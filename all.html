@@ -748,7 +748,7 @@ async function apiCallWithRetry(baseUrl, params) {
     : (opLogUpdate(logId, { state: 'sent' }), apiCallRetrying(baseUrl, params));
   if (logId) {
     promise.then(
-      () => opLogUpdate(logId, { state: 'ok' }),
+      (data) => opLogUpdate(logId, { state: 'ok', result: data && data.newDate ? { row: data.row, newDate: data.newDate } : undefined }),
       // 頁面正在關閉時瀏覽器會中斷連線，那不代表伺服器沒做，維持原狀態，下次載入顯示「沒送出／沒等到回應」
       (err) => { if (!pageUnloading) opLogUpdate(logId, { state: 'fail', err: err && err.message }); }
     );
@@ -851,6 +851,28 @@ function updateOpLogButton() {
     : '📜 操作歷程（完成／刪除／編輯是否真的送出）';
 }
 
+// 「完成」回報成功的項目，下一次重新載入時應該就不在今天的到期清單了（完成會把日期推到明天以後）。
+// 還在的話標記起來，代表伺服器說成功但其實沒生效，這種情況以前完全看不出來。
+const OPLOG_COMPLETE_ACTIONS = new Set(['completeByRow', 'completeTaskItem']);
+let loadStartedAt = 0;
+function opLogVerifyLoaded(source, items) {
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const norm = t => String(t || '').replace(/\s+/g, ' ').trim();
+  const dueTexts = new Set(items.map(it => norm(it.text)));
+  const dueIds = new Set(items.map(it => it.id));
+  let flagged = 0;
+  opLog.forEach(e => {
+    if (e.source !== source || e.state !== 'ok' || e.stillDue || !OPLOG_COMPLETE_ACTIONS.has(e.action)) return;
+    if (!e.doneAt || e.doneAt < todayStart.getTime() || e.doneAt >= loadStartedAt) return;
+    const stillThere = e.params && e.params.taskId ? dueIds.has(e.params.taskId) : (e.text && dueTexts.has(norm(e.text)));
+    if (stillThere) { e.stillDue = Date.now(); flagged++; }
+  });
+  if (flagged) {
+    saveOpLog();
+    showStatus('有 ' + flagged + ' 筆「完成」伺服器回報成功，但重新載入後還在清單，詳見「📜 操作歷程」', true);
+  }
+}
+
 function opLogPendingCount() {
   return opLog.filter(e => e.state === 'queued' || e.state === 'sent').length;
 }
@@ -889,7 +911,7 @@ function opLogCanResend(entry) {
 
 function renderOpLog() {
   const pending = opLogPendingCount();
-  const failed = opLog.filter(e => e.state === 'fail' || e.state === 'lost' || e.state === 'unknown').length;
+  const failed = opLog.filter(e => e.state === 'fail' || e.state === 'lost' || e.state === 'unknown' || (e.state === 'ok' && e.stillDue)).length;
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const todayOk = opLog.filter(e => e.state === 'ok' && e.t >= todayStart.getTime()).length;
   el.opLogSummary.textContent = '今天成功 ' + todayOk + ' 筆 · 進行中 ' + pending + ' 筆 · 失敗／沒送出 ' + failed + ' 筆'
@@ -912,13 +934,17 @@ function renderOpLog() {
     const meta = document.createElement('div');
     meta.className = 'trash-item-meta';
     meta.textContent = formatOpLogTime(entry.t) + ' · ' + (OPLOG_SOURCE_LABELS[entry.source] || entry.source)
+      + (entry.result ? ' · 下次 ' + entry.result.newDate + '（第 ' + entry.result.row + ' 列）' : '')
+      + (entry.stillDue ? ' · 重新載入後仍在到期清單（' + formatOpLogTime(entry.stillDue) + ' 發現）' : '')
       + (entry.err ? ' · ' + entry.err : '');
     main.appendChild(text);
     main.appendChild(meta);
 
     const actions = document.createElement('div');
     actions.className = 'trash-item-actions';
-    const stateInfo = OPLOG_STATE_TEXT[entry.state] || [entry.state, ''];
+    const stateInfo = entry.state === 'ok' && entry.stillDue
+      ? ['⚠️ 回報成功但沒生效', 'oplog-fail']
+      : (OPLOG_STATE_TEXT[entry.state] || [entry.state, '']);
     const state = document.createElement('span');
     state.className = 'oplog-item-state ' + stateInfo[1];
     state.textContent = stateInfo[0];
@@ -1082,6 +1108,7 @@ function loadSource(generation, source, label, promise, normalize) {
         allItems.push(item);
       });
       if (source === 'multi' && data.custom) customTagsCache = data.custom;
+      opLogVerifyLoaded(source, data.items || []);
       applyFilter();
     })
     .catch(err => {
@@ -1095,6 +1122,7 @@ function loadSource(generation, source, label, promise, normalize) {
 
 function loadAll() {
   loadGeneration++;
+  loadStartedAt = Date.now();
   const generation = loadGeneration;
   allItems = [];
   lastFailedSources = [];
