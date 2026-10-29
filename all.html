@@ -241,6 +241,11 @@
   .search-item-text { font-size: 14px; color: var(--text-main); white-space: pre-wrap; word-break: break-word; }
   .search-item-meta { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
   .search-merge-btn { width: 100%; padding: 12px; border-radius: 10px; border: none; background: var(--main-primary); color: white; font-size: 15px; }
+  .oplog-item-state { font-size: 12px; white-space: nowrap; }
+  .oplog-ok { color: var(--main-primary); }
+  .oplog-pending { color: var(--text-sub); }
+  .oplog-fail { color: var(--text-danger); font-weight: bold; }
+  .oplog-summary { font-size: 13px; color: var(--text-sub); padding: 8px 20px 0; }
   .trash-empty-btn { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--text-danger); background: white; color: var(--text-danger); font-size: 14px; cursor: pointer; }
   .toggle-row {
     width: 100%; max-width: 480px; display: flex; align-items: center;
@@ -384,6 +389,8 @@
 <button class="copy-tasks-btn" id="mergeLinelogBtn">🔗 合併 LINE 通知待辦（同一人／群組合成一個）</button>
 <button class="copy-tasks-btn" id="openBlacklistBtn">🚫 LINE 黑名單（查詢／解除）</button>
 
+<button class="copy-tasks-btn" id="openOpLogBtn">📜 操作歷程（完成／刪除／編輯是否真的送出）</button>
+
 <div class="danger-zone">
   <button id="openTrashBtn">🗑 查看垃圾桶（多方禱告）</button>
 </div>
@@ -431,6 +438,20 @@
     <div class="trash-list" id="blacklistList"></div>
     <div class="trash-panel-footer">
       <div class="trash-item-meta">加入：Google Tasks 任務標題打「B名字：」（可直接勾完成），下一則 LINE 通知進來時生效</div>
+    </div>
+  </div>
+</div>
+
+<div class="trash-overlay" id="opLogOverlay">
+  <div class="trash-panel">
+    <div class="trash-panel-header">
+      <h2>操作歷程</h2>
+      <button id="closeOpLogBtn" class="trash-close-btn">✕</button>
+    </div>
+    <div class="oplog-summary" id="opLogSummary"></div>
+    <div class="trash-list" id="opLogList"></div>
+    <div class="trash-panel-footer">
+      <button id="clearOpLogBtn" class="trash-empty-btn">清除歷程記錄</button>
     </div>
   </div>
 </div>
@@ -654,6 +675,12 @@ const el = {
   openBlacklistBtn: document.getElementById('openBlacklistBtn'),
   blacklistOverlay: document.getElementById('blacklistOverlay'),
   closeBlacklistBtn: document.getElementById('closeBlacklistBtn'),
+  openOpLogBtn: document.getElementById('openOpLogBtn'),
+  opLogOverlay: document.getElementById('opLogOverlay'),
+  closeOpLogBtn: document.getElementById('closeOpLogBtn'),
+  opLogSummary: document.getElementById('opLogSummary'),
+  opLogList: document.getElementById('opLogList'),
+  clearOpLogBtn: document.getElementById('clearOpLogBtn'),
   blacklistList: document.getElementById('blacklistList'),
   closeSearchBtn: document.getElementById('closeSearchBtn'),
   searchOverlay: document.getElementById('searchOverlay'),
@@ -715,9 +742,234 @@ async function apiCall(baseUrl, params, timeoutMs) {
 // 打不到就再試幾次（Apps Script 偶爾會出現暫時性錯誤或整個掛住，尤其是 dg-network 那個獨立部署），
 // 每次重試間隔拉長一點（1.2秒／2.5秒），總共試 3 次都失敗才真的算這個來源載入失敗。
 async function apiCallWithRetry(baseUrl, params) {
-  if (isRowMutation(baseUrl, params)) return rowMutation(baseUrl, params);
-  return apiCallRetrying(baseUrl, params);
+  const logId = isWriteAction(params.action) ? opLogAdd(baseUrl, params) : null;
+  const promise = isRowMutation(baseUrl, params)
+    ? rowMutation(baseUrl, params, logId)
+    : (opLogUpdate(logId, { state: 'sent' }), apiCallRetrying(baseUrl, params));
+  if (logId) {
+    promise.then(
+      () => opLogUpdate(logId, { state: 'ok' }),
+      // 頁面正在關閉時瀏覽器會中斷連線，那不代表伺服器沒做，維持原狀態，下次載入顯示「沒送出／沒等到回應」
+      (err) => { if (!pageUnloading) opLogUpdate(logId, { state: 'fail', err: err && err.message }); }
+    );
+  }
+  return promise;
 }
+
+// ===== 操作歷程：每個寫入動作（完成／刪除／編輯…）都記在 localStorage，看得到有沒有真的送到伺服器 =====
+// 列號類的動作是排隊一個一個送的（見下方 rowMutation），每個要等 Apps Script 回應好幾秒；
+// 連續處理幾十項時，排隊中的請求還沒送出就重新整理／關掉頁面，那些就不會生效，
+// 重新整理後數字自然不會減少。這裡把每筆的狀態記下來：排隊中→已送出→成功／失敗，
+// 頁面被關掉時還在「排隊中」的就是確定沒送出的，可以在歷程面板按「重送」。
+const OPLOG_STORAGE_KEY = 'allHtml_opLog';
+const OPLOG_MAX = 500;
+const OPLOG_ACTION_LABELS = {
+  completeByRow: '完成', completeTaskItem: '完成', deleteByRow: '刪除', deleteCalendarEvent: '刪除',
+  updateTextByRow: '改文字', updateTaskTitle: '改文字', updateCalendarEventTitle: '改文字',
+  updateCycleByRow: '改週期', updateCalendarEventCycle: '改週期', updateTagByRow: '改標籤',
+  updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks',
+  setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
+  exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1'
+};
+const OPLOG_SOURCE_LABELS = { habit: '習慣', network: '網絡', multi: '多方', task: '待辦' };
+
+function isWriteAction(action) {
+  return Object.prototype.hasOwnProperty.call(OPLOG_ACTION_LABELS, action);
+}
+
+let opLogNewlyLost = 0; // 這次載入才發現的（上次關頁面時還沒結果的），只提醒這些，不會每次重新整理都跳
+function loadOpLog() {
+  try {
+    const list = JSON.parse(localStorage.getItem(OPLOG_STORAGE_KEY) || '[]');
+    // 上次頁面關掉時還沒有結果的：排隊中＝確定沒送出，已送出＝伺服器可能有做也可能沒做
+    list.forEach(e => {
+      if (e.state === 'queued') { e.state = 'lost'; opLogNewlyLost++; }
+      else if (e.state === 'sent') { e.state = 'unknown'; opLogNewlyLost++; }
+    });
+    return list;
+  } catch (err) {
+    return [];
+  }
+}
+let opLog = loadOpLog();
+function saveOpLog() {
+  if (opLog.length > OPLOG_MAX) opLog = opLog.slice(opLog.length - OPLOG_MAX);
+  try { localStorage.setItem(OPLOG_STORAGE_KEY, JSON.stringify(opLog)); } catch (err) { /* 存不進去就算了 */ }
+}
+saveOpLog();
+
+// 呼叫當下從本地清單找出是哪一項（任務／行程用 id，列號類用 row；要在 rowMutation 校正列號之前找）
+function findItemForParams(baseUrl, params) {
+  return allItems.find(it => {
+    if (params.taskId) return it.source === 'task' && it.id === params.taskId;
+    if (params.eventId) return it.source === 'habit' && it.id === params.eventId;
+    if (params.row !== undefined) {
+      const source = baseUrl === NETWORK_API_URL ? 'network' : 'multi';
+      return it.source === source && String(it.row) === String(params.row);
+    }
+    return false;
+  });
+}
+
+function opLogAdd(baseUrl, params) {
+  const item = findItemForParams(baseUrl, params);
+  const isUpdate = /^update/.test(params.action);
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    t: Date.now(),
+    action: params.action,
+    source: item ? item.source : (params.taskId ? 'task' : params.eventId ? 'habit' : baseUrl === NETWORK_API_URL ? 'network' : 'multi'),
+    text: params.expect || (item && item.text) || params.text || (isUpdate ? '' : params.value) || '',
+    value: isUpdate ? String(params.value || '') : '',
+    state: 'queued',
+    baseUrl: baseUrl,
+    params: Object.assign({}, params)
+  };
+  delete entry.params._t;
+  opLog.push(entry);
+  saveOpLog();
+  updateOpLogButton();
+  return entry.id;
+}
+
+function opLogUpdate(id, patch) {
+  if (!id) return;
+  const entry = opLog.find(e => e.id === id);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  if (patch.state === 'ok' || patch.state === 'fail') entry.doneAt = Date.now();
+  saveOpLog();
+  updateOpLogButton();
+  if (el.opLogOverlay.classList.contains('show')) renderOpLog();
+}
+
+// 按鈕上直接顯示還有幾筆沒送完，提醒等它歸零再重新整理／關頁面
+function updateOpLogButton() {
+  const pending = opLogPendingCount();
+  el.openOpLogBtn.textContent = pending
+    ? '📜 操作歷程（還有 ' + pending + ' 筆同步中，先別關頁面）'
+    : '📜 操作歷程（完成／刪除／編輯是否真的送出）';
+}
+
+function opLogPendingCount() {
+  return opLog.filter(e => e.state === 'queued' || e.state === 'sent').length;
+}
+
+// 還有沒送完的就攔住重新整理／關閉頁面，不然排隊中的動作會整批消失
+let pageUnloading = false;
+window.addEventListener('pagehide', () => { pageUnloading = true; });
+window.addEventListener('beforeunload', (e) => {
+  if (opLogPendingCount() === 0) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+const OPLOG_STATE_TEXT = {
+  queued: ['⏳ 排隊中', 'oplog-pending'],
+  sent: ['⏳ 已送出，等回應', 'oplog-pending'],
+  ok: ['✅ 成功', 'oplog-ok'],
+  fail: ['❌ 失敗', 'oplog-fail'],
+  lost: ['❌ 沒送出（頁面已關閉）', 'oplog-fail'],
+  unknown: ['❓ 已送出但沒等到回應', 'oplog-fail']
+};
+
+function formatOpLogTime(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+
+// 重送只開放給「伺服器能自己找回是哪一項」的請求：多方禱告帶 expect 文字、任務／行程帶 id。
+// 網絡禱告只有列號，頁面重新載入後列號可能已經變了，重送可能改到別列，所以不提供。
+function opLogCanResend(entry) {
+  if (entry.state !== 'lost' && entry.state !== 'fail') return false;
+  const p = entry.params || {};
+  return !!(p.expect || p.taskId || p.eventId);
+}
+
+function renderOpLog() {
+  const pending = opLogPendingCount();
+  const failed = opLog.filter(e => e.state === 'fail' || e.state === 'lost' || e.state === 'unknown').length;
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todayOk = opLog.filter(e => e.state === 'ok' && e.t >= todayStart.getTime()).length;
+  el.opLogSummary.textContent = '今天成功 ' + todayOk + ' 筆 · 進行中 ' + pending + ' 筆 · 失敗／沒送出 ' + failed + ' 筆'
+    + '（只記錄這台裝置、這個瀏覽器的操作）';
+
+  el.opLogList.innerHTML = '';
+  if (opLog.length === 0) {
+    el.opLogList.innerHTML = '<div class="trash-empty-msg">還沒有任何操作記錄</div>';
+    return;
+  }
+  opLog.slice().reverse().forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'trash-item';
+    const main = document.createElement('div');
+    main.className = 'trash-item-main';
+    const text = document.createElement('div');
+    text.className = 'trash-item-text';
+    text.textContent = (OPLOG_ACTION_LABELS[entry.action] || entry.action) + '｜' + (entry.text || '(無文字)')
+      + (entry.value ? ' → ' + entry.value : '');
+    const meta = document.createElement('div');
+    meta.className = 'trash-item-meta';
+    meta.textContent = formatOpLogTime(entry.t) + ' · ' + (OPLOG_SOURCE_LABELS[entry.source] || entry.source)
+      + (entry.err ? ' · ' + entry.err : '');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'trash-item-actions';
+    const stateInfo = OPLOG_STATE_TEXT[entry.state] || [entry.state, ''];
+    const state = document.createElement('span');
+    state.className = 'oplog-item-state ' + stateInfo[1];
+    state.textContent = stateInfo[0];
+    actions.appendChild(state);
+    if (opLogCanResend(entry)) {
+      const btn = document.createElement('button');
+      btn.className = 'trash-restore-btn';
+      btn.textContent = '重送';
+      btn.addEventListener('click', () => resendOpLogEntry(entry, btn));
+      actions.appendChild(btn);
+    }
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.opLogList.appendChild(row);
+  });
+}
+
+function resendOpLogEntry(entry, btn) {
+  btn.disabled = true;
+  entry.state = 'resent'; // 原本這筆不再顯示重送鈕，結果記在新的一筆
+  saveOpLog();
+  apiCallWithRetry(entry.baseUrl, Object.assign({}, entry.params))
+    .then(() => {
+      showStatus('重送成功：' + (entry.text || ''));
+      loadAll(); // 重新抓清單，剛重送完成／刪除的項目才會從畫面消失
+    })
+    .catch(err => showStatus('重送失敗：' + err.message, true))
+    .finally(renderOpLog);
+}
+OPLOG_STATE_TEXT.resent = ['↻ 已重送（見上方新記錄）', 'oplog-pending'];
+
+// 上次關頁面時有沒送出／沒等到回應的，載入時提醒一次（常駐紅字，點歷程可以重送）
+(function warnLostOps() {
+  const lost = opLogNewlyLost;
+  if (lost) showStatus('上次有 ' + lost + ' 筆操作沒有確認送出（頁面在同步完成前被關掉），請到「📜 操作歷程」查看／重送', true);
+})();
+
+el.openOpLogBtn.addEventListener('click', () => {
+  renderOpLog();
+  el.opLogOverlay.classList.add('show');
+});
+el.closeOpLogBtn.addEventListener('click', () => el.opLogOverlay.classList.remove('show'));
+el.opLogOverlay.addEventListener('click', (e) => {
+  if (e.target === el.opLogOverlay) el.opLogOverlay.classList.remove('show');
+});
+armConfirmButton(el.clearOpLogBtn, '再按一次確認清除', () => {
+  // 進行中的保留，不然它們的結果回來時找不到記錄
+  opLog = opLog.filter(e => e.state === 'queued' || e.state === 'sent');
+  saveOpLog();
+  renderOpLog();
+});
 
 // ===== 以「列號」操作試算表的請求（完成／刪除／改文字…）一律排隊，照點擊順序一個一個送 =====
 // 為什麼要排隊：刪除一列後，後面所有列號都會往前移一位。以前每次點擊都立刻平行送出，
@@ -739,7 +991,7 @@ function isRowMutation(baseUrl, params) {
     && (baseUrl === MULTI_API_URL || baseUrl === NETWORK_API_URL);
 }
 
-function rowMutation(baseUrl, params) {
+function rowMutation(baseUrl, params, logId) {
   const source = baseUrl === NETWORK_API_URL ? 'network' : 'multi';
   const row = params.row;
   const isDelete = params.action === 'deleteByRow';
@@ -749,6 +1001,8 @@ function rowMutation(baseUrl, params) {
   const prev = mutationQueues[baseUrl] || Promise.resolve();
   const run = prev.then(async () => {
     if (epoch !== mutationEpoch) throw new Error('前面有一筆刪除失敗，為避免對錯列，這個動作已取消，請等清單重新載入後再操作一次');
+    if (pageUnloading) throw new Error('頁面已關閉，沒有送出');
+    opLogUpdate(logId, { state: 'sent' });
     // 不重試的請求只有一次機會，逾時要放寬（Apps Script 偶爾會慢到十幾秒才回，12 秒就放棄會誤判成失敗）
     const data = NO_RETRY_ACTIONS.has(params.action)
       ? await apiCall(baseUrl, Object.assign({}, params), 45000)
