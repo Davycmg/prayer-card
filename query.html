@@ -988,7 +988,7 @@ async function loadTagList() {
   }
 }
 
-// 標籤查詢下拉選單：內建標籤 + 自訂標籤 + 星期標籤，全部放在同一個選單裡方便查詢
+// 標籤查詢下拉選單：內建標籤 + 自訂標籤 + 引號標籤（週一～週日不列）
 function populateTagQuerySelect() {
   el.tagQuerySelect.innerHTML = '<option value="">選擇標籤</option>';
 
@@ -999,13 +999,7 @@ function populateTagQuerySelect() {
     el.tagQuerySelect.appendChild(opt);
   });
 
-  Object.values(WEEKDAY_MAP).forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v;
-    opt.textContent = v;
-    el.tagQuerySelect.appendChild(opt);
-  });
-
+  // 週一～週日只出現在星期標籤選單，查詢選單不列
   customTagsCache
     .filter(v => !WEEKDAY_MAP[v])
     .forEach(v => {

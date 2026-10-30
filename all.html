@@ -1336,7 +1336,8 @@ function populateSelect(selectEl, values, placeholder, currentValue) {
 
 function populateTagSelect(currentTag) {
   el.tagSelect.innerHTML = '<option value="">選擇標籤</option>';
-  const values = Object.values(TAG_MAP).concat(customTagsCache || []);
+  // 週一～週日只出現在星期標籤選單
+  const values = Object.values(TAG_MAP).concat((customTagsCache || []).filter(v => !WEEKDAY_MAP[v]));
   values.forEach(v => {
     const opt = document.createElement('option');
     opt.value = v;
