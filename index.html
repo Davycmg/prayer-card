@@ -1563,6 +1563,8 @@ el.weekdaySelect.addEventListener('change', () => {
 // ===== 朗讀（連禱）功能：翻頁改成純本地操作，只有標記完成在背景打API，速度不受網路影響 =====
 let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
 let autoPrayActive = false;
+// 連續朗讀中按了完成／翻頁等其他按鈕：不結束朗讀，只打斷目前這張，接著唸畫面上現在的卡片
+let autoPrayInterrupted = false;
 let pureReadMode = true; // 純朗讀模式：預設開啟，開啟時連禱不會標記完成、不寫入F欄、不從清單移除
 let zhVoice = null;
 
@@ -1641,8 +1643,14 @@ async function runAutoPray() {
         if (!autoPrayActive) return;
         el.speakBtn.textContent = `⏹ 停止連禱（${i + 1}/${repeatCount}）`;
         await speakOnePass(el.prayerText.value, i + 1);
+        if (autoPrayInterrupted) break;
       }
       if (!autoPrayActive) return;
+      if (autoPrayInterrupted) {
+        autoPrayInterrupted = false;
+        await new Promise(r => setTimeout(r, 300)); // 剛 cancel() 馬上 speak() 有些瀏覽器會沒聲音
+        continue;
+      }
 
       if (isPureMode) {
         // 純朗讀模式：不打API、不標記完成、不從清單移除，單純往下一項移動
@@ -1718,17 +1726,14 @@ el.speakBtn.addEventListener('click', () => {
     return;
   }
   autoPrayActive = true;
+  autoPrayInterrupted = false;
   requestWakeLock();
   runAutoPray();
 });
 
 function stopSpeakingIfNeeded() {
+  if (autoPrayActive) autoPrayInterrupted = true;
   if (window.speechSynthesis) window.speechSynthesis.cancel();
-  if (autoPrayActive) {
-    autoPrayActive = false;
-    el.speakBtn.textContent = '🔊 開始連禱';
-    releaseWakeLock();
-  }
 }
 
 init();

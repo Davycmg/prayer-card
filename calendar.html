@@ -572,6 +572,8 @@ el.jumpBtn.addEventListener('click', () => {
 // ===== 朗讀：純本地操作，唸完一輪自動停止，不會呼叫任何寫入API =====
 let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
 let autoPlayActive = false;
+// 連續朗讀中按了完成／翻頁等其他按鈕：不結束朗讀，只打斷目前這張，接著唸畫面上現在的卡片
+let autoPlayInterrupted = false;
 let zhVoice = null;
 
 function updateRepeatButtons() {
@@ -629,8 +631,14 @@ async function runAutoPlay() {
       if (!autoPlayActive) return;
       el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
       await speakOnePass(el.eventText.value, i + 1);
+      if (autoPlayInterrupted) break;
     }
     if (!autoPlayActive) return;
+    if (autoPlayInterrupted) {
+      autoPlayInterrupted = false;
+      await new Promise(r => setTimeout(r, 300)); // 剛 cancel() 馬上 speak() 有些瀏覽器會沒聲音
+      continue;
+    }
 
     loopCount++;
     if (loopCount >= totalAtStart) {
@@ -652,15 +660,13 @@ el.speakBtn.addEventListener('click', () => {
   }
   if (itemsCache.length === 0) { showStatus('今天沒有行程'); return; }
   autoPlayActive = true;
+  autoPlayInterrupted = false;
   runAutoPlay();
 });
 
 function stopSpeakingIfNeeded() {
+  if (autoPlayActive) autoPlayInterrupted = true;
   if (window.speechSynthesis) window.speechSynthesis.cancel();
-  if (autoPlayActive) {
-    autoPlayActive = false;
-    el.speakBtn.textContent = '🔊 開始朗讀';
-  }
 }
 
 loadTodayEvents();
