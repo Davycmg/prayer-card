@@ -1946,13 +1946,14 @@ if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = tcLoadVoices;
 }
 
-function tcSpeakOnePass(text) {
+// passNo：第幾次朗讀，會接在內容最後多念這個數字
+function tcSpeakOnePass(text, passNo) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis || !text || !text.trim()) {
       resolve();
       return;
     }
-    const utter = new SpeechSynthesisUtterance(text);
+    const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
     utter.lang = 'zh-TW';
     if (tcZhVoice) utter.voice = tcZhVoice;
     utter.rate = 0.95;
@@ -1980,7 +1981,7 @@ async function tcRunAutoPray() {
       for (let i = 0; i < tcRepeatCount; i++) {
         if (!tcAutoPrayActive) return;
         el.tcSpeakBtn.textContent = `⏹ 停止連禱（${i + 1}/${tcRepeatCount}）`;
-        await tcSpeakOnePass(el.tcPrayerText.value);
+        await tcSpeakOnePass(el.tcPrayerText.value, i + 1);
       }
       if (!tcAutoPrayActive) return;
 

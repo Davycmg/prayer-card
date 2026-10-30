@@ -704,10 +704,11 @@ if (window.speechSynthesis) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
-function speakOnePass(text) {
+// passNo：第幾次朗讀，會接在內容最後多念這個數字
+function speakOnePass(text, passNo) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis || !text || !text.trim()) { resolve(); return; }
-    const utter = new SpeechSynthesisUtterance(text);
+    const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
     utter.lang = 'zh-TW';
     if (zhVoice) utter.voice = zhVoice;
     utter.rate = 0.95;
@@ -733,7 +734,7 @@ async function runAutoPlay() {
       for (let i = 0; i < repeatCount; i++) {
         if (!autoPlayActive) return;
         el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
-        await speakOnePass(el.eventText.value);
+        await speakOnePass(el.eventText.value, i + 1);
       }
       if (!autoPlayActive) return;
 
