@@ -1341,7 +1341,7 @@ function tcRenderEmptyState() {
 }
 
 el.tcBackBtn.addEventListener('click', () => {
-  tcStopSpeakingIfNeeded();
+  tcStopAutoPrayCompletely();
   el.tagCardView.style.display = 'none';
   el.listView.style.display = '';
 });
@@ -1914,6 +1914,8 @@ el.tcWeekdaySelect.addEventListener('change', () => {
 // ===== 朗讀（連禱）功能：跟 index.html 完全一樣 =====
 let tcRepeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
 let tcAutoPrayActive = false;
+// 連續朗讀中按了完成／翻頁等其他按鈕：不結束朗讀，只打斷目前這張，接著唸畫面上現在的卡片
+let tcAutoPrayInterrupted = false;
 let tcPureReadMode = true;
 let tcZhVoice = null;
 
@@ -1982,8 +1984,14 @@ async function tcRunAutoPray() {
         if (!tcAutoPrayActive) return;
         el.tcSpeakBtn.textContent = `⏹ 停止連禱（${i + 1}/${tcRepeatCount}）`;
         await tcSpeakOnePass(el.tcPrayerText.value, i + 1);
+        if (tcAutoPrayInterrupted) break;
       }
       if (!tcAutoPrayActive) return;
+      if (tcAutoPrayInterrupted) {
+        tcAutoPrayInterrupted = false;
+        await new Promise(r => setTimeout(r, 300)); // 剛 cancel() 馬上 speak() 有些瀏覽器會沒聲音
+        continue;
+      }
 
       if (isPureMode) {
         loopCount++;
@@ -2054,11 +2062,17 @@ el.tcSpeakBtn.addEventListener('click', () => {
     return;
   }
   tcAutoPrayActive = true;
+  tcAutoPrayInterrupted = false;
   tcRequestWakeLock();
   tcRunAutoPray();
 });
 
 function tcStopSpeakingIfNeeded() {
+  if (tcAutoPrayActive) tcAutoPrayInterrupted = true;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+function tcStopAutoPrayCompletely() {
   if (window.speechSynthesis) window.speechSynthesis.cancel();
   if (tcAutoPrayActive) {
     tcAutoPrayActive = false;
