@@ -535,19 +535,19 @@ const SOURCE_CONFIG = {
     text: { editable: false }, // 後端沒有「改姓名」的 action，姓名唯讀
     cycle: {
       show: true, options: NETWORK_CYCLE_OPTIONS,
-      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value, expect: item.text })
     },
     tag: { show: false },
     // 跟 dg-network/CardIndex.html 一致：這個來源真正可以編輯的是備註，姓名反而不能改
     note: {
       editable: true,
-      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNoteByRow', row: item.row, value })
+      save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNoteByRow', row: item.row, value, expect: item.text })
     },
-    complete: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'completeByRow', row: item.row }),
+    complete: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'completeByRow', row: item.row, expect: item.text }),
     delete: {
       show: true,
-      confirmText: '⚠️ 這會直接從試算表刪掉這一列，無法復原，確定要刪除嗎？',
-      run: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'deleteByRow', row: item.row })
+      confirmText: '⚠️ 這會直接從試算表刪掉這一列（可以到「📜 操作歷程」按復原加回來），確定要刪除嗎？',
+      run: (item) => apiCallWithRetry(NETWORK_API_URL, { action: 'deleteByRow', row: item.row, expect: item.text })
     }
   },
   multi: {
@@ -775,24 +775,42 @@ const OPLOG_ACTION_LABELS = {
   updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks',
   setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
   exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1',
-  undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成'
+  undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成', restoreRow: '復原刪除'
 };
 
 // 伺服器回傳裡「復原」需要的資料：完成前的日期、垃圾桶列號、改之前的值、任務所在清單
 function pickUndoInfo(data) {
   if (!data || typeof data !== 'object') return undefined;
   const info = {};
-  ['row', 'newDate', 'oldDate', 'trashRow', 'oldValue', 'listId', 'exported'].forEach(k => {
+  ['row', 'newDate', 'oldDate', 'trashRow', 'oldValue', 'listId', 'exported', 'oldThis', 'oldNext', 'rowValues'].forEach(k => {
     if (data[k] !== undefined) info[k] = data[k];
   });
   return Object.keys(info).length ? info : undefined;
 }
 
-// 算出「復原」要送的請求；不能復原的回 null（舊記錄沒有回傳資料、網絡禱告在另一個專案沒有復原 API…）
+// 算出「復原」要送的請求；不能復原的回 null（舊記錄沒有回傳資料、習慣（日曆）沒有復原 API…）
 function opLogUndoRequest(entry) {
-  if (entry.state !== 'ok' || entry.undone || entry.stillDue || !entry.result || entry.baseUrl !== MULTI_API_URL) return null;
+  if (entry.state !== 'ok' || entry.undone || entry.stillDue || !entry.result) return null;
   const p = entry.params || {};
   const r = entry.result;
+  if (entry.baseUrl === NETWORK_API_URL) {
+    // 網絡禱告（dg-network 專案）：沒有垃圾桶，刪除時伺服器回傳整列內容，復原就加回最後一列
+    switch (entry.action) {
+      case 'completeByRow':
+        if (r.oldNext === undefined || !p.expect) return null;
+        return { action: 'undoCompleteByRow', row: r.row, expect: p.expect, oldThis: r.oldThis, oldNext: r.oldNext };
+      case 'deleteByRow':
+        if (!r.rowValues) return null;
+        return { action: 'restoreRow', values: r.rowValues };
+      case 'updateCycleByRow':
+      case 'updateNoteByRow':
+        if (r.oldValue === undefined || !p.expect) return null;
+        return { action: entry.action, row: r.row, expect: p.expect, value: r.oldValue };
+      default:
+        return null;
+    }
+  }
+  if (entry.baseUrl !== MULTI_API_URL) return null;
   switch (entry.action) {
     case 'completeByRow':
       if (r.oldDate === undefined || !p.expect) return null;
@@ -965,7 +983,7 @@ function formatOpLogTime(ms) {
 }
 
 // 重送只開放給「伺服器能自己找回是哪一項」的請求：多方禱告帶 expect 文字、任務／行程帶 id。
-// 網絡禱告只有列號，頁面重新載入後列號可能已經變了，重送可能改到別列，所以不提供。
+// 網絡禱告 2026-10-31 起也帶 expect（姓名），舊記錄只有列號，重送可能改到別列，所以不提供。
 function opLogCanResend(entry) {
   if (entry.state !== 'lost' && entry.state !== 'fail') return false;
   const p = entry.params || {};
