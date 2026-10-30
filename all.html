@@ -387,6 +387,7 @@
 <button class="copy-tasks-btn" id="exportAllBtn">📤 一鍵輸出目前清單所有項目</button>
 <button class="copy-tasks-btn" id="openSearchBtn">🔍 關鍵字搜尋（多方禱告）</button>
 <button class="copy-tasks-btn" id="mergeLinelogBtn">🔗 合併 LINE 通知待辦（同一人／群組合成一個）</button>
+<button class="copy-tasks-btn" id="fixWeekdayBtn">📅 校正週清單（E週一～E週日 沒搬好時按）</button>
 <button class="copy-tasks-btn" id="openBlacklistBtn">🚫 LINE 黑名單（查詢／解除）</button>
 
 <button class="copy-tasks-btn" id="openOpLogBtn">📜 操作歷程（完成／刪除／編輯是否真的送出）</button>
@@ -672,6 +673,7 @@ const el = {
   exportAllBtn: document.getElementById('exportAllBtn'),
   openSearchBtn: document.getElementById('openSearchBtn'),
   mergeLinelogBtn: document.getElementById('mergeLinelogBtn'),
+  fixWeekdayBtn: document.getElementById('fixWeekdayBtn'),
   openBlacklistBtn: document.getElementById('openBlacklistBtn'),
   blacklistOverlay: document.getElementById('blacklistOverlay'),
   closeBlacklistBtn: document.getElementById('closeBlacklistBtn'),
@@ -2336,6 +2338,38 @@ armConfirmButton(el.mergeLinelogBtn, '再按一次確認合併', async () => {
     } else {
       showStatus('合併失敗：' + err.message + '（已合併的不會重複，可以再按一次接著做）', true);
     }
+  } finally {
+    el.loadingOverlay.textContent = '處理中...';
+    setLoading(false);
+  }
+});
+
+// 執行禱告卡的 fixWeekdayTaskLists()：補救 google-task-weekday-scheduler 漏搬的任務
+// （非今天的 E週X 還在預設清單／工作區 → 搬回週X 清單；今天的週X 清單還有任務 → 搬回預設清單）。重跑是安全的
+armConfirmButton(el.fixWeekdayBtn, '再按一次確認校正', async () => {
+  setLoading(true);
+  const movedOut = [];
+  const movedBack = [];
+  let failed = [];
+  let today = '';
+  try {
+    for (let batch = 1; batch <= 5; batch++) {
+      el.loadingOverlay.textContent = '校正週清單中（第 ' + batch + ' 批）...';
+      const data = await apiCall(MULTI_API_URL, { action: 'fixWeekdayTaskLists' }, 6 * 60 * 1000);
+      today = data.today;
+      movedOut.push(...(data.movedOut || []));
+      movedBack.push(...(data.movedBack || []));
+      failed = data.failed || [];
+      if (!data.more) break;
+    }
+    const parts = [];
+    if (movedOut.length) parts.push('搬回週清單 ' + movedOut.length + ' 個：' + movedOut.map(m => m.title + '→' + m.to).join('、'));
+    if (movedBack.length) parts.push('從「' + today + '」搬回預設清單 ' + movedBack.length + ' 個：' + movedBack.map(m => m.title).join('、'));
+    if (failed.length) parts.push(failed.length + ' 個搬移失敗（可以再按一次）：' + failed.join('、'));
+    showStatus(parts.length ? parts.join('；') : '週清單都正常（今天' + today + '），沒有要搬的任務', failed.length > 0);
+    await loadAll(); // 待辦來源的任務可能有進出預設清單
+  } catch (err) {
+    showStatus('校正失敗：' + err.message + '（可以再按一次）', true);
   } finally {
     el.loadingOverlay.textContent = '處理中...';
     setLoading(false);
