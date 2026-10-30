@@ -744,13 +744,15 @@ async function apiCall(baseUrl, params, timeoutMs) {
 // 打不到就再試幾次（Apps Script 偶爾會出現暫時性錯誤或整個掛住，尤其是 dg-network 那個獨立部署），
 // 每次重試間隔拉長一點（1.2秒／2.5秒），總共試 3 次都失敗才真的算這個來源載入失敗。
 async function apiCallWithRetry(baseUrl, params) {
-  const logId = isWriteAction(params.action) ? opLogAdd(baseUrl, params) : null;
+  const label = params._label; // 只給操作歷程顯示用，不送到伺服器
+  delete params._label;
+  const logId = isWriteAction(params.action) ? opLogAdd(baseUrl, params, label) : null;
   const promise = isRowMutation(baseUrl, params)
     ? rowMutation(baseUrl, params, logId)
     : (opLogUpdate(logId, { state: 'sent' }), apiCallRetrying(baseUrl, params));
   if (logId) {
     promise.then(
-      (data) => opLogUpdate(logId, { state: 'ok', result: data && data.newDate ? { row: data.row, newDate: data.newDate } : undefined }),
+      (data) => opLogUpdate(logId, { state: 'ok', result: pickUndoInfo(data) }),
       // 頁面正在關閉時瀏覽器會中斷連線，那不代表伺服器沒做，維持原狀態，下次載入顯示「沒送出／沒等到回應」
       (err) => { if (!pageUnloading) opLogUpdate(logId, { state: 'fail', err: err && err.message }); }
     );
@@ -771,8 +773,65 @@ const OPLOG_ACTION_LABELS = {
   updateCycleByRow: '改週期', updateCalendarEventCycle: '改週期', updateTagByRow: '改標籤',
   updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks',
   setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
-  exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1'
+  exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1',
+  undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成'
 };
+
+// 伺服器回傳裡「復原」需要的資料：完成前的日期、垃圾桶列號、改之前的值、任務所在清單
+function pickUndoInfo(data) {
+  if (!data || typeof data !== 'object') return undefined;
+  const info = {};
+  ['row', 'newDate', 'oldDate', 'trashRow', 'oldValue', 'listId', 'exported'].forEach(k => {
+    if (data[k] !== undefined) info[k] = data[k];
+  });
+  return Object.keys(info).length ? info : undefined;
+}
+
+// 算出「復原」要送的請求；不能復原的回 null（舊記錄沒有回傳資料、網絡禱告在另一個專案沒有復原 API…）
+function opLogUndoRequest(entry) {
+  if (entry.state !== 'ok' || entry.undone || entry.stillDue || !entry.result || entry.baseUrl !== MULTI_API_URL) return null;
+  const p = entry.params || {};
+  const r = entry.result;
+  switch (entry.action) {
+    case 'completeByRow':
+      if (r.oldDate === undefined || !p.expect) return null;
+      return { action: 'undoCompleteByRow', row: r.row, expect: p.expect, value: r.oldDate };
+    case 'deleteByRow':
+      if (!r.trashRow || !p.expect) return null;
+      return { action: 'undoDeleteByRow', trashRow: r.trashRow, expect: p.expect };
+    case 'updateTextByRow':
+      if (r.oldValue === undefined) return null;
+      return { action: 'updateTextByRow', row: r.row, expect: p.value, value: r.oldValue };
+    case 'updateCycleByRow':
+    case 'updateTagByRow':
+      if (r.oldValue === undefined || r.exported || !p.expect) return null; // 星期標籤已複製到 Tasks 並丟垃圾桶的不處理
+      return { action: entry.action, row: r.row, expect: p.expect, value: r.oldValue };
+    case 'completeTaskItem':
+      if (!p.taskId) return null;
+      return { action: 'uncompleteTaskItem', taskId: p.taskId, listId: r.listId || '' };
+    default:
+      return null;
+  }
+}
+
+function undoOpLogEntry(entry, btn) {
+  const req = opLogUndoRequest(entry);
+  if (!req) return;
+  btn.disabled = true;
+  req._label = entry.text;
+  apiCallWithRetry(entry.baseUrl, req)
+    .then(() => {
+      entry.undone = Date.now();
+      saveOpLog();
+      showStatus('已復原：' + (entry.text || ''));
+      loadAll(); // 復原的項目要重新抓清單才會回到畫面上
+    })
+    .catch(err => {
+      btn.disabled = false;
+      showStatus('復原失敗：' + err.message, true);
+    })
+    .finally(renderOpLog);
+}
 const OPLOG_SOURCE_LABELS = { habit: '習慣', network: '網絡', multi: '多方', task: '待辦' };
 
 function isWriteAction(action) {
@@ -802,7 +861,7 @@ saveOpLog();
 
 // 呼叫當下從本地清單找出是哪一項（任務／行程用 id，列號類用 row；要在 rowMutation 校正列號之前找）
 function findItemForParams(baseUrl, params) {
-  return allItems.find(it => {
+  return allItems.concat(recentlyRemovedItems).find(it => {
     if (params.taskId) return it.source === 'task' && it.id === params.taskId;
     if (params.eventId) return it.source === 'habit' && it.id === params.eventId;
     if (params.row !== undefined) {
@@ -813,7 +872,7 @@ function findItemForParams(baseUrl, params) {
   });
 }
 
-function opLogAdd(baseUrl, params) {
+function opLogAdd(baseUrl, params, label) {
   const item = findItemForParams(baseUrl, params);
   const isUpdate = /^update/.test(params.action);
   const entry = {
@@ -821,7 +880,7 @@ function opLogAdd(baseUrl, params) {
     t: Date.now(),
     action: params.action,
     source: item ? item.source : (params.taskId ? 'task' : params.eventId ? 'habit' : baseUrl === NETWORK_API_URL ? 'network' : 'multi'),
-    text: params.expect || (item && item.text) || params.text || (isUpdate ? '' : params.value) || '',
+    text: label || params.expect || (item && item.text) || params.text || (isUpdate ? '' : params.value) || '',
     value: isUpdate ? String(params.value || '') : '',
     state: 'queued',
     baseUrl: baseUrl,
@@ -864,7 +923,7 @@ function opLogVerifyLoaded(source, items) {
   const dueIds = new Set(items.map(it => it.id));
   let flagged = 0;
   opLog.forEach(e => {
-    if (e.source !== source || e.state !== 'ok' || e.stillDue || !OPLOG_COMPLETE_ACTIONS.has(e.action)) return;
+    if (e.source !== source || e.state !== 'ok' || e.stillDue || e.undone || !OPLOG_COMPLETE_ACTIONS.has(e.action)) return;
     if (!e.doneAt || e.doneAt < todayStart.getTime() || e.doneAt >= loadStartedAt) return;
     const stillThere = e.params && e.params.taskId ? dueIds.has(e.params.taskId) : (e.text && dueTexts.has(norm(e.text)));
     if (stillThere) { e.stillDue = Date.now(); flagged++; }
@@ -873,6 +932,7 @@ function opLogVerifyLoaded(source, items) {
     saveOpLog();
     showStatus('有 ' + flagged + ' 筆「完成」伺服器回報成功，但重新載入後還在清單，詳見「📜 操作歷程」', true);
   }
+  if (flagged && el.opLogOverlay.classList.contains('show')) renderOpLog();
 }
 
 function opLogPendingCount() {
@@ -936,7 +996,9 @@ function renderOpLog() {
     const meta = document.createElement('div');
     meta.className = 'trash-item-meta';
     meta.textContent = formatOpLogTime(entry.t) + ' · ' + (OPLOG_SOURCE_LABELS[entry.source] || entry.source)
-      + (entry.result ? ' · 下次 ' + entry.result.newDate + '（第 ' + entry.result.row + ' 列）' : '')
+      + (entry.result && entry.result.newDate ? ' · 下次 ' + entry.result.newDate + '（第 ' + entry.result.row + ' 列）' : '')
+      + (entry.result && entry.result.oldValue !== undefined && /^update/.test(entry.action) ? ' · 原本「' + (entry.result.oldValue || '空白') + '」' : '')
+      + (entry.undone ? ' · 已復原（' + formatOpLogTime(entry.undone) + '）' : '')
       + (entry.stillDue ? ' · 重新載入後仍在到期清單（' + formatOpLogTime(entry.stillDue) + ' 發現）' : '')
       + (entry.err ? ' · ' + entry.err : '');
     main.appendChild(text);
@@ -957,6 +1019,13 @@ function renderOpLog() {
       btn.textContent = '重送';
       btn.addEventListener('click', () => resendOpLogEntry(entry, btn));
       actions.appendChild(btn);
+    }
+    if (opLogUndoRequest(entry)) {
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'trash-delete-btn';
+      undoBtn.textContent = '復原';
+      armConfirmButton(undoBtn, '確認復原', () => undoOpLogEntry(entry, undoBtn));
+      actions.appendChild(undoBtn);
     }
     row.appendChild(main);
     row.appendChild(actions);
@@ -1006,7 +1075,7 @@ armConfirmButton(el.clearOpLogBtn, '再按一次確認清除', () => {
 // 做法：點擊當下就先把本地列號校正好（跟「已經刪掉」的狀態一致），請求照順序排隊，
 // 每個請求排到時，伺服器的列號狀態剛好就是它點擊當下看到的狀態。
 const ROW_MUTATION_ACTIONS = new Set([
-  'deleteByRow', 'completeByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'deleteByRow', 'completeByRow', 'undoCompleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
   'updateNoteByRow', 'copyToTasks', 'setDateToNearestWeekday', 'setDateToNearestWeekend'
 ]);
 // 刪除、完成不能重試：請求逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
@@ -1582,7 +1651,10 @@ function reindexRowsAfterDelete(source, deletedRow) {
 }
 
 // 從畫面上移除目前這項（已經在後端處理完，這裡只負責同步本地暫存區＋重新渲染）
+// 剛移除的項目留著一份，操作歷程要用它查出文字（「完成」是先從畫面移除才送出請求）
+let recentlyRemovedItems = [];
 function removeItemFromLists(item) {
+  recentlyRemovedItems = [item].concat(recentlyRemovedItems).slice(0, 50);
   allItems = allItems.filter(it => it !== item);
   const idx = viewItems.indexOf(item);
   if (idx !== -1) viewItems.splice(idx, 1);
