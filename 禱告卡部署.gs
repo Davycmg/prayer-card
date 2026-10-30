@@ -1016,6 +1016,7 @@ function doGet(e) {
         break;
       case 'getTagList':
         result = getTagList();
+        if (e.parameter.withQuoted === 'true') result.quoted = getQuotedWords_();
         break;
       case 'addCustomTag':
         result = addCustomTag(e.parameter.value);
@@ -1174,6 +1175,38 @@ function pruneUnusedCustomTags_() {
  */
 function getTagList() {
   return { builtIn: Object.values(TAG_MAP), custom: pruneUnusedCustomTags_() };
+}
+
+/**
+ * 事項文字（B欄）裡被雙引號包起來的詞（例如 "祈願牆"），當作「引號標籤」用：
+ * query.html 的標籤選單會列出來，選了之後 getItemsByTag 會找出 H 欄標籤相同、
+ * 或事項文字裡含有這個詞的所有項目（不管那一條有沒有加引號）。
+ * 半形 " 跟全形 “ ” 都算；只收 1～15 字、不跨行的詞，避免整段引號句子變成標籤。
+ */
+const QUOTED_WORD_REGEX_ = /["“”]([^"“”\r\n]{1,15})["“”]/g;
+
+function extractQuotedWords_(text, set) {
+  const str = (text || '').toString();
+  QUOTED_WORD_REGEX_.lastIndex = 0;
+  let m;
+  while ((m = QUOTED_WORD_REGEX_.exec(str)) !== null) {
+    const w = m[1].trim();
+    if (w) set.add(w);
+  }
+}
+
+function collectQuotedWords_(textValues) {
+  const set = new Set();
+  textValues.forEach(row => extractQuotedWords_(row[0], set));
+  return set;
+}
+
+function getQuotedWords_() {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
+  const textValues = sheet.getRange(2, COL.TEXT, lastRow - 1, 1).getValues();
+  return Array.from(collectQuotedWords_(textValues)).sort((a, b) => a.localeCompare(b, 'zh-Hant'));
 }
 
 /**
@@ -1888,10 +1921,16 @@ function getItemsByTag(tag, includeAll) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  // 選的是「引號標籤」（某條事項文字裡有 "這個詞"）時，事項文字含有這個詞的也算進來
+  const quotedWords = collectQuotedWords_(allData.map(r => [r[COL.TEXT - 1]]));
+  const matchText = quotedWords.has(trimmedTag);
+  const tagLower = trimmedTag.toLowerCase();
+
   const items = [];
   for (let i = 0; i < allData.length; i++) {
     const rowTag = (allData[i][COL.TAG - 1] || '').toString().trim();
-    if (rowTag !== trimmedTag) continue;
+    const textHit = matchText && (allData[i][COL.TEXT - 1] || '').toString().toLowerCase().indexOf(tagLower) !== -1;
+    if (rowTag !== trimmedTag && !textHit) continue;
 
     const dateVal = allData[i][COL.DATE - 1];
     const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());

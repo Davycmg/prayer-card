@@ -98,3 +98,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 ### 操作歷程的「復原」（2026-10-30）
 
 歷程裡成功的動作旁有「復原」鈕（按兩下確認）。後端回傳復原需要的資料、存進歷程的 `result`：`completeByRow` 回 `oldDate`（原本空白回空字串）→ 復原打 `undoCompleteByRow`（把 E 欄改回、今日完成數減一）；`deleteByRow` 回 `trashRow` → `undoDeleteByRow`（先用文字確認垃圾桶列號，對不上從下往上找同文字，救回附加到最後一列）；`updateFieldByRow`（改文字／週期／標籤）回 `oldValue` → 再打同一個 update 改回去（改文字時 `expect` 用新文字）；`completeTaskItem` 回 `listId` → `uncompleteTaskItem`（改回 needsAction）。不能復原：網絡禱告（dg-network 另一個專案，沒有對應 API）、習慣（日曆）、改待辦標題、這次改版前的舊記錄。後端部分要手動發布新版本才生效。
+
+## query.html「引號標籤」（2026-10-30）
+
+事項文字（B欄）裡用雙引號（半形 `"` 或全形 `“ ”`）包起來、1～15 字的詞（例如 `"祈願牆"`），會出現在 query.html「依標籤查詢」選單裡（顯示成 `"祈願牆"（文字）`）。選了之後 `getItemsByTag` 會找出 H 欄標籤相同、**或事項文字含這個詞**的所有項目——其他沒加引號、但文字裡有這個詞的也會一起被找到。前端用 `getTagList&withQuoted=true` 取得引號詞清單（`getQuotedWords_()`），其他頁面的 `getTagList` 不受影響。後端部分要手動發布新版本才生效。
