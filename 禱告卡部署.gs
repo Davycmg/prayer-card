@@ -91,6 +91,7 @@ function advancePrayerDate_(sheet, row) {
 
   const dateCell = sheet.getRange(row, COL.DATE);
   let baseDate = dateCell.getValue();
+  const wasBlank = !(baseDate instanceof Date) || isNaN(baseDate.getTime());
   if (!(baseDate instanceof Date) || isNaN(baseDate.getTime())) {
     baseDate = new Date();
     baseDate.setHours(0, 0, 0, 0);
@@ -113,7 +114,7 @@ function advancePrayerDate_(sheet, row) {
 
   dateCell.setValue(newDate);
   dateCell.setNumberFormat('yyyy/MM/dd');
-  return { oldDate: baseDate, newDate: newDate };
+  return { oldDate: baseDate, newDate: newDate, wasBlank: wasBlank };
 }
 
 /**
@@ -131,6 +132,14 @@ function markDone_(sheet, row) {
 // 今日完成計數器：存在 PropertiesService（跟試算表綁定），日期不是今天就視同歸零重算
 const PRAYER_PROGRESS_DATE_KEY_ = 'PRAYER_PROGRESS_DATE';
 const PRAYER_PROGRESS_COUNT_KEY_ = 'PRAYER_PROGRESS_COUNT';
+
+function recordPrayerUndone_() {
+  const props = PropertiesService.getDocumentProperties();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (props.getProperty(PRAYER_PROGRESS_DATE_KEY_) !== today) return;
+  const count = parseInt(props.getProperty(PRAYER_PROGRESS_COUNT_KEY_) || '0', 10);
+  props.setProperty(PRAYER_PROGRESS_COUNT_KEY_, String(Math.max(0, count - 1)));
+}
 
 function recordPrayerCompleted_() {
   const props = PropertiesService.getDocumentProperties();
@@ -1050,6 +1059,15 @@ function doGet(e) {
       case 'completeTaskItem':
         result = completeTaskItem(e.parameter.taskId, e.parameter.listId);
         break;
+      case 'uncompleteTaskItem':
+        result = uncompleteTaskItem(e.parameter.taskId, e.parameter.listId);
+        break;
+      case 'undoCompleteByRow':
+        result = undoCompleteByRow(parseInt(e.parameter.row, 10), e.parameter.value);
+        break;
+      case 'undoDeleteByRow':
+        result = undoDeleteByRow(parseInt(e.parameter.trashRow, 10), e.parameter.expect);
+        break;
       case 'moveTaskToWorkdayList':
         result = moveTaskToWorkdayList(e.parameter.taskId);
         break;
@@ -1430,6 +1448,16 @@ function completeTaskItem(taskId, listId) {
   if (!taskId) throw new Error('缺少 Task ID');
   const targetListId = resolveTaskListId_(taskId, listId || getDefaultTaskListId_());
   patchTaskFriendly_({ status: 'completed' }, targetListId, taskId);
+  return { success: true, listId: targetListId };
+}
+
+/**
+ * all.html 操作歷程「復原完成」：把 Google Tasks 的任務改回未完成。
+ */
+function uncompleteTaskItem(taskId, listId) {
+  if (!taskId) throw new Error('缺少 Task ID');
+  const targetListId = resolveTaskListId_(taskId, listId || getDefaultTaskListId_());
+  patchTaskFriendly_({ status: 'needsAction', completed: null }, targetListId, taskId);
   return { success: true };
 }
 
@@ -1934,7 +1962,7 @@ function searchItems(keyword) {
  * 沒帶 expect 就不檢查，直接用傳進來的列號（舊行為）。
  */
 const ROW_TEXT_CHECKED_ACTIONS_ = [
-  'completeByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
   'setDateToNearestWeekday', 'setDateToNearestWeekend', 'copyToTasks'
 ];
 
@@ -1985,7 +2013,52 @@ function completeByRow(row, expect) {
   if (!(saved instanceof Date) || saved.getTime() <= today.getTime()) {
     throw new Error('寫入後讀回第 ' + row + ' 列日期仍是 ' + fmt(saved) + '（應為 ' + fmt(dates.newDate) + '），完成沒有生效');
   }
-  return { success: true, row: row, oldDate: fmt(dates.oldDate), newDate: fmt(saved) };
+  // oldDate 給 all.html 操作歷程的「復原」用：原本 E 欄空白就回空字串，復原時改回空白
+  return { success: true, row: row, oldDate: dates.wasBlank ? '' : fmt(dates.oldDate), newDate: fmt(saved) };
+}
+
+/**
+ * all.html 操作歷程「復原完成」：把 E 欄改回完成前的日期（value 是 yyyy/MM/dd，空字串＝改回空白），
+ * 今日完成計數減一。列號跟其他列號類動作一樣，先在 doGet 用 expect 文字確認／找回。
+ */
+function undoCompleteByRow(row, value) {
+  if (!row || row < 2) return { success: false };
+  const sheet = getSheet_();
+  const cell = sheet.getRange(row, COL.DATE);
+  const m = String(value || '').match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+  if (m) {
+    cell.setValue(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    cell.setNumberFormat('yyyy/MM/dd');
+  } else if (!value) {
+    cell.setValue('');
+  } else {
+    throw new Error('日期格式不對：' + value);
+  }
+  recordPrayerUndone_();
+  return { success: true, row: row };
+}
+
+/**
+ * all.html 操作歷程「復原刪除」：從垃圾桶救回。trashRow 是刪除當下的垃圾桶列號，
+ * 之後垃圾桶有別的列被永久刪除時會位移，所以先用事項文字確認，對不上就從下往上找同文字的最後一筆。
+ */
+function undoDeleteByRow(trashRow, expect) {
+  const trashSheet = getTrashSheet_();
+  const lastRow = trashSheet.getLastRow();
+  const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+  const want = norm(expect);
+  let row = trashRow;
+  if (!(row >= 2 && row <= lastRow && norm(trashSheet.getRange(row, COL.TEXT).getValue()) === want)) {
+    row = -1;
+    if (lastRow >= 2) {
+      const texts = trashSheet.getRange(2, COL.TEXT, lastRow - 1, 1).getValues();
+      for (let i = texts.length - 1; i >= 0; i--) {
+        if (norm(texts[i][0]) === want) { row = i + 2; break; }
+      }
+    }
+  }
+  if (row === -1) throw new Error('垃圾桶裡找不到「' + want.slice(0, 30) + '」，可能已被永久刪除或救回過了');
+  return restoreFromTrash(row);
 }
 
 /**
@@ -2008,7 +2081,7 @@ function deleteByRow(row, expect) {
   trashSheet.getRange(trashRow, lastCol + 1).setValue(new Date());
 
   sheet.deleteRow(row);
-  return { success: true, deletedRow: row };
+  return { success: true, deletedRow: row, trashRow: trashRow };
 }
 
 /**
@@ -2203,6 +2276,8 @@ function addItem(text, cycle, note, tag) {
 function updateFieldByRow(row, col, value) {
   if (!row || row < 2) return { success: false };
   const sheet = getSheet_();
+  // 改之前的值回傳給 all.html 操作歷程，「復原」時改回去
+  const oldValue = String(sheet.getRange(row, col).getValue());
   sheet.getRange(row, col).setValue(value);
 
   // 如果是標籤欄位，檢查是否需要複製到 Google Tasks（兩種情況都只複製，不會刪除這一列）
@@ -2210,17 +2285,17 @@ function updateFieldByRow(row, col, value) {
     // 週幾標籤 → 複製到對應的週幾清單
     const exported = exportWeekdayTagIfMatched_(sheet, row);
     if (exported) {
-      return { success: true, row: row, exported: true };
+      return { success: true, row: row, exported: true, oldValue: oldValue };
     }
 
     // task預設清單標籤 → 複製到Tasks預設清單（只在「切換成」這個值那一刻觸發一次）
     const copied = copyToDefaultTaskListIfTagged_(sheet, row);
     if (copied) {
-      return { success: true, row: row, copied: true };
+      return { success: true, row: row, copied: true, oldValue: oldValue };
     }
   }
 
-  return { success: true, row: row };
+  return { success: true, row: row, oldValue: oldValue };
 }
 
 /**
