@@ -875,6 +875,7 @@ const CYCLE_RRULE_MAP = {
 };
 
 let customTagsCache = [];
+let quotedTagsCache = [];
 let currentKeywordResults = []; // 目前關鍵字查詢的結果，點進去編輯時用來對照
 let editingItem = null;         // 目前正在編輯的項目 {row, text, cycle, note, tag}
 let saveTimer = null;
@@ -978,10 +979,12 @@ function populateSelect(selectEl, map, placeholder) {
 
 async function loadTagList() {
   try {
-    const data = await apiCall({ action: 'getTagList' });
+    const data = await apiCall({ action: 'getTagList', withQuoted: 'true' });
     customTagsCache = data.custom || [];
+    quotedTagsCache = data.quoted || [];
   } catch (err) {
     customTagsCache = [];
+    quotedTagsCache = [];
   }
 }
 
@@ -1009,6 +1012,17 @@ function populateTagQuerySelect() {
       const opt = document.createElement('option');
       opt.value = v;
       opt.textContent = v + '（自訂）';
+      el.tagQuerySelect.appendChild(opt);
+    });
+
+  // 引號標籤：事項文字裡被 "雙引號" 包起來的詞，選了會連同沒加引號、但文字含這個詞的項目一起找出來
+  const listed = new Set([...Object.values(TAG_MAP), ...Object.values(WEEKDAY_MAP), ...customTagsCache]);
+  quotedTagsCache
+    .filter(v => !listed.has(v))
+    .forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v;
+      opt.textContent = '"' + v + '"（文字）';
       el.tagQuerySelect.appendChild(opt);
     });
 }
