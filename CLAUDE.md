@@ -90,3 +90,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 每個寫入動作（完成／刪除／改文字／改週期／標籤…）在 `apiCallWithRetry` 統一記進 localStorage `allHtml_opLog`（最多 500 筆，只記這台裝置）：排隊中→已送出→成功／失敗。起因（2026-10-29）：列號類動作是排隊一個一個送、每個要等 Apps Script 幾秒，連續處理幾十項後馬上重新整理，排隊中的請求根本沒送出，數字就不會減少。現在：還有沒送完的會在按鈕上顯示筆數、`beforeunload` 攔住關頁面；下次載入時「排隊中」的標成「沒送出」、「已送出」的標成「沒等到回應」並跳紅字提醒。「沒送出／失敗」且帶 `expect`／`taskId`／`eventId` 的可以按「重送」（網絡禱告只有列號，重送可能對錯列，所以不提供）。
 
 2026-10-29 晚上使用者回報：歷程顯示「完成 成功」，重新整理後項目又出現。查試算表確認那些列的 E 欄日期確實沒被推進，但 `getPrayerProgress` 顯示今天伺服器有記到 43 次完成、部署版本也是最新程式碼，原因還沒找到。因此加了兩道檢查：前端每次載入後，把今天回報成功的「完成」跟到期清單比對，還在的標成「⚠️ 回報成功但沒生效」；後端 `completeByRow` 寫完 `flush()` 後讀回 E 欄，日期不在今天之後就丟錯（不再回成功），並 `console.log` 列號與舊→新日期，回傳 `row`／`newDate` 讓歷程顯示「下次 yyyy/MM/dd（第 N 列）」。之後再遇到，看 Apps Script「執行項目」的 log 對照。
+
+## all.html「📅 校正週清單」按鈕（`週清單校正.gs`）
+
+補救 `Davycmg/apps-script-projects` 的 `google-task-weekday-scheduler`（另一個專案，每晚 23:50 把 `E週X` 任務收進「週X」清單、每天 03:50 把今天的週清單搬回預設清單）漏搬的任務。起因 2026-10-29 23:44 那一輪 9 個 `E週四` 任務 Quota Exceeded 被跳過，週五還留在預設清單。按鈕打 action `fixWeekdayTaskLists`：預設清單／「工作區」裡非今天的 `E週X` → 搬回「週X」；今天的「週X」清單還有任務 → 搬回預設清單。前綴比對跟 weekday-scheduler 一致（直接 `startsWith('E週X')`）。重跑安全；後端每批 4.5 分鐘，回 `more` 時前端自動接著跑。別的專案建立、這個專案沒權限搬的任務會列在「失敗」裡。

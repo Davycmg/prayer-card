@@ -1083,6 +1083,9 @@ function doGet(e) {
       case 'mergeLinelogTasks':
         result = mergeLinelogTasks();
         break;
+      case 'fixWeekdayTaskLists':
+        result = fixWeekdayTaskLists();
+        break;
       case 'getLinelogBlacklist':
         result = getLinelogBlacklist();
         break;
