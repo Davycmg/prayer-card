@@ -413,6 +413,11 @@ function getPrayerProgress_() {
 function handleCardApi_(e, action) {
   let result;
   try {
+    // 列號類動作：前端（all.html）帶了 expect（它看到的姓名）就先用姓名確認／找回正確的列，
+    // 避免頁面開著期間刪列、合併同名資料造成列號位移，改到別人那一列
+    if (ROW_NAME_CHECKED_ACTIONS_.indexOf(action) !== -1 && e.parameter.expect) {
+      e.parameter.row = String(resolveRowByName_(getSheet_(), parseInt(e.parameter.row, 10), e.parameter.expect));
+    }
     switch (action) {
       case 'getAllItems':
         result = getAllItems_();
@@ -423,8 +428,14 @@ function handleCardApi_(e, action) {
       case 'completeByRow':
         result = completeByRow_(parseInt(e.parameter.row, 10));
         break;
+      case 'undoCompleteByRow':
+        result = undoCompleteByRow_(parseInt(e.parameter.row, 10), e.parameter.oldThis, e.parameter.oldNext);
+        break;
       case 'deleteByRow':
         result = deleteByRow_(parseInt(e.parameter.row, 10));
+        break;
+      case 'restoreRow':
+        result = restoreRow_(e.parameter.values);
         break;
       case 'updateNoteByRow':
         result = updateFieldByRow_(parseInt(e.parameter.row, 10), COL.NOTE, e.parameter.value);
@@ -567,33 +578,109 @@ function getFixedRosterItems_() {
   return { items: items, total: items.length };
 }
 
+const ROW_NAME_CHECKED_ACTIONS_ = ['completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateNoteByRow', 'updateCycleByRow'];
+
+/**
+ * 該列姓名跟 expect 一樣就用原列號；不一樣就整欄找同名的列（多筆取離原列號最近的），找不到報錯。
+ */
+function resolveRowByName_(sheet, row, expect) {
+  const norm = function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+  const want = norm(expect);
+  const lastRow = sheet.getLastRow();
+  const actual = row >= 2 && row <= lastRow ? norm(sheet.getRange(row, COL.NAME).getValue()) : '';
+  if (actual === want) return row;
+  let best = -1;
+  if (lastRow >= 2) {
+    const names = sheet.getRange(2, COL.NAME, lastRow - 1, 1).getValues();
+    for (let i = 0; i < names.length; i++) {
+      if (norm(names[i][0]) !== want) continue;
+      const r = i + 2;
+      if (best === -1 || Math.abs(r - row) < Math.abs(best - row)) best = r;
+    }
+  }
+  if (best === -1) throw new Error('找不到姓名「' + want.slice(0, 30) + '」（第 ' + row + ' 列現在是「' + actual.slice(0, 30) + '」），可能已被刪除或改過');
+  return best;
+}
+
+// 儲存格值 ⇄ 字串（給 all.html 操作歷程的「復原」存起來再送回來）：日期要能還原成日期
+function serializeCell_(v) {
+  return JSON.stringify(v instanceof Date && !isNaN(v.getTime()) ? { d: v.toISOString() } : v);
+}
+function deserializeCell_(s) {
+  if (s === undefined || s === null || s === '') return '';
+  const v = JSON.parse(s);
+  return v && typeof v === 'object' && v.d ? new Date(v.d) : v;
+}
+
 /**
  * 用實際列號標記完成（F欄寫入現在時間、G欄依週期推進）。
  * 不需要重新掃描今日清單，前端可以背景呼叫，不阻塞畫面。
+ * 回傳完成前的 F／G 欄（序列化字串），給操作歷程「復原」用。
  */
 function completeByRow_(row) {
   if (!row || row < 2) return { success: false };
-  markDone_(getSheet_(), row);
+  const sheet = getSheet_();
+  const oldThis = serializeCell_(sheet.getRange(row, COL.THIS).getValue());
+  const oldNext = serializeCell_(sheet.getRange(row, COL.NEXT).getValue());
+  markDone_(sheet, row);
+  const next = sheet.getRange(row, COL.NEXT).getValue();
+  return {
+    success: true, row: row, oldThis: oldThis, oldNext: oldNext,
+    newDate: next instanceof Date ? Utilities.formatDate(next, Session.getScriptTimeZone(), 'yyyy/MM/dd') : String(next)
+  };
+}
+
+/**
+ * 操作歷程「復原完成」：F／G 欄改回完成前的值，今日完成數減一。
+ */
+function undoCompleteByRow_(row, oldThis, oldNext) {
+  if (!row || row < 2) return { success: false };
+  const sheet = getSheet_();
+  sheet.getRange(row, COL.THIS).setValue(deserializeCell_(oldThis));
+  sheet.getRange(row, COL.NEXT).setValue(deserializeCell_(oldNext));
+  const props = PropertiesService.getDocumentProperties();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  if (props.getProperty(PRAYER_PROGRESS_DATE_KEY_) === today) {
+    const count = parseInt(props.getProperty(PRAYER_PROGRESS_COUNT_KEY_) || '0', 10);
+    props.setProperty(PRAYER_PROGRESS_COUNT_KEY_, String(Math.max(0, count - 1)));
+  }
   return { success: true, row: row };
 }
 
 /**
  * 用實際列號刪除該列資料。刪除後該列以下所有列號會往前移一位，
  * 前端收到成功回應後，會自動校正本地暫存區裡所有列號 > 這個 row 的項目（各減1）。
+ * 這個專案沒有垃圾桶，所以把整列內容回傳給操作歷程，「復原」時用 restoreRow_ 加回最後一列。
  */
 function deleteByRow_(row) {
   if (!row || row < 2) return { success: false };
-  getSheet_().deleteRow(row);
-  return { success: true, deletedRow: row };
+  const sheet = getSheet_();
+  const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  sheet.deleteRow(row);
+  return { success: true, deletedRow: row, rowValues: JSON.stringify(values.map(serializeCell_)) };
 }
 
 /**
- * 用實際列號更新指定欄位（備註／週期）。
+ * 操作歷程「復原刪除」：把 deleteByRow_ 回傳的整列內容加回最後一列。
+ */
+function restoreRow_(valuesJson) {
+  const values = JSON.parse(valuesJson || '[]').map(deserializeCell_);
+  if (!values.length) throw new Error('沒有可以還原的資料');
+  const sheet = getSheet_();
+  const newRow = sheet.getLastRow() + 1;
+  sheet.getRange(newRow, 1, 1, values.length).setValues([values]);
+  return { success: true, row: newRow };
+}
+
+/**
+ * 用實際列號更新指定欄位（備註／週期）。回傳改之前的值，給操作歷程「復原」用。
  */
 function updateFieldByRow_(row, col, value) {
   if (!row || row < 2) return { success: false };
-  getSheet_().getRange(row, col).setValue(value);
-  return { success: true, row: row };
+  const cell = getSheet_().getRange(row, col);
+  const oldValue = String(cell.getValue());
+  cell.setValue(value);
+  return { success: true, row: row, oldValue: oldValue };
 }
 
 // ========== 代禱卡片：Google Sheet 內操作版本（選用） ==========
