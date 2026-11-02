@@ -474,24 +474,42 @@ function showDrawResult(task, total, remaining) {
   autoResizeDrawTaskText();
 }
 
+// 平日（週一～週五）08:00–16:00（台灣時間）是上班時間，抽籤不抽 H 開頭（非工作事務）的任務。
+function isWorkHoursNow() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei', weekday: 'short', hour: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const get = type => (parts.find(p => p.type === type) || {}).value;
+  const hour = parseInt(get('hour'), 10) % 24;
+  return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(get('weekday')) !== -1 && hour >= 8 && hour < 16;
+}
+
+// H 前綴比對跟 nonwork.html 一致：不分大小寫、全形半形視為相同、開頭空白忽略。
+function hasHPrefix(text) {
+  const first = String(text || '').trim().charAt(0);
+  return first === 'H' || first === 'h' || first === 'Ｈ' || first === 'ｈ';
+}
+
 // 從本地清單抽下一個任務並顯示（抽選按鈕、完成任務後的「接著抽下一個」共用）。
 function drawNextTask() {
-  if (drawItems.length === 0) {
+  const pool = isWorkHoursNow() ? drawItems.filter(t => !hasHPrefix(t.text)) : drawItems;
+  if (pool.length === 0) {
     showDrawResult(null, 0, 0);
     return;
   }
 
-  let candidates = drawItems.filter(t => drawnIds.indexOf(t.id) === -1);
+  let candidates = pool.filter(t => drawnIds.indexOf(t.id) === -1);
   let reset = false;
   if (candidates.length === 0) {
     // 全部都抽過了，重新開始一輪
     drawnIds = [];
-    candidates = drawItems;
+    candidates = pool;
     reset = true;
   }
   const picked = candidates[Math.floor(Math.random() * candidates.length)];
   drawnIds.push(picked.id);
-  showDrawResult(picked, drawItems.length, drawItems.length - drawnIds.length);
+  const remaining = pool.filter(t => drawnIds.indexOf(t.id) === -1).length;
+  showDrawResult(picked, pool.length, remaining);
 
   // 存回後端（已抽清單＋日曆記錄）放背景做，接在上一筆後面避免同時改「上一筆事件」；
   // 做完順便重抓一次，讓清單跟 Google Tasks 的變動保持同步。
