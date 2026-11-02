@@ -104,3 +104,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 ## query.html「引號標籤」（2026-10-30）
 
 事項文字（B欄）裡用雙引號（半形 `"` 或全形 `“ ”`）包起來、1～15 字的詞（例如 `"祈願牆"`），會出現在 query.html「依標籤查詢」選單裡（顯示成 `"祈願牆"（文字）`）。選了之後 `getItemsByTag` 會找出 H 欄標籤相同、**或事項文字含這個詞**的所有項目——其他沒加引號、但文字裡有這個詞的也會一起被找到。前端用 `getTagList&withQuoted=true` 取得引號詞清單（`getQuotedWords_()`），其他頁面的 `getTagList` 不受影響。後端部分要手動發布新版本才生效。
+
+## home.html「隨機抽待辦任務」上班時間不抽 H（2026-11-02）
+
+平日（週一～週五）台灣時間 08:00–16:00（16:00 起不算）按「抽一個」時，`drawNextTask()` 會先排除標題 `H` 開頭的任務（比對規則同 nonwork.html：不分大小寫、全形半形相同、忽略開頭空白），進度數字也只算排除後的清單。其他時間照舊全部抽。純前端改動，merge 進 main 就生效；Highlight 抽到 Google Task 時不套用這個規則。
