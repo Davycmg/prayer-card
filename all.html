@@ -1293,8 +1293,35 @@ function loadTasksAllListsForDup(generation) {
     .catch(() => { /* 比對用的輔助資料，載入失敗不影響主要卡片功能，靜默略過 */ });
 }
 
+// 平日（週一～週五）08:00–16:00（台灣時間）是上班時間，「待辦」來源不顯示 H 開頭（非工作事務）的任務
+// （跟 home.html「隨機抽待辦任務」同一套規則；H 比對同 nonwork.html：不分大小寫、全形半形相同、忽略開頭空白）。
+function isWorkHoursNow() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Taipei', weekday: 'short', hour: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const get = type => (parts.find(p => p.type === type) || {}).value;
+  const hour = parseInt(get('hour'), 10) % 24;
+  return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].indexOf(get('weekday')) !== -1 && hour >= 8 && hour < 16;
+}
+function isHiddenHTaskNow(item, workHours) {
+  if (item.source !== 'task' || !workHours) return false;
+  const first = String(item.text || '').trim().charAt(0);
+  return first === 'H' || first === 'h' || first === 'Ｈ' || first === 'ｈ';
+}
+// 頁面開著跨過 08:00／16:00 時重新套用篩選（避免一直開著的分頁還在用舊時段的規則）
+let lastWorkHoursState = isWorkHoursNow();
+setInterval(() => {
+  const now = isWorkHoursNow();
+  if (now !== lastWorkHoursState && !autoPlayActive) { // 朗讀中先不動，唸完下一分鐘再套用
+    lastWorkHoursState = now;
+    applyFilter();
+  }
+}, 60 * 1000);
+
 function applyFilter() {
-  viewItems = allItems.filter(it => activeSources.has(it.source));
+  const workHours = isWorkHoursNow();
+  lastWorkHoursState = workHours;
+  viewItems = allItems.filter(it => activeSources.has(it.source) && !isHiddenHTaskNow(it, workHours));
 
   // 跟 index.html 一致：隨機排序開關對任何篩選都適用（多方禱告以外的來源沒有 CYCLE_MAP 週期格式，
   // 「依週期排序」對它們等於維持原順序，不影響顯示，但開關本身不限來源都能用）
@@ -1316,7 +1343,8 @@ el.randomOrderToggle.addEventListener('change', () => {
 
 function updateBreakdown() {
   const counts = { habit: 0, network: 0, multi: 0, task: 0 };
-  allItems.forEach(it => { counts[it.source]++; });
+  const workHours = isWorkHoursNow();
+  allItems.forEach(it => { if (!isHiddenHTaskNow(it, workHours)) counts[it.source]++; });
   const failedSet = new Set(lastFailedSources.map(f => f.source));
   const countLabel = (source, icon) => failedSet.has(source) ? `${icon}⚠️載入失敗` : `${icon}${counts[source]}`;
 
