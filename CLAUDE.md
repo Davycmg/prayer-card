@@ -95,6 +95,8 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 
 補救 `Davycmg/apps-script-projects` 的 `google-task-weekday-scheduler`（另一個專案，每晚 23:50 把 `E週X` 任務收進「週X」清單、每天 03:50 把今天的週清單搬回預設清單）漏搬的任務。起因 2026-10-29 23:44 那一輪 9 個 `E週四` 任務 Quota Exceeded 被跳過，週五還留在預設清單。按鈕打 action `fixWeekdayTaskLists`：預設清單／「工作區」裡非今天的 `E週X` → 搬回「週X」；今天的「週X」清單還有任務 → 搬回預設清單。前綴比對跟 weekday-scheduler 一致（直接 `startsWith('E週X')`）。重跑安全；後端每批 4.5 分鐘，回 `more` 時前端自動接著跑。別的專案建立、這個專案沒權限搬的任務會列在「失敗」裡。
 
+2026-11-03 手機上一堆「排隊中」永遠不送：`pagehide` 設了 `pageUnloading = true` 就沒改回來，頁面從 bfcache 還原（切去別頁再按返回）後，排隊的請求一跑到就被擋、錯誤又因為 `pageUnloading` 不記，全部停在「排隊中」。現在 `pageshow`（`persisted`）時改回 false，暫停期間擋下的請求接著送（`afterPageRestore`）。
+
 ### 操作歷程的「復原」（2026-10-30）
 
 歷程裡成功的動作旁有「復原」鈕（按兩下確認）。後端回傳復原需要的資料、存進歷程的 `result`：`completeByRow` 回 `oldDate`（原本空白回空字串）→ 復原打 `undoCompleteByRow`（把 E 欄改回、今日完成數減一）；`deleteByRow` 回 `trashRow` → `undoDeleteByRow`（先用文字確認垃圾桶列號，對不上從下往上找同文字，救回附加到最後一列）；`updateFieldByRow`（改文字／週期／標籤）回 `oldValue` → 再打同一個 update 改回去（改文字時 `expect` 用新文字）；`completeTaskItem` 回 `listId` → `uncompleteTaskItem`（改回 needsAction）。不能復原：習慣（日曆）、改待辦標題、改版前的舊記錄。後端部分要手動發布新版本才生效。

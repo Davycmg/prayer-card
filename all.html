@@ -755,7 +755,11 @@ async function apiCallWithRetry(baseUrl, params) {
     promise.then(
       (data) => opLogUpdate(logId, { state: 'ok', result: pickUndoInfo(data) }),
       // 頁面正在關閉時瀏覽器會中斷連線，那不代表伺服器沒做，維持原狀態，下次載入顯示「沒送出／沒等到回應」
-      (err) => { if (!pageUnloading) opLogUpdate(logId, { state: 'fail', err: err && err.message }); }
+      // 如果之後頁面又從 bfcache 還原，再補記成失敗（不然會一直停在「已送出」）
+      (err) => {
+        const markFail = () => opLogUpdate(logId, { state: 'fail', err: err && err.message });
+        if (pageUnloading) afterPageRestore.push(markFail); else markFail();
+      }
     );
   }
   return promise;
@@ -960,7 +964,16 @@ function opLogPendingCount() {
 
 // 還有沒送完的就攔住重新整理／關閉頁面，不然排隊中的動作會整批消失
 let pageUnloading = false;
+// pagehide 不一定是真的關掉：手機上切去別的頁面再按返回，頁面會從「往返快取」(bfcache) 原封不動還原。
+// 以前 pageUnloading 設成 true 之後就再也不會改回來，還原後新按的每一筆都卡在「排隊中」永遠不送
+// （2026-11-03 實際踩到）。現在還原時改回 false，暫停期間被擋下的請求／錯誤也接著處理。
+const afterPageRestore = [];
 window.addEventListener('pagehide', () => { pageUnloading = true; });
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  pageUnloading = false;
+  afterPageRestore.splice(0).forEach(fn => fn());
+});
 window.addEventListener('beforeunload', (e) => {
   if (opLogPendingCount() === 0) return;
   e.preventDefault();
@@ -1117,7 +1130,9 @@ function rowMutation(baseUrl, params, logId) {
   const prev = mutationQueues[baseUrl] || Promise.resolve();
   const run = prev.then(async () => {
     if (epoch !== mutationEpoch) throw new Error('前面有一筆刪除失敗，為避免對錯列，這個動作已取消，請等清單重新載入後再操作一次');
-    if (pageUnloading) throw new Error('頁面已關閉，沒有送出');
+    // 頁面被藏起來（可能正在關閉）就先別送：真的關掉的話維持「排隊中」，下次載入標成「沒送出」可重送；
+    // 從 bfcache 還原的話接著送
+    if (pageUnloading) await new Promise(resolve => afterPageRestore.push(resolve));
     opLogUpdate(logId, { state: 'sent' });
     // 不重試的請求只有一次機會，逾時要放寬（Apps Script 偶爾會慢到十幾秒才回，12 秒就放棄會誤判成失敗）
     const data = NO_RETRY_ACTIONS.has(params.action)
