@@ -2125,15 +2125,21 @@ if (window.speechSynthesis) {
 }
 
 // passNo：第幾次朗讀，會接在內容最後多念這個數字
+// 回傳 true＝真的有唸出來。2026-11-04 捷運上連禱一秒內「完成」好幾項：手機語音引擎出錯／被打斷時
+// onerror 或 onend 會立刻觸發，以前一律當成唸完，迴圈就一秒完成好幾項。現在沒有 onstart、
+// 或不到 SPEAK_MIN_MS 就結束的，都算沒唸出來，連禱會停下來、不標記完成。
+const SPEAK_MIN_MS = 800;
 function speakOnePass(text, passNo) {
   return new Promise((resolve) => {
-    if (!window.speechSynthesis || !text || !text.trim()) { resolve(); return; }
+    if (!window.speechSynthesis || !text || !text.trim()) { resolve(false); return; }
     const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
     utter.lang = 'zh-TW';
     if (zhVoice) utter.voice = zhVoice;
     utter.rate = 0.95;
-    utter.onend = () => resolve();
-    utter.onerror = () => resolve();
+    let startedAt = 0;
+    utter.onstart = () => { startedAt = Date.now(); };
+    utter.onend = () => resolve(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
+    utter.onerror = () => resolve(false);
     window.speechSynthesis.speak(utter);
   });
 }
@@ -2154,10 +2160,11 @@ async function runAutoPlay() {
         return;
       }
 
+      let spokeOk = true;
       for (let i = 0; i < repeatCount; i++) {
         if (!autoPlayActive) return;
         el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
-        await speakOnePass(el.itemText.value, i + 1);
+        if (!(await speakOnePass(el.itemText.value, i + 1))) spokeOk = false;
         if (autoPlayInterrupted) break;
       }
       if (!autoPlayActive) return;
@@ -2165,6 +2172,13 @@ async function runAutoPlay() {
         autoPlayInterrupted = false;
         await new Promise(r => setTimeout(r, 300)); // 剛 cancel() 馬上 speak() 有些瀏覽器會沒聲音
         continue;
+      }
+      // 沒真的唸出來（語音出錯、被打斷、螢幕關掉…）就停下來，不能當作唸完而標記完成
+      if (!spokeOk && !isPureMode) {
+        autoPlayActive = false;
+        el.speakBtn.textContent = '🔊 開始朗讀';
+        showStatus('朗讀沒有正常播出，已停止連禱（這項沒有標記完成）', true);
+        return;
       }
 
       const item = viewItems[cachePos];
