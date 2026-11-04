@@ -1272,7 +1272,7 @@ function getTodayCalendarEvents(withExtra) {
     maxResults: 250
   });
 
-  const items = (resp.items || []).map(function (ev) { return calendarEventToItem_(ev, 'primary', false); });
+  let items = (resp.items || []).map(function (ev) { return calendarEventToItem_(ev, 'primary', false); });
 
   // all.html 的「習慣」另外納入 HABIT_EXTRA_CALENDAR_IDS：重複行程只列今天那一次，
   // 不重複的行程則從過去到今天全部列出（calendar.html 不帶 withExtra，不受影響）
@@ -1280,10 +1280,16 @@ function getTodayCalendarEvents(withExtra) {
     HABIT_EXTRA_CALENDAR_IDS.forEach(function (calId) {
       Array.prototype.push.apply(items, getExtraHabitCalendarItems_(calId, startOfDay, endOfDay));
     });
+    // all.html 的「習慣」排除標題含 🍅 或「任務進度」的行程（兩個日曆都套用）
+    items = items.filter(function (it) {
+      return !HABIT_EXCLUDE_TITLE_KEYWORDS.some(function (kw) { return it.text.indexOf(kw) !== -1; });
+    });
   }
 
   return { items: items, total: items.length };
 }
+
+const HABIT_EXCLUDE_TITLE_KEYWORDS = ['🍅', '任務進度'];
 
 // all.html「習慣」額外納入的日曆（2026-11-04）
 const HABIT_EXTRA_CALENDAR_IDS = [
