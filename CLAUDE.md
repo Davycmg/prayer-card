@@ -112,3 +112,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 平日（週一～週五）台灣時間 08:00–16:00（16:00 起不算）按「抽一個」時，`drawNextTask()` 會先排除標題 `H` 開頭的任務（比對規則同 nonwork.html：不分大小寫、全形半形相同、忽略開頭空白），進度數字也只算排除後的清單。其他時間照舊全部抽。純前端改動，merge 進 main 就生效；Highlight 抽到 Google Task 時不套用這個規則。
 
 all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` 把「待辦」來源（Google Tasks）裡 `H` 開頭的任務排除，「全部」「待辦」篩選、隨機一項、翻頁、朗讀、上方 📋 數字都不含它們；多方禱告等其他來源不受影響。頁面開著跨過 08:00／16:00 時，每分鐘檢查一次會自動重新套用（朗讀中先不動）。
+
+## all.html「習慣」納入額外日曆（2026-11-04）
+
+除了 primary 日曆今天的行程，all.html 的「習慣」另外納入 `HABIT_EXTRA_CALENDAR_IDS`（`禱告卡部署.gs`，目前是 `4a3fca26…@group.calendar.google.com`）：重複行程只列今天那一次；不重複行程從過去到今天（開始時間在今天結束前）全部列出。all.html 打 `getTodayCalendarEvents&withExtra=true`，calendar.html 不帶參數不受影響。額外日曆的項目帶 `calendarId`，改標題／週期／刪除會帶著它打到正確日曆。後端部分要手動發布新版本才生效。
