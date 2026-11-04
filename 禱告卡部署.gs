@@ -1031,16 +1031,16 @@ function doGet(e) {
         result = searchItems(e.parameter.keyword);
         break;
       case 'getTodayCalendarEvents':
-        result = getTodayCalendarEvents();
+        result = getTodayCalendarEvents(e.parameter.withExtra === 'true');
         break;
       case 'updateCalendarEventCycle':
-        result = updateCalendarEventCycle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value);
+        result = updateCalendarEventCycle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value, e.parameter.calendarId);
         break;
       case 'deleteCalendarEvent':
-        result = deleteCalendarEvent(e.parameter.eventId, e.parameter.recurringEventId);
+        result = deleteCalendarEvent(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.calendarId);
         break;
       case 'updateCalendarEventTitle':
-        result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value);
+        result = updateCalendarEventTitle(e.parameter.eventId, e.parameter.recurringEventId, e.parameter.value, e.parameter.calendarId);
         break;
       case 'exportCalendarEventToPrayerSheet':
         result = exportCalendarEventToPrayerSheet(e.parameter.value, e.parameter.cycle, e.parameter.note);
@@ -1259,7 +1259,7 @@ function normalizeCode(value, map) {
  * 每筆附上時間、備註（說明文字）跟依重複規則換算出來的週期文字（跟 CYCLE_MAP 顯示格式一致）。
  * 需要 appsscript.json 啟用 Calendar 進階服務（Advanced Calendar Service）才能讀到重複規則（RRULE）。
  */
-function getTodayCalendarEvents() {
+function getTodayCalendarEvents(withExtra) {
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
   const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
@@ -1272,19 +1272,88 @@ function getTodayCalendarEvents() {
     maxResults: 250
   });
 
-  const items = (resp.items || []).map(function (ev) {
-    const isAllDay = !!(ev.start && ev.start.date);
-    return {
-      id: ev.id,
-      recurringEventId: ev.recurringEventId || '',
-      text: ev.summary || '(無標題)',
-      time: isAllDay ? '全天' : formatEventTime_(ev.start.dateTime),
-      note: ev.description ? stripHtml_(ev.description) : '',
-      cycle: getRecurrenceLabel_(ev)
-    };
-  });
+  const items = (resp.items || []).map(function (ev) { return calendarEventToItem_(ev, 'primary', false); });
+
+  // all.html 的「習慣」另外納入 HABIT_EXTRA_CALENDAR_IDS：重複行程只列今天那一次，
+  // 不重複的行程則從過去到今天全部列出（calendar.html 不帶 withExtra，不受影響）
+  if (withExtra) {
+    HABIT_EXTRA_CALENDAR_IDS.forEach(function (calId) {
+      Array.prototype.push.apply(items, getExtraHabitCalendarItems_(calId, startOfDay, endOfDay));
+    });
+  }
 
   return { items: items, total: items.length };
+}
+
+// all.html「習慣」額外納入的日曆（2026-11-04）
+const HABIT_EXTRA_CALENDAR_IDS = [
+  '4a3fca26ef63c8c76efbc13cac22e4320d3448f271cdd3933273b496d055146a@group.calendar.google.com'
+];
+
+function calendarEventToItem_(ev, calendarId, withDate) {
+  const isAllDay = !!(ev.start && ev.start.date);
+  const tz = Session.getScriptTimeZone();
+  let time = isAllDay ? '全天' : formatEventTime_(ev.start.dateTime);
+  if (withDate) {
+    const d = isAllDay ? ev.start.date.replace(/-/g, '/') : Utilities.formatDate(new Date(ev.start.dateTime), tz, 'yyyy/MM/dd');
+    time = d + ' ' + time;
+  }
+  const item = {
+    id: ev.id,
+    recurringEventId: ev.recurringEventId || '',
+    text: ev.summary || '(無標題)',
+    time: time,
+    note: ev.description ? stripHtml_(ev.description) : '',
+    cycle: getRecurrenceLabel_(ev, calendarId)
+  };
+  if (calendarId !== 'primary') item.calendarId = calendarId;
+  return item;
+}
+
+/**
+ * 額外日曆：今天的重複行程（singleEvents 展開後有 recurringEventId 的）＋
+ * 開始時間在今天結束前的所有不重複行程（singleEvents=false，沒有 recurrence 也沒有 recurringEventId 的）。
+ */
+function getExtraHabitCalendarItems_(calendarId, startOfDay, endOfDay) {
+  const items = [];
+  const seen = {};
+
+  const today = Calendar.Events.list(calendarId, {
+    timeMin: startOfDay.toISOString(),
+    timeMax: endOfDay.toISOString(),
+    singleEvents: true,
+    orderBy: 'startTime',
+    maxResults: 250
+  });
+  (today.items || []).forEach(function (ev) {
+    if (!ev.recurringEventId || ev.status === 'cancelled') return;
+    seen[ev.id] = true;
+    items.push(calendarEventToItem_(ev, calendarId, false));
+  });
+
+  const once = [];
+  let pageToken;
+  do {
+    const resp = Calendar.Events.list(calendarId, {
+      timeMax: endOfDay.toISOString(),
+      singleEvents: false,
+      showDeleted: false,
+      maxResults: 2500,
+      pageToken: pageToken
+    });
+    (resp.items || []).forEach(function (ev) {
+      if (ev.status === 'cancelled' || ev.recurringEventId || (ev.recurrence && ev.recurrence.length) || seen[ev.id]) return;
+      if (!ev.start) return;
+      seen[ev.id] = true;
+      once.push(ev);
+    });
+    pageToken = resp.nextPageToken;
+  } while (pageToken);
+
+  const startKey = function (ev) { return ev.start.dateTime || ev.start.date || ''; };
+  once.sort(function (a, b) { return new Date(startKey(a)) - new Date(startKey(b)); });
+  once.forEach(function (ev) { items.push(calendarEventToItem_(ev, calendarId, true)); });
+  return items;
 }
 
 function formatEventTime_(dateTimeStr) {
@@ -1317,12 +1386,12 @@ const CALENDAR_CYCLE_RRULE_MAP_ = {
  * 直接在這個行程本身加上重複規則（等於把它變成一個新的重複系列）。
  * cycleLabel 給「不重複」或空值時，會移除重複規則。
  */
-function updateCalendarEventCycle(eventId, recurringEventId, cycleLabel) {
+function updateCalendarEventCycle(eventId, recurringEventId, cycleLabel, calendarId) {
   const targetId = recurringEventId || eventId;
   if (!targetId) throw new Error('缺少行程 ID');
 
   const rrule = cycleLabelToRRule_(cycleLabel);
-  Calendar.Events.patch({ recurrence: rrule ? [rrule] : [] }, 'primary', targetId);
+  Calendar.Events.patch({ recurrence: rrule ? [rrule] : [] }, calendarId || 'primary', targetId);
   return { success: true };
 }
 
@@ -1359,10 +1428,10 @@ function cycleLabelToRRule_(cycleLabel) {
  * 修改一個日曆行程的標題。如果是重複行程，改的是整個系列（用 recurringEventId 對應的
  * 主行程），所有次的標題都會一起更新；不是重複行程的話，就只改這一筆本身。
  */
-function updateCalendarEventTitle(eventId, recurringEventId, value) {
+function updateCalendarEventTitle(eventId, recurringEventId, value, calendarId) {
   const targetId = recurringEventId || eventId;
   if (!targetId) throw new Error('缺少行程 ID');
-  Calendar.Events.patch({ summary: value }, 'primary', targetId);
+  Calendar.Events.patch({ summary: value }, calendarId || 'primary', targetId);
   return { success: true };
 }
 
@@ -1770,25 +1839,27 @@ function finishHighlightSession(eventId, endMs, minutes, outcome) {
  * 刪除一個日曆行程。如果是重複行程，會用 recurringEventId 刪除整個系列；
  * 不是重複行程的話，就只刪除這一筆。
  */
-function deleteCalendarEvent(eventId, recurringEventId) {
+function deleteCalendarEvent(eventId, recurringEventId, calendarId) {
   const targetId = recurringEventId || eventId;
   if (!targetId) throw new Error('缺少行程 ID');
 
-  Calendar.Events.remove('primary', targetId);
+  Calendar.Events.remove(calendarId || 'primary', targetId);
   return { success: true };
 }
 
 // 同一個重複行程系列，今天可能出現不只一筆（理論上不會，但保險起見快取，避免重複打 API）
 const RECURRENCE_MASTER_CACHE_ = {};
 
-function getRecurrenceLabel_(ev) {
+function getRecurrenceLabel_(ev, calendarId) {
   if (!ev.recurringEventId) return '不重複';
 
-  let master = RECURRENCE_MASTER_CACHE_[ev.recurringEventId];
+  const calId = calendarId || 'primary';
+  const cacheKey = calId + '|' + ev.recurringEventId;
+  let master = RECURRENCE_MASTER_CACHE_[cacheKey];
   if (!master) {
     try {
-      master = Calendar.Events.get('primary', ev.recurringEventId);
-      RECURRENCE_MASTER_CACHE_[ev.recurringEventId] = master;
+      master = Calendar.Events.get(calId, ev.recurringEventId);
+      RECURRENCE_MASTER_CACHE_[cacheKey] = master;
     } catch (err) {
       return '重複（無法讀取規則）';
     }

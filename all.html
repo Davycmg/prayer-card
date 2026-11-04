@@ -515,11 +515,11 @@ const SOURCE_CONFIG = {
     label: '🔁 為習慣禱告', badgeClass: 'habit',
     text: {
       editable: true,
-      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventTitle', eventId: item.id, recurringEventId: item.recurringEventId || '', calendarId: item.calendarId || '', value })
     },
     cycle: {
       show: true, options: CALENDAR_CYCLE_OPTIONS,
-      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', value })
+      save: (item, value) => apiCallWithRetry(MULTI_API_URL, { action: 'updateCalendarEventCycle', eventId: item.id, recurringEventId: item.recurringEventId || '', calendarId: item.calendarId || '', value })
     },
     tag: { show: false },
     note: { editable: false },
@@ -527,7 +527,7 @@ const SOURCE_CONFIG = {
     delete: {
       show: true,
       confirmText: '⚠️ 這會直接刪除 Google 日曆裡的這個行程，無法復原，確定要刪除嗎？',
-      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '' })
+      run: (item) => apiCallWithRetry(MULTI_API_URL, { action: 'deleteCalendarEvent', eventId: item.id, recurringEventId: item.recurringEventId || '', calendarId: item.calendarId || '' })
     }
   },
   network: {
@@ -1236,7 +1236,7 @@ function loadAll() {
   renderEmptyState();
   el.progress.textContent = '載入中...';
 
-  loadSource(generation, 'habit', '習慣', apiCallWithRetry(MULTI_API_URL, { action: 'getTodayCalendarEvents' }));
+  loadSource(generation, 'habit', '習慣', apiCallWithRetry(MULTI_API_URL, { action: 'getTodayCalendarEvents', withExtra: 'true' }));
   // 網絡禱告後端回傳的是 {name, cycle, note}，沒有 text 欄位，這裡補上 text = name 才能跟其他來源共用同一套卡片渲染邏輯
   loadSource(generation, 'network', '網絡', apiCallWithRetry(NETWORK_API_URL, { action: 'getAllItems' }), (item) => { item.text = item.name || ''; });
   loadSource(generation, 'multi', '多方', apiCallWithRetry(MULTI_API_URL, { action: 'getInitData' }));
