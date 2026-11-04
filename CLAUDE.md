@@ -116,3 +116,7 @@ all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` �
 ## all.html「習慣」納入額外日曆（2026-11-04）
 
 除了 primary 日曆今天的行程，all.html 的「習慣」另外納入 `HABIT_EXTRA_CALENDAR_IDS`（`禱告卡部署.gs`，目前是 `4a3fca26…@group.calendar.google.com`）：重複行程只列今天那一次；不重複行程從過去到今天（開始時間在今天結束前）全部列出。all.html 打 `getTodayCalendarEvents&withExtra=true`，calendar.html 不帶參數不受影響。額外日曆的項目帶 `calendarId`，改標題／週期／刪除會帶著它打到正確日曆。標題含 `🍅` 或「任務進度」的行程（兩個日曆都算）會被排除（`HABIT_EXCLUDE_TITLE_KEYWORDS`）。後端部分要手動發布新版本才生效。
+
+## all.html 完成按鈕防誤觸（2026-11-04）
+
+使用者在捷運上（手機晃動／口袋誤觸）兩次一口氣完成幾十項（11/4 一次 29＋12 項）。原因：「✅ 完成」位置固定，完成後下一項立刻出現在同一位置，連續誤觸就連續完成。現在 `completionAllowed()` 擋兩件事：新項目顯示未滿 1.5 秒按完成不算；30 秒內已完成 4 項就暫停完成到視窗過去。「完成」「禱告更多／更少」都經過它。誤觸完成的可用「📜 操作歷程」的「復原」還原。
