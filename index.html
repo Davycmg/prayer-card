@@ -1608,10 +1608,13 @@ if (window.speechSynthesis) {
 }
 
 // passNo：第幾次朗讀，會接在內容最後多念這個數字
+// 回傳 true＝真的有唸出來（要有 onstart 且唸超過 SPEAK_MIN_MS）。語音引擎出錯／被打斷時 onerror／onend
+// 會立刻觸發，以前當成唸完，連禱一秒完成好幾項（2026-11-04 all.html 實際發生，這裡同樣寫法一起修）。
+const SPEAK_MIN_MS = 800;
 function speakOnePass(text, passNo) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis || !text || !text.trim()) {
-      resolve();
+      resolve(false);
       return;
     }
     const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
@@ -1619,8 +1622,10 @@ function speakOnePass(text, passNo) {
     if (zhVoice) utter.voice = zhVoice;
     utter.rate = 0.95;
     utter.pitch = 1;
-    utter.onend = () => resolve();
-    utter.onerror = () => resolve();
+    let startedAt = 0;
+    utter.onstart = () => { startedAt = Date.now(); };
+    utter.onend = () => resolve(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
+    utter.onerror = () => resolve(false);
     window.speechSynthesis.speak(utter);
   });
 }
@@ -1639,10 +1644,11 @@ async function runAutoPray() {
         return;
       }
 
+      let spokeOk = true;
       for (let i = 0; i < repeatCount; i++) {
         if (!autoPrayActive) return;
         el.speakBtn.textContent = `⏹ 停止連禱（${i + 1}/${repeatCount}）`;
-        await speakOnePass(el.prayerText.value, i + 1);
+        if (!(await speakOnePass(el.prayerText.value, i + 1))) spokeOk = false;
         if (autoPrayInterrupted) break;
       }
       if (!autoPrayActive) return;
@@ -1650,6 +1656,13 @@ async function runAutoPray() {
         autoPrayInterrupted = false;
         await new Promise(r => setTimeout(r, 300)); // 剛 cancel() 馬上 speak() 有些瀏覽器會沒聲音
         continue;
+      }
+      // 沒真的唸出來就停下來，不能當作唸完而標記完成
+      if (!spokeOk && !isPureMode) {
+        autoPrayActive = false;
+        el.speakBtn.textContent = '🔊 開始連禱';
+        showStatus('朗讀沒有正常播出，已停止連禱（這項沒有標記完成）');
+        return;
       }
 
       if (isPureMode) {
