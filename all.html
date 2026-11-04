@@ -1756,10 +1756,10 @@ function armConfirmButton(btn, confirmText, onConfirmed) {
 
 // 防誤觸（2026-11-04）：手機放口袋／捷運上晃動時，「✅ 完成」按鈕位置固定，完成一項後下一項馬上出現在
 // 同一個位置，連續誤觸就會一口氣完成幾十項（11/3、11/4 各發生一次，一次 29＋12 項）。兩道防線：
-// 1. 新的一項顯示後 COMPLETE_MIN_DWELL_MS 內按完成不算（真的禱告不可能 1.5 秒就按完成）
+// 1. 新的一項顯示後 COMPLETE_MIN_DWELL_MS 內按完成不算（真的禱告不可能 2 秒就按完成）
 // 2. COMPLETE_BURST_WINDOW_MS 內已經完成 COMPLETE_BURST_MAX 項，就暫停完成到視窗過去為止
 // 「完成」「禱告更多／更少」都會經過這裡。
-const COMPLETE_MIN_DWELL_MS = 1500;
+const COMPLETE_MIN_DWELL_MS = 2000;
 const COMPLETE_BURST_WINDOW_MS = 30000;
 const COMPLETE_BURST_MAX = 4;
 var itemShownAt = 0; // var：renderFromView 在上面定義，避免 TDZ
