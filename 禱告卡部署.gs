@@ -1114,6 +1114,9 @@ function doGet(e) {
       case 'getPrayerProgress':
         result = getPrayerProgress_();
         break;
+      case 'getRecentItems':
+        result = getRecentItems(e.parameter.limit);
+        break;
       case 'addItem':
         result = addItem(e.parameter.text, e.parameter.cycle, e.parameter.note, e.parameter.tag);
         break;
@@ -1973,6 +1976,41 @@ function getAllItems() {
   }
 
   return { items: items, total: items.length };
+}
+
+/**
+ * home.html「最新輸入的禱告」用：回傳「表單回覆 1」最後 limit 列（預設 100、最多 100），
+ * 由新到舊（列號大的在前；表單回覆／addItem 都是附加在最後一列）。不套用到期篩選。
+ * A 欄是表單時間戳記（addItem 新增的沒有），有的話附上 timeText。
+ */
+function getRecentItems(limit) {
+  const n = Math.max(1, Math.min(100, parseInt(limit, 10) || 100));
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { items: [] };
+
+  const startRow = Math.max(2, lastRow - n + 1);
+  const data = sheet.getRange(startRow, 1, lastRow - startRow + 1, 8).getValues();
+  const tz = Session.getScriptTimeZone();
+
+  const items = [];
+  for (let i = data.length - 1; i >= 0; i--) {
+    const text = (data[i][COL.TEXT - 1] || '').toString();
+    if (!text.trim()) continue;
+    const ts = data[i][0];
+    const dateVal = data[i][COL.DATE - 1];
+    const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
+    items.push({
+      row: startRow + i,
+      text: text,
+      cycle: data[i][COL.CYCLE - 1] || '',
+      note: data[i][COL.NOTE - 1] || '',
+      tag: data[i][COL.TAG - 1] || '',
+      timeText: (ts instanceof Date && !isNaN(ts.getTime())) ? Utilities.formatDate(ts, tz, 'yyyy/MM/dd HH:mm') : '',
+      dateText: isValidDate ? Utilities.formatDate(dateVal, tz, 'yyyy/MM/dd') : ''
+    });
+  }
+  return { items: items };
 }
 
 /**
