@@ -292,8 +292,8 @@
   .recent-head button { border: 1px solid var(--purple); background: white; color: var(--purple); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
   .recent-status { font-size: 12px; color: var(--text-sub); }
   /* 一次看到 5 條（每條固定高度），其餘捲動 */
-  .recent-list { list-style: none; margin: 0; padding: 0; max-height: calc(5 * 68px); overflow-y: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid #eee; }
-  .recent-list li { height: 68px; padding: 8px 4px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+  .recent-list { list-style: none; margin: 0; padding: 0; max-height: calc(5 * 84px); overflow-y: auto; -webkit-overflow-scrolling: touch; border-top: 1px solid #eee; }
+  .recent-list li { height: 84px; padding: 8px 4px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
   .recent-text { font-size: 15px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
   .recent-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>
@@ -397,15 +397,6 @@
   <button type="button" id="completeTaskBtn">✅ 完成任務</button>
 </div>
 
-<div class="recent-box">
-  <div class="recent-head">
-    <h2>🆕 最新輸入的禱告</h2>
-    <button type="button" id="recentReloadBtn">重新整理</button>
-  </div>
-  <div class="recent-status" id="recentStatus">載入中…</div>
-  <ul class="recent-list" id="recentList"></ul>
-</div>
-
 <div class="query-row">
   <a class="btn" href="#" id="highlightSettingsBtn">⚙️ 今天的 Highlight 設定</a>
   <a class="btn" href="today.html">📋 今日待辦禱告</a>
@@ -415,6 +406,23 @@
   <a class="btn" href="query.html">🔍 禱告卡片查詢</a>
   <a class="btn" href="#" id="exportTasksBtn">📋 匯出 Google Tasks 到剪貼簿</a>
   <a class="btn" href="#" id="dedupeMultiBtn">🧹 清除重複（多方禱告跟待辦重複的丟垃圾桶；Google Tasks 同清單重複的標記完成）</a>
+</div>
+
+<div class="recent-box">
+  <div class="recent-head">
+    <h2>✍️ 輸入禱告（PUSH 表單）</h2>
+    <a href="https://docs.google.com/forms/d/e/1FAIpQLSf9mM8QyuB3jhqmwRsyWntPyBBsjnpTPAmqf_VC6TdbuA-T-A/viewform" target="_blank" rel="noopener" style="font-size:13px; color:var(--purple);">另開視窗</a>
+  </div>
+  <iframe id="pushFormFrame" src="https://docs.google.com/forms/d/e/1FAIpQLSf9mM8QyuB3jhqmwRsyWntPyBBsjnpTPAmqf_VC6TdbuA-T-A/viewform?embedded=true" style="width:100%; height:900px; border:0;">載入中…</iframe>
+</div>
+
+<div class="recent-box">
+  <div class="recent-head">
+    <h2>🆕 最新輸入的禱告</h2>
+    <button type="button" id="recentReloadBtn">重新整理</button>
+  </div>
+  <div class="recent-status" id="recentStatus">載入中…</div>
+  <ul class="recent-list" id="recentList"></ul>
 </div>
 
 <script>
@@ -1100,6 +1108,11 @@ async function loadRecentItems() {
   }
 }
 document.getElementById('recentReloadBtn').addEventListener('click', loadRecentItems);
+// 嵌入的表單送出後 iframe 會重新載入（第一次是初始載入），等幾秒讓試算表寫入後更新清單
+let pushFormLoads = 0;
+document.getElementById('pushFormFrame').addEventListener('load', () => {
+  if (++pushFormLoads > 1) setTimeout(loadRecentItems, 3000);
+});
 loadRecentItems();
 </script>
 
