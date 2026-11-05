@@ -366,7 +366,7 @@
 
 <div class="toggle-row">
   <label class="switch">
-    <input type="checkbox" id="pureReadToggle" checked>
+    <input type="checkbox" id="pureReadToggle">
     <span class="slider"></span>
   </label>
   <span>純朗讀模式（不標記完成）</span>
@@ -2093,7 +2093,7 @@ el.jumpBtn.addEventListener('click', () => {
 });
 
 // ===== 朗讀：純本地操作，唸完一輪自動停止，不會呼叫任何寫入API =====
-let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 3;
+let repeatCount = parseInt(localStorage.getItem('prayerRepeatCount'), 10) || 7;
 let autoPlayActive = false;
 // 連續朗讀中按了完成／翻頁等其他按鈕：不結束朗讀，只打斷目前這張，接著唸畫面上現在的卡片
 let autoPlayInterrupted = false;
