@@ -1979,9 +1979,9 @@ function getAllItems() {
 }
 
 /**
- * home.html「最新輸入的禱告」用：回傳「表單回覆 1」最後 limit 列（預設 100、最多 100），
- * 由新到舊（列號大的在前；表單回覆／addItem 都是附加在最後一列）。不套用到期篩選。
- * A 欄是表單時間戳記（addItem 新增的沒有），有的話附上 timeText。
+ * home.html「最新輸入的禱告」用：掃描「表單回覆 1」全部列，依 A 欄時間戳記由新到舊排序，回傳前 limit 筆
+ * （預設 100、最多 100）。沒有時間戳記的列排在最後（彼此依列號由大到小），只在有時間的不滿 limit 筆時才會出現。
+ * 不套用到期篩選。
  */
 function getRecentItems(limit) {
   const n = Math.max(1, Math.min(100, parseInt(limit, 10) || 100));
@@ -1989,27 +1989,33 @@ function getRecentItems(limit) {
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return { items: [] };
 
-  const startRow = Math.max(2, lastRow - n + 1);
-  const data = sheet.getRange(startRow, 1, lastRow - startRow + 1, 8).getValues();
+  const data = sheet.getRange(2, 1, lastRow - 1, 8).getValues();
   const tz = Session.getScriptTimeZone();
 
-  const items = [];
-  for (let i = data.length - 1; i >= 0; i--) {
+  const rows = [];
+  for (let i = 0; i < data.length; i++) {
     const text = (data[i][COL.TEXT - 1] || '').toString();
     if (!text.trim()) continue;
     const ts = data[i][0];
-    const dateVal = data[i][COL.DATE - 1];
-    const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
-    items.push({
-      row: startRow + i,
-      text: text,
-      cycle: data[i][COL.CYCLE - 1] || '',
-      note: data[i][COL.NOTE - 1] || '',
-      tag: data[i][COL.TAG - 1] || '',
-      timeText: (ts instanceof Date && !isNaN(ts.getTime())) ? Utilities.formatDate(ts, tz, 'yyyy/MM/dd HH:mm') : '',
-      dateText: isValidDate ? Utilities.formatDate(dateVal, tz, 'yyyy/MM/dd') : ''
-    });
+    const hasTs = ts instanceof Date && !isNaN(ts.getTime());
+    rows.push({ i: i, sortTs: hasTs ? ts.getTime() : -Infinity, ts: hasTs ? ts : null });
   }
+  rows.sort((x, y) => (y.sortTs - x.sortTs) || (y.i - x.i));
+
+  const items = rows.slice(0, n).map(r => {
+    const d = data[r.i];
+    const dateVal = d[COL.DATE - 1];
+    const isValidDate = dateVal instanceof Date && !isNaN(dateVal.getTime());
+    return {
+      row: r.i + 2,
+      text: (d[COL.TEXT - 1] || '').toString(),
+      cycle: d[COL.CYCLE - 1] || '',
+      note: d[COL.NOTE - 1] || '',
+      tag: d[COL.TAG - 1] || '',
+      timeText: r.ts ? Utilities.formatDate(r.ts, tz, 'yyyy/MM/dd HH:mm') : '',
+      dateText: isValidDate ? Utilities.formatDate(dateVal, tz, 'yyyy/MM/dd') : ''
+    };
+  });
   return { items: items };
 }
 
@@ -2416,6 +2422,7 @@ function addItem(text, cycle, note, tag) {
 
   const sheet = getSheet_();
   const newRow = sheet.getLastRow() + 1;
+  sheet.getRange(newRow, 1).setValue(new Date()); // A 欄時間戳記（跟表單回覆一樣），home.html「最新輸入的禱告」靠它排序
   sheet.getRange(newRow, COL.TEXT).setValue(trimmedText);
   sheet.getRange(newRow, COL.CYCLE).setValue(normalizeCode(cycle, CYCLE_MAP));
   sheet.getRange(newRow, COL.NOTE).setValue((note || '').toString().trim());
