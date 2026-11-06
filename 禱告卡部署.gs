@@ -1117,6 +1117,12 @@ function doGet(e) {
       case 'getRecentItems':
         result = getRecentItems(e.parameter.limit);
         break;
+      case 'aiTidyText':
+        result = aiTidyText(e.parameter.text);
+        break;
+      case 'checkClaudeCredit':
+        result = checkClaudeCredit();
+        break;
       case 'addItem':
         result = addItem(e.parameter.text, e.parameter.cycle, e.parameter.note, e.parameter.tag);
         break;

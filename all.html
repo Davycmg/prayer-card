@@ -167,6 +167,12 @@
     background: transparent; color: var(--text-danger); font-size: 13px; opacity: 0.6;
   }
   .delete-row button:active { opacity: 1; }
+  .ai-row { display: flex; justify-content: flex-end; gap: 6px; margin: 4px 0 2px; }
+  .ai-row button {
+    padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-sub); font-size: 12px;
+  }
+  .ai-row button:disabled { opacity: 0.5; }
   .repeat-row {
     width: 100%; max-width: 480px; display: flex; align-items: center;
     justify-content: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
@@ -291,6 +297,10 @@
   <span class="source-badge" id="sourceBadge"></span>
   <span class="dup-warning" id="dupWarning" style="display:none;"></span>
   <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目"></textarea>
+  <div class="ai-row" id="aiRow" style="display:none;">
+    <button type="button" id="aiCreditBtn" title="檢查 Claude API key 與儲值">💳 查儲值</button>
+    <button type="button" id="aiTidyBtn">✨ AI整理</button>
+  </div>
   <div class="readonly-hint" id="readonlyHint" style="display:none;">姓名要到「為網絡禱告」頁面才能改，這裡唯讀；備註可以直接在下面編輯</div>
 
   <div class="meta-row" id="cycleRow" style="display:none;">
@@ -1444,6 +1454,7 @@ function renderFromView(pos) {
   el.itemText.value = item.text || '';
   el.itemText.readOnly = !config.text.editable;
   el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
+  document.getElementById('aiRow').style.display = config.text.editable ? 'flex' : 'none';
 
   // 只有網絡禱告的備註可以編輯、內容通常也比較長，才需要一大格；其他來源備註大多是空的，
   // 顯示一個空的大格子只會把下面的按鈕往下擠，不能編輯又沒內容的話乾脆整欄隱藏。
@@ -1502,6 +1513,7 @@ function renderEmptyState() {
   el.dupWarning.style.display = 'none';
   el.itemText.value = '🎉 目前沒有待代禱的項目';
   el.itemText.readOnly = true;
+  document.getElementById('aiRow').style.display = 'none';
   el.readonlyHint.style.display = 'none';
   el.noteText.value = '';
   el.noteText.readOnly = true;
@@ -1570,6 +1582,47 @@ el.noteText.addEventListener('input', () => {
   const value = el.noteText.value;
   clearTimeout(noteSaveTimer);
   noteSaveTimer = setTimeout(() => flushSave(item, config, 'note', value), 1000);
+});
+
+// 「✨ AI整理」：後端 aiTidyText 用 Claude API 整理文字，確認後才套用（套用＝一般的改文字，可在操作歷程復原）
+document.getElementById('aiTidyBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('aiTidyBtn');
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.text.editable) return;
+  const original = el.itemText.value.trim();
+  if (!original) { showStatus('沒有文字可以整理', true); return; }
+  btn.disabled = true;
+  btn.textContent = '⏳ 整理中…';
+  try {
+    const r = await apiCall(MULTI_API_URL, { action: 'aiTidyText', text: original }, 90000);
+    const tidied = (r.text || '').trim();
+    if (!tidied || tidied === original) { showStatus('AI 覺得不用改'); return; }
+    if (!confirm('AI 整理結果：\n\n' + tidied + (r.truncated ? '\n\n（⚠️ 結果可能被截斷）' : '') + '\n\n要套用嗎？（之後可在操作歷程復原）')) return;
+    if (currentItem() !== item) { showStatus('已切換到別的項目，沒有套用', true); return; }
+    clearTimeout(saveTimer);
+    saveTimer = null;
+    el.itemText.value = tidied;
+    flushSave(item, config, 'text', tidied);
+  } catch (err) {
+    showStatus('AI 整理失敗：' + err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '✨ AI整理';
+  }
+});
+
+document.getElementById('aiCreditBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('aiCreditBtn');
+  btn.disabled = true;
+  try {
+    const r = await apiCall(MULTI_API_URL, { action: 'checkClaudeCredit' }, 60000);
+    alert((r.ok ? '✅ ' : '❌ ') + r.message + '\n\n（實際餘額數字請到 platform.claude.com → Billing 查看）');
+  } catch (err) {
+    alert('❌ 檢查失敗：' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 function flushSave(item, config, field, value) {
