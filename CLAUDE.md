@@ -126,3 +126,7 @@ all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` �
 ## home.html「🆕 最新輸入的禱告」（2026-11-05）
 
 首頁最下面的區塊（2026-11-05 移到按鈕列下方，上面是嵌入的 PUSH Google 表單 iframe `1FAIpQLSf9mM8…/viewform?embedded=true`，送出後 iframe 重新載入時 3 秒後自動重抓清單）：掃描「表單回覆 1」全部列，**依 A 欄時間戳記由新到舊**排序取前 100 筆（2026-11-05 使用者指定，不要改回依列號；沒有時間戳記的排最後），畫面一次顯示 5 條（每條固定高度 84px，最多兩行文字），其餘在框內捲動。每條下方顯示時間戳記（沒有的話顯示列號）、週期、標籤、備註。`addItem`（add-item.html 等）新增時也會寫 A 欄時間戳記（同日起；之前新增的那些沒有時間）。後端 action `getRecentItems&limit=100`（上限 100），要手動發布新版本才生效。
+
+## all.html「✨ AI整理」（2026-11-06，`AI整理.gs`）
+
+卡片文字框右上方的小按鈕（只在文字可編輯的來源顯示）：打 action `aiTidyText` → 後端用 Claude API（`claude-opus-5-5`、effort `low`、`fallbacks: "default"`）整理文字（加標點、去口語贅字、修語音辨識錯字，不改原意），前端 `confirm` 預覽後才套用，套用走一般改文字流程（可在操作歷程復原）。旁邊「💳 查儲值」打 `checkClaudeCredit`：Claude API 沒有查餘額的端點，是送一個最小請求，回 400「credit balance is too low」就是沒儲值；實際餘額要到 platform.claude.com → Billing 看。API key 存指令碼屬性 `CLAUDE_API_KEY`（不進 repo）。部署網址公開，所以限制每段 3000 字、每天 100 次（`AI_TIDY_USAGE`）。`appsscript.json` 加了 `script.external_request` scope：第一次要在編輯器手動執行 `checkClaudeCredit()` 授權，再發布新版本才生效。
