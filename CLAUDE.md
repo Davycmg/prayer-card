@@ -130,3 +130,7 @@ all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` �
 ## all.html「✨ AI整理」（2026-11-06，`AI整理.gs`）
 
 卡片文字框右上方的小按鈕（只在文字可編輯的來源顯示）：打 action `aiTidyText` → 後端用 Claude API（`claude-opus-5-5`、effort `low`、`fallbacks: "default"`）整理文字（加標點、去口語贅字、修語音辨識錯字，不改原意），前端 `confirm` 預覽後才套用，套用走一般改文字流程（可在操作歷程復原）。旁邊「💳 查儲值」打 `checkClaudeCredit`：Claude API 沒有查餘額的端點，是送一個最小請求，回 400「credit balance is too low」就是沒儲值；實際餘額要到 platform.claude.com → Billing 看。API key 存指令碼屬性 `CLAUDE_API_KEY`（不進 repo）。部署網址公開，所以限制每段 3000 字、每天 100 次（`AI_TIDY_USAGE`）。`appsscript.json` 加了 `script.external_request` scope：第一次要在編輯器手動執行 `checkClaudeCredit()` 授權，再發布新版本才生效。
+
+## all.html「💬 LINE」篩選（2026-11-09）
+
+篩選列在「📋 待辦」右邊多一顆「💬 LINE」：把 Google Tasks 裡 linelog 建立的任務（標題符合 `^1 名字：`，即 `LINELOG_PREFIX` + 名字 + `LINELOG_SEP`）從「待辦」分出來。純前端：項目的 `source` 仍是 `task`（完成／改標題等動作不變），只有篩選與上方計數用 `filterKeyOf()` 分成 `task`／`line`（📋／💬 各自計數）。標題被手動改掉 `1 ` 前綴的會回到「待辦」。
