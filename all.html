@@ -604,7 +604,8 @@ let allItems = [];
 let viewItems = [];
 let cachePos = 0;
 // 篩選鈕改成可以複選：activeSources 是目前勾選的來源集合，「全部」是快速全選的捷徑按鈕，
-// 不是獨立的第五個來源。預設全選（等同原本的「全部」）。
+// 不是獨立的第五個來源。預設全選（等同原本的「全部」）。全選狀態下點某一項＝只顯示那一項，
+// 之後再點其他項才是加進去／再點已選的是拿掉（2026-11-11）。
 // 'line' 不是獨立來源：是「待辦」（Google Tasks）裡由 linelog（LINE通知記錄.gs）建立的任務，
 // 標題格式「1 名字：訊息」（LINELOG_PREFIX + who + LINELOG_SEP），篩選時從「待辦」分出來（filterKeyOf）。
 const ALL_SOURCES = ['habit', 'network', 'multi', 'task', 'line'];
@@ -1554,6 +1555,9 @@ el.filterRow.addEventListener('click', (e) => {
   const source = btn.dataset.source;
   if (source === 'all') {
     activeSources = new Set(ALL_SOURCES);
+  } else if (activeSources.size === ALL_SOURCES.length) {
+    // 目前是「全部」狀態：點一個來源＝只顯示那一項；之後再點別的才是加進去（接連點兩項＝只顯示這兩項）
+    activeSources = new Set([source]);
   } else if (activeSources.has(source)) {
     if (activeSources.size === 1) { showStatus('至少要選一個來源'); return; }
     activeSources.delete(source);
