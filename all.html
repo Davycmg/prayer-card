@@ -47,6 +47,14 @@
     background: white; color: var(--main-primary); font-size: 12px;
   }
   .filter-row button.active { background: var(--main-primary); color: white; }
+  .habit-when {
+    margin-top: 8px; padding: 4px 12px; border-radius: 999px;
+    font-size: 13px; font-weight: bold; color: white;
+  }
+  .habit-when.recurring { background: #5b7fa6; }
+  .habit-when.past { background: #b0603f; }
+  .habit-when.today { background: #3d9e5a; }
+  .habit-when.future { background: #8a6bb0; }
   .card {
     width: 100%;
     max-width: 480px;
@@ -293,6 +301,7 @@
   <button type="button" data-source="task">📋 待辦</button>
   <button type="button" data-source="line">💬 LINE</button>
 </div>
+<div class="habit-when" id="habitWhen" style="display:none;"></div>
 
 <div class="card">
   <span class="source-badge" id="sourceBadge"></span>
@@ -654,6 +663,7 @@ const el = {
   progressBreakdown: document.getElementById('progressBreakdown'),
   filterRow: document.getElementById('filterRow'),
   sourceBadge: document.getElementById('sourceBadge'),
+  habitWhen: document.getElementById('habitWhen'),
   dupWarning: document.getElementById('dupWarning'),
   itemText: document.getElementById('itemText'),
   readonlyHint: document.getElementById('readonlyHint'),
@@ -1452,6 +1462,7 @@ function renderFromView(pos) {
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
   el.sourceBadge.textContent = config.label;
   el.sourceBadge.className = 'source-badge ' + config.badgeClass;
+  renderHabitWhen(item);
 
   const dupLabels = findDuplicateSourceLabels(item);
   if (dupLabels.length) {
@@ -1516,10 +1527,41 @@ function renderFromView(pos) {
   el.exportToFormBtn.style.display = (item.source === 'habit' || item.source === 'network') ? 'block' : 'none';
 }
 
+// 「習慣」項目標示：重複行程／過去／今天／未來（2026-11-11）。
+// 後端 calendarEventToItem_：重複行程帶 recurringEventId；額外日曆的不重複行程 time 是「yyyy/MM/dd HH:mm」，
+// primary 日曆的只有「HH:mm」或「全天」（一定是今天）。純前端判斷，不用重新發布 Apps Script。
+function habitWhenOf(item) {
+  if (item.recurringEventId) return { cls: 'recurring', label: '🔁 重複行程' };
+  const m = String(item.time || '').match(/^(\d{4})\/(\d{2})\/(\d{2})/);
+  if (!m) return { cls: 'today', label: '📍 今天' };
+  const now = new Date();
+  const todayKey = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  const key = Number(m[1]) * 10000 + Number(m[2]) * 100 + Number(m[3]);
+  const dateText = `${m[1]}/${m[2]}/${m[3]}`;
+  if (key < todayKey) {
+    const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) / 86400000);
+    return { cls: 'past', label: `⏪ 過去（${dateText}，${days} 天前）` };
+  }
+  if (key > todayKey) return { cls: 'future', label: `⏩ 未來（${dateText}）` };
+  return { cls: 'today', label: '📍 今天' };
+}
+
+function renderHabitWhen(item) {
+  if (!item || item.source !== 'habit') {
+    el.habitWhen.style.display = 'none';
+    return;
+  }
+  const w = habitWhenOf(item);
+  el.habitWhen.className = 'habit-when ' + w.cls;
+  el.habitWhen.textContent = w.label;
+  el.habitWhen.style.display = 'inline-block';
+}
+
 function renderEmptyState() {
   el.progress.textContent = '第 0 項 / 共 0 項';
   el.sourceBadge.textContent = '';
   el.sourceBadge.className = 'source-badge';
+  renderHabitWhen(null);
   el.dupWarning.style.display = 'none';
   el.itemText.value = '🎉 目前沒有待代禱的項目';
   el.itemText.readOnly = true;
