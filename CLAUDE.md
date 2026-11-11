@@ -141,4 +141,4 @@ all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` �
 
 ## all.html「習慣」時間標示（2026-11-11）
 
-篩選列（LINE 那排）下方，目前卡片是「習慣」時顯示一個標籤：`🔁 重複行程`（有 `recurringEventId`）、`⏪ 過去（yyyy/MM/dd，N 天前）`、`📍 今天`、`⏩ 未來`。純前端判斷（`habitWhenOf()`）：額外日曆的不重複行程 `time` 帶日期（`yyyy/MM/dd HH:mm`），拿來跟今天比；primary 日曆的 `time` 只有時間，一定是今天。不用重新發布 Apps Script。
+卡片白框右上角（跟左上「為習慣禱告」同一排），目前卡片是「習慣」時顯示一個標籤：`🔁 重複行程`（有 `recurringEventId`）、`⏪ 過去（yyyy/MM/dd，N 天前）`、`📍 今天`、`⏩ 未來`。純前端判斷（`habitWhenOf()`）：額外日曆的不重複行程 `time` 帶日期（`yyyy/MM/dd HH:mm`），拿來跟今天比；primary 日曆的 `time` 只有時間，一定是今天。不用重新發布 Apps Script。

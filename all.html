@@ -47,9 +47,11 @@
     background: white; color: var(--main-primary); font-size: 12px;
   }
   .filter-row button.active { background: var(--main-primary); color: white; }
+  .card { position: relative; }
   .habit-when {
-    margin-top: 8px; padding: 4px 12px; border-radius: 999px;
-    font-size: 13px; font-weight: bold; color: white;
+    position: absolute; top: 24px; right: 20px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: bold; color: white;
   }
   .habit-when.recurring { background: #5b7fa6; }
   .habit-when.past { background: #b0603f; }
@@ -301,9 +303,9 @@
   <button type="button" data-source="task">📋 待辦</button>
   <button type="button" data-source="line">💬 LINE</button>
 </div>
-<div class="habit-when" id="habitWhen" style="display:none;"></div>
 
 <div class="card">
+  <span class="habit-when" id="habitWhen" style="display:none;"></span>
   <span class="source-badge" id="sourceBadge"></span>
   <span class="dup-warning" id="dupWarning" style="display:none;"></span>
   <textarea class="prayer-text" id="itemText" placeholder="今天沒有待代禱的項目"></textarea>
