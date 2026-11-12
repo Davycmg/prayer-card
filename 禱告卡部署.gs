@@ -1286,11 +1286,14 @@ function getTodayCalendarEvents(withExtra) {
   // all.html 的「習慣」另外納入 HABIT_EXTRA_CALENDAR_IDS：重複行程只列今天那一次，
   // 不重複的行程則從過去到今天全部列出（calendar.html 不帶 withExtra，不受影響）
   if (withExtra) {
+    const todayKey = Utilities.formatDate(now, Session.getScriptTimeZone(), 'yyyy/MM/dd');
     HABIT_EXTRA_CALENDAR_IDS.forEach(function (calId) {
       Array.prototype.push.apply(items, getExtraHabitCalendarItems_(calId, startOfDay, endOfDay));
     });
     // all.html 的「習慣」排除標題含 🍅 或「任務進度」的行程（兩個日曆都套用）
     items = items.filter(function (it) {
+      // 重複行程只留「開始日期就是今天」的那一次（跨日／前一天延續到今天的不算，2026-11-12）
+      if (it.recurringEventId && it.startDate !== todayKey) return false;
       return !HABIT_EXCLUDE_TITLE_KEYWORDS.some(function (kw) { return it.text.indexOf(kw) !== -1; });
     });
   }
@@ -1309,17 +1312,16 @@ function calendarEventToItem_(ev, calendarId, withDate) {
   const isAllDay = !!(ev.start && ev.start.date);
   const tz = Session.getScriptTimeZone();
   let time = isAllDay ? '全天' : formatEventTime_(ev.start.dateTime);
-  if (withDate) {
-    const d = isAllDay ? ev.start.date.replace(/-/g, '/') : Utilities.formatDate(new Date(ev.start.dateTime), tz, 'yyyy/MM/dd');
-    time = d + ' ' + time;
-  }
+  const d = isAllDay ? ev.start.date.replace(/-/g, '/') : Utilities.formatDate(new Date(ev.start.dateTime), tz, 'yyyy/MM/dd');
+  if (withDate) time = d + ' ' + time;
   const item = {
     id: ev.id,
     recurringEventId: ev.recurringEventId || '',
     text: ev.summary || '(無標題)',
     time: time,
     note: ev.description ? stripHtml_(ev.description) : '',
-    cycle: getRecurrenceLabel_(ev, calendarId)
+    cycle: getRecurrenceLabel_(ev, calendarId),
+    startDate: d
   };
   if (calendarId !== 'primary') item.calendarId = calendarId;
   return item;
