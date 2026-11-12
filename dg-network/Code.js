@@ -97,6 +97,15 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // view=all → 為網絡禱告（all.html 版面，只有網絡這個來源，拿掉 Google Tasks／日曆相關功能）
+  if (view === 'all') {
+    const tmpl = HtmlService.createTemplateFromFile('AllCard');
+    tmpl.apiUrl = ScriptApp.getService().getUrl();
+    return tmpl.evaluate()
+      .setTitle('為網絡禱告')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // view=card-fixed → 代禱卡片網頁（固定名單版，只顯示 FIXED_ROSTER_NAMES 那幾位，依指定順序）
   if (view === 'card-fixed') {
     const tmpl = HtmlService.createTemplateFromFile('CardIndexFixed');
