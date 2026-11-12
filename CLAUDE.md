@@ -50,6 +50,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
   - `.../exec` → 代禱表單（依姓名帶出舊資料編輯）
   - `.../exec?form=simple` → 代禱表單簡化版（不顯示 DG 週期，有舊資料就沿用原週期，沒有就預設「每月」）
   - `.../exec?view=card` → 代禱卡片網頁（今日待代禱名單，可翻頁、朗讀）
+  - `.../exec?view=all` → 為網絡禱告（`AllCard.html`，2026-11-12）：根目錄 all.html 的版面，但只有「網絡」這個來源，拿掉所有 Google Tasks／日曆／多方禱告相關的按鈕（篩選列、AI整理、標籤、複製到 Tasks、加入日曆、垃圾桶、LINE 等）。保留：翻頁／隨機／跳到、完成（含防誤觸）、刪除、改週期、改備註、朗讀（姓名＋備註）、一鍵輸出、操作歷程（重送／復原）。API 打同一個部署網址（`tmpl.apiUrl`）。要手動發布新版本才生效。
   - `.../exec?action=xxx` → 代禱卡片專用資料 API（前端 fetch 用）
 - 也內建 Google Sheet 內操作版的代禱卡片（`onOpen` 選單「🙏 代禱卡片」），含自動合併同名重複資料、朗讀連禱等功能。
 

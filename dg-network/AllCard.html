@@ -1,0 +1,1190 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>為網絡禱告</title>
+<!--
+  為網絡禱告（all.html 版面）：根目錄 all.html 的版面與操作邏輯，但只保留「🌐 網絡」這一個來源
+  （dg-network 試算表「表單回覆 1」今天到期的代禱名單），拿掉所有 Google Tasks／Google 日曆／
+  多方禱告相關的按鈕與功能。透過 dg-network 的 doGet（?view=all）發布，API 打同一個部署網址。
+-->
+<style>
+  :root {
+    --main-primary: #3d4a5c;
+    --main-primary-light: #dde1e6;
+    --main-primary-light-text: #2c3644;
+    --text-main: #2a2f36;
+    --text-sub: #6b7280;
+    --clay: #8a6a4e;
+    --teal: #3d7a68;
+    --border: #d9dce0;
+    --border-strong: #c2c6cc;
+    --text-danger: #b0413e;
+    --gray-bg: #f0f1f2;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px;
+  }
+  .header { width: 100%; max-width: 480px; text-align: center; padding: 12px 0; }
+  .header h1 { font-size: 20px; color: var(--main-primary); margin: 0; }
+  .progress { font-size: 14px; color: var(--text-sub); margin-top: 4px; }
+  .progress-breakdown { font-size: 12px; color: var(--text-sub); margin-top: 2px; }
+  .card {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 24px 20px;
+    margin-top: 12px;
+  }
+  .source-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+  }
+  .source-badge.network { background: #3d9e8f; }
+  .prayer-text {
+    font-size: 22px;
+    line-height: 1.6;
+    min-height: 60px;
+    white-space: pre-wrap;
+    outline: none;
+    border: none;
+    width: 100%;
+    background: transparent;
+    font-family: inherit;
+    resize: none;
+    color: var(--text-main);
+    margin-top: 12px;
+  }
+  .prayer-text[readonly] { color: var(--text-main); }
+  .readonly-hint { font-size: 11px; color: var(--text-sub); margin-top: -6px; }
+  .meta-row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .meta-field { flex: 1; min-width: 130px; }
+  .meta-field label { display: block; font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .meta-field select {
+    width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-strong);
+    font-size: 15px; background: var(--main-primary-light);
+  }
+  .meta-field select.cycle-empty {
+    background: #ff8a80; border: 1px solid #d32f2f; color: #7a0000; font-weight: bold;
+  }
+  .note {
+    display: block; margin-top: 14px; font-size: 13px; color: var(--text-sub);
+    white-space: pre-wrap; width: 100%; outline: none; font-family: inherit; resize: none;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: white;
+  }
+  .note:focus { border-color: var(--main-primary); }
+  .controls { width: 100%; max-width: 480px; display: flex; gap: 10px; margin-top: 16px; }
+  .btn {
+    flex: 1;
+    padding: 16px 0;
+    border-radius: 12px;
+    border: none;
+    font-size: 17px;
+    font-weight: bold;
+    color: white;
+    background: var(--main-primary);
+    cursor: pointer;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn:disabled { opacity: 0.35; cursor: default; }
+  .btn.prev { background: var(--main-primary-light); color: var(--main-primary-light-text); }
+  .btn.next { background: var(--main-primary); }
+  .btn.complete { background: var(--teal); }
+  .btn.random { background: var(--clay); }
+  .btn.speak { background: var(--clay); }
+  .controls.triple { gap: 6px; }
+  .controls.triple .btn { font-size: 14px; padding: 14px 2px; }
+  .delete-row { width: 100%; max-width: 480px; display: flex; justify-content: center; margin-top: 10px; }
+  .delete-row button {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--text-danger); font-size: 13px; opacity: 0.6;
+  }
+  .delete-row button:active { opacity: 1; }
+  .repeat-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    justify-content: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
+  }
+  .repeat-row .repeat-options { display: flex; gap: 6px; }
+  .repeat-row button {
+    padding: 6px 12px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 14px;
+  }
+  .repeat-row button.active { background: var(--main-primary); color: white; }
+  .jump-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    gap: 8px; margin-top: 14px; justify-content: center;
+  }
+  .jump-row input {
+    width: 70px; padding: 8px; text-align: center; border-radius: 8px;
+    border: 1px solid var(--border); font-size: 15px;
+  }
+  .jump-row button {
+    padding: 8px 14px; border-radius: 8px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 14px;
+  }
+  .status { margin-top: 10px; font-size: 12px; color: var(--text-sub); min-height: 16px; text-align: center; max-width: 480px; }
+  .wide-btn {
+    margin-top: 10px; width: 100%; max-width: 480px; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--main-primary); background: white; color: var(--main-primary);
+    font-size: 14px; cursor: pointer;
+  }
+  .wide-btn:active { opacity: 0.7; }
+  .overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    align-items: flex-end; justify-content: center; z-index: 20;
+  }
+  .overlay.show { display: flex; }
+  .panel {
+    width: 100%; max-width: 480px; max-height: 80vh; background: white;
+    border-radius: 16px 16px 0 0; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .panel-header h2 { font-size: 17px; margin: 0; color: var(--main-primary); }
+  .close-btn { border: none; background: transparent; font-size: 18px; color: var(--text-sub); padding: 4px 8px; cursor: pointer; }
+  .panel-list { overflow-y: auto; padding: 8px 20px; flex: 1; }
+  .empty-msg { text-align: center; color: var(--text-sub); font-size: 14px; padding: 32px 0; }
+  .list-item { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .list-item-main { flex: 1; min-width: 0; }
+  .list-item-text { font-size: 14px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .list-item-meta { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+  .list-item-actions { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+  .list-item-actions button { padding: 6px 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; cursor: pointer; }
+  .resend-btn { border: 1px solid var(--main-primary); background: white; color: var(--main-primary); }
+  .undo-btn { border: 1px solid var(--border); background: white; color: var(--text-danger); }
+  .panel-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
+  .clear-btn { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--text-danger); background: white; color: var(--text-danger); font-size: 14px; cursor: pointer; }
+  .oplog-item-state { font-size: 12px; white-space: nowrap; }
+  .oplog-ok { color: var(--main-primary); }
+  .oplog-pending { color: var(--text-sub); }
+  .oplog-fail { color: var(--text-danger); font-weight: bold; }
+  .oplog-summary { font-size: 13px; color: var(--text-sub); padding: 8px 20px 0; }
+  .toggle-row {
+    width: 100%; max-width: 480px; display: flex; align-items: center;
+    justify-content: center; gap: 10px; margin-top: 12px; font-size: 13px; color: var(--text-sub);
+  }
+  .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #ccc; transition: .2s; border-radius: 24px;
+  }
+  .slider:before {
+    position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+    background-color: white; transition: .2s; border-radius: 50%;
+  }
+  input:checked + .slider { background-color: var(--main-primary); }
+  input:checked + .slider:before { transform: translateX(20px); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🌐 為網絡禱告</h1>
+  <div class="progress" id="progress">載入中...</div>
+  <div class="progress-breakdown" id="progressBreakdown"></div>
+</div>
+
+<div class="card">
+  <span class="source-badge network">🌐 為網絡禱告</span>
+  <textarea class="prayer-text" id="itemText" rows="1" readonly placeholder="今天沒有待代禱的項目"></textarea>
+  <div class="readonly-hint" id="readonlyHint" style="display:none;">姓名唯讀（要改請用代禱表單）；週期、備註可以直接在這裡改</div>
+
+  <div class="meta-row" id="cycleRow" style="display:none;">
+    <div class="meta-field">
+      <label>DG 週期</label>
+      <select id="cycleSelect"></select>
+    </div>
+  </div>
+
+  <textarea class="note" id="noteText" placeholder="備註（可直接編輯）" rows="10" style="display:none;"></textarea>
+</div>
+
+<div class="controls triple">
+  <button class="btn prev" id="prevBtn">◀ 上一項</button>
+  <button class="btn next" id="nextBtn">下一項 ▶</button>
+  <button class="btn complete" id="completeBtn">✅ 完成</button>
+</div>
+
+<div class="delete-row" id="deleteRow">
+  <button id="deleteBtn">🗑 刪除此項</button>
+</div>
+
+<div class="controls">
+  <button class="btn random" id="randomBtn">🎲 隨機一項</button>
+  <button class="btn speak" id="speakBtn">🔊 開始朗讀</button>
+</div>
+
+<div class="repeat-row">
+  <span>每項朗讀次數：</span>
+  <div class="repeat-options" id="repeatOptions">
+    <button type="button" data-count="1">1 次</button>
+    <button type="button" data-count="2">2 次</button>
+    <button type="button" data-count="3">3 次</button>
+    <button type="button" data-count="7">7 次</button>
+  </div>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="pureReadToggle">
+    <span class="slider"></span>
+  </label>
+  <span>純朗讀模式（不標記完成）</span>
+</div>
+
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="randomOrderToggle" checked>
+    <span class="slider"></span>
+  </label>
+  <span>隨機排序</span>
+</div>
+
+<div class="jump-row">
+  <input type="number" id="jumpInput" placeholder="第幾項" min="1">
+  <button id="jumpBtn">跳到</button>
+</div>
+
+<button class="wide-btn" id="exportAllBtn">📤 一鍵輸出目前清單所有項目</button>
+<button class="wide-btn" id="openOpLogBtn">📜 操作歷程（完成／刪除／編輯是否真的送出）</button>
+
+<div class="status" id="status"></div>
+
+<div class="overlay" id="opLogOverlay">
+  <div class="panel">
+    <div class="panel-header">
+      <h2>操作歷程</h2>
+      <button id="closeOpLogBtn" class="close-btn">✕</button>
+    </div>
+    <div class="oplog-summary" id="opLogSummary"></div>
+    <div class="panel-list" id="opLogList"></div>
+    <div class="panel-footer">
+      <button id="clearOpLogBtn" class="clear-btn">清除歷程記錄</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 這個頁面由 dg-network 的 doGet（?view=all）發布，API 就是同一個部署網址
+const API_URL = '<?= apiUrl ?>';
+
+// 跟 dg-network/CardIndex.html 一致：週期選項（由密集到疏鬆，「隨機排序」關掉時依這個順序排）
+const CYCLE_OPTIONS = ['每天','每兩天','每三天','每四天','每五天','每週','每兩週','每月','每兩個月','每季','每半年','每年'];
+
+// localStorage 跟 all.html 分開（不同網域本來就分開，key 也取不同名字避免混淆）
+const DRAWN_KEYS_STORAGE_KEY = 'dgAllCard_drawnKeys';
+const OPLOG_STORAGE_KEY = 'dgAllCard_opLog';
+const REPEAT_STORAGE_KEY = 'dgAllCard_repeatCount';
+
+function storageGet(key) { try { return localStorage.getItem(key); } catch (err) { return null; } }
+function storageSet(key, value) { try { localStorage.setItem(key, value); } catch (err) { /* 存不進去就算了 */ } }
+
+let allItems = [];
+let viewItems = [];
+let cachePos = 0;
+let saveTimer = null;
+
+// ===== 「這一輪看過了」的記憶（隨機一項會優先抽還沒看過的）=====
+function keyOf(item) { return 'r' + item.row + '|' + (item.text || ''); }
+function loadDrawnKeys() {
+  try {
+    const raw = storageGet(DRAWN_KEYS_STORAGE_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch (err) { return new Set(); }
+}
+let drawnKeys = loadDrawnKeys();
+function saveDrawnKeys() { storageSet(DRAWN_KEYS_STORAGE_KEY, JSON.stringify(Array.from(drawnKeys))); }
+function markAsSeen(item) {
+  const key = keyOf(item);
+  if (!drawnKeys.has(key)) { drawnKeys.add(key); saveDrawnKeys(); }
+}
+
+const el = {
+  progress: document.getElementById('progress'),
+  progressBreakdown: document.getElementById('progressBreakdown'),
+  itemText: document.getElementById('itemText'),
+  readonlyHint: document.getElementById('readonlyHint'),
+  cycleRow: document.getElementById('cycleRow'),
+  cycleSelect: document.getElementById('cycleSelect'),
+  noteText: document.getElementById('noteText'),
+  completeBtn: document.getElementById('completeBtn'),
+  deleteRow: document.getElementById('deleteRow'),
+  deleteBtn: document.getElementById('deleteBtn'),
+  prevBtn: document.getElementById('prevBtn'),
+  nextBtn: document.getElementById('nextBtn'),
+  randomBtn: document.getElementById('randomBtn'),
+  speakBtn: document.getElementById('speakBtn'),
+  repeatOptions: document.getElementById('repeatOptions'),
+  pureReadToggle: document.getElementById('pureReadToggle'),
+  randomOrderToggle: document.getElementById('randomOrderToggle'),
+  jumpInput: document.getElementById('jumpInput'),
+  jumpBtn: document.getElementById('jumpBtn'),
+  exportAllBtn: document.getElementById('exportAllBtn'),
+  openOpLogBtn: document.getElementById('openOpLogBtn'),
+  opLogOverlay: document.getElementById('opLogOverlay'),
+  closeOpLogBtn: document.getElementById('closeOpLogBtn'),
+  opLogSummary: document.getElementById('opLogSummary'),
+  opLogList: document.getElementById('opLogList'),
+  clearOpLogBtn: document.getElementById('clearOpLogBtn'),
+  status: document.getElementById('status')
+};
+
+let statusClearTimer = null;
+function showStatus(msg, persistent) {
+  clearTimeout(statusClearTimer);
+  el.status.textContent = msg;
+  el.status.style.color = persistent ? 'var(--text-danger)' : '';
+  if (!persistent) statusClearTimer = setTimeout(() => { el.status.textContent = ''; }, 1800);
+}
+
+async function apiCall(params, timeoutMs) {
+  params._t = Date.now();
+  const url = API_URL + '?' + new URLSearchParams(params).toString();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs || 15000);
+  let res;
+  try {
+    res = await fetch(url, { cache: 'no-store', signal: controller.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('連線逾時（超過 ' + Math.round((timeoutMs || 15000) / 1000) + ' 秒沒有回應）');
+    throw new Error('連線失敗：' + err.message);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch (parseErr) {
+    throw new Error('伺服器回應異常，可能是登入逾時或暫時性錯誤');
+  }
+  if (data.error) throw new Error(data.error);
+  return data;
+}
+
+async function apiCallRetrying(params) {
+  const delays = [0, 1200, 2500];
+  let lastErr;
+  for (const delay of delays) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    try { return await apiCall(Object.assign({}, params)); } catch (err) { lastErr = err; }
+  }
+  throw lastErr;
+}
+
+// 寫入動作：記操作歷程＋列號類動作排隊一個一個送
+function apiCallWithRetry(params) {
+  const label = params._label; // 只給操作歷程顯示用，不送到伺服器
+  delete params._label;
+  const logId = isWriteAction(params.action) ? opLogAdd(params, label) : null;
+  const promise = (params.row !== undefined && ROW_MUTATION_ACTIONS.has(params.action))
+    ? rowMutation(params, logId)
+    : (opLogUpdate(logId, { state: 'sent' }), apiCallRetrying(params));
+  if (logId) {
+    promise.then(
+      (data) => opLogUpdate(logId, { state: 'ok', result: pickUndoInfo(data) }),
+      (err) => {
+        const markFail = () => opLogUpdate(logId, { state: 'fail', err: err && err.message });
+        if (pageUnloading) afterPageRestore.push(markFail); else markFail();
+      }
+    );
+  }
+  return promise;
+}
+
+const ITEM_API = {
+  complete: (item) => apiCallWithRetry({ action: 'completeByRow', row: item.row, expect: item.text }),
+  delete: (item) => apiCallWithRetry({ action: 'deleteByRow', row: item.row, expect: item.text }),
+  saveCycle: (item, value) => apiCallWithRetry({ action: 'updateCycleByRow', row: item.row, value, expect: item.text }),
+  saveNote: (item, value) => apiCallWithRetry({ action: 'updateNoteByRow', row: item.row, value, expect: item.text })
+};
+
+// ===== 操作歷程（跟 all.html 同一套，只記這台裝置）=====
+const OPLOG_MAX = 500;
+const OPLOG_ACTION_LABELS = {
+  completeByRow: '完成', deleteByRow: '刪除', updateCycleByRow: '改週期', updateNoteByRow: '改備註',
+  undoCompleteByRow: '復原完成', restoreRow: '復原刪除'
+};
+function isWriteAction(action) { return Object.prototype.hasOwnProperty.call(OPLOG_ACTION_LABELS, action); }
+
+function pickUndoInfo(data) {
+  if (!data || typeof data !== 'object') return undefined;
+  const info = {};
+  ['row', 'newDate', 'oldValue', 'oldThis', 'oldNext', 'rowValues'].forEach(k => {
+    if (data[k] !== undefined) info[k] = data[k];
+  });
+  return Object.keys(info).length ? info : undefined;
+}
+
+// dg-network 沒有垃圾桶：刪除時伺服器回傳整列內容，復原就加回最後一列
+function opLogUndoRequest(entry) {
+  if (entry.state !== 'ok' || entry.undone || entry.stillDue || !entry.result) return null;
+  const p = entry.params || {};
+  const r = entry.result;
+  switch (entry.action) {
+    case 'completeByRow':
+      if (r.oldNext === undefined || !p.expect) return null;
+      return { action: 'undoCompleteByRow', row: r.row, expect: p.expect, oldThis: r.oldThis, oldNext: r.oldNext };
+    case 'deleteByRow':
+      if (!r.rowValues) return null;
+      return { action: 'restoreRow', values: r.rowValues };
+    case 'updateCycleByRow':
+    case 'updateNoteByRow':
+      if (r.oldValue === undefined || !p.expect) return null;
+      return { action: entry.action, row: r.row, expect: p.expect, value: r.oldValue };
+    default:
+      return null;
+  }
+}
+
+function undoOpLogEntry(entry, btn) {
+  const req = opLogUndoRequest(entry);
+  if (!req) return;
+  btn.disabled = true;
+  req._label = entry.text;
+  apiCallWithRetry(req)
+    .then(() => {
+      entry.undone = Date.now();
+      saveOpLog();
+      showStatus('已復原：' + (entry.text || ''));
+      loadAll();
+    })
+    .catch(err => { btn.disabled = false; showStatus('復原失敗：' + err.message, true); })
+    .finally(renderOpLog);
+}
+
+let opLogNewlyLost = 0;
+function loadOpLog() {
+  try {
+    const list = JSON.parse(storageGet(OPLOG_STORAGE_KEY) || '[]');
+    list.forEach(e => {
+      if (e.state === 'queued') { e.state = 'lost'; opLogNewlyLost++; }
+      else if (e.state === 'sent') { e.state = 'unknown'; opLogNewlyLost++; }
+    });
+    return list;
+  } catch (err) { return []; }
+}
+let opLog = loadOpLog();
+function saveOpLog() {
+  if (opLog.length > OPLOG_MAX) opLog = opLog.slice(opLog.length - OPLOG_MAX);
+  storageSet(OPLOG_STORAGE_KEY, JSON.stringify(opLog));
+}
+saveOpLog();
+
+let recentlyRemovedItems = [];
+function opLogAdd(params, label) {
+  const item = params.row !== undefined
+    ? allItems.concat(recentlyRemovedItems).find(it => String(it.row) === String(params.row))
+    : null;
+  const isUpdate = /^update/.test(params.action);
+  const entry = {
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    t: Date.now(),
+    action: params.action,
+    text: label || params.expect || (item && item.text) || '',
+    value: isUpdate ? String(params.value || '') : '',
+    state: 'queued',
+    params: Object.assign({}, params)
+  };
+  delete entry.params._t;
+  opLog.push(entry);
+  saveOpLog();
+  updateOpLogButton();
+  return entry.id;
+}
+
+function opLogUpdate(id, patch) {
+  if (!id) return;
+  const entry = opLog.find(e => e.id === id);
+  if (!entry) return;
+  Object.assign(entry, patch);
+  if (patch.state === 'ok' || patch.state === 'fail') entry.doneAt = Date.now();
+  saveOpLog();
+  updateOpLogButton();
+  if (el.opLogOverlay.classList.contains('show')) renderOpLog();
+}
+
+function opLogPendingCount() { return opLog.filter(e => e.state === 'queued' || e.state === 'sent').length; }
+function updateOpLogButton() {
+  const pending = opLogPendingCount();
+  el.openOpLogBtn.textContent = pending
+    ? '📜 操作歷程（還有 ' + pending + ' 筆同步中，先別關頁面）'
+    : '📜 操作歷程（完成／刪除／編輯是否真的送出）';
+}
+
+// 「完成」回報成功、重新載入後卻還在到期清單的，標記成「回報成功但沒生效」
+let loadStartedAt = 0;
+function opLogVerifyLoaded(items) {
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const norm = t => String(t || '').replace(/\s+/g, ' ').trim();
+  const dueTexts = new Set(items.map(it => norm(it.text)));
+  let flagged = 0;
+  opLog.forEach(e => {
+    if (e.state !== 'ok' || e.stillDue || e.undone || e.action !== 'completeByRow') return;
+    if (!e.doneAt || e.doneAt < todayStart.getTime() || e.doneAt >= loadStartedAt) return;
+    if (e.text && dueTexts.has(norm(e.text))) { e.stillDue = Date.now(); flagged++; }
+  });
+  if (flagged) {
+    saveOpLog();
+    showStatus('有 ' + flagged + ' 筆「完成」伺服器回報成功，但重新載入後還在清單，詳見「📜 操作歷程」', true);
+  }
+}
+
+let pageUnloading = false;
+const afterPageRestore = [];
+window.addEventListener('pagehide', () => { pageUnloading = true; });
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  pageUnloading = false;
+  afterPageRestore.splice(0).forEach(fn => fn());
+});
+window.addEventListener('beforeunload', (e) => {
+  if (opLogPendingCount() === 0) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
+const OPLOG_STATE_TEXT = {
+  queued: ['⏳ 排隊中', 'oplog-pending'],
+  sent: ['⏳ 已送出，等回應', 'oplog-pending'],
+  ok: ['✅ 成功', 'oplog-ok'],
+  fail: ['❌ 失敗', 'oplog-fail'],
+  lost: ['❌ 沒送出（頁面已關閉）', 'oplog-fail'],
+  unknown: ['❓ 已送出但沒等到回應', 'oplog-fail'],
+  resent: ['↻ 已重送（見上方新記錄）', 'oplog-pending']
+};
+
+function formatOpLogTime(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+}
+
+// 重送只開放給帶 expect（姓名）的請求：伺服器能用姓名找回正確的列
+function opLogCanResend(entry) {
+  if (entry.state !== 'lost' && entry.state !== 'fail') return false;
+  return !!(entry.params && entry.params.expect);
+}
+
+function renderOpLog() {
+  const pending = opLogPendingCount();
+  const failed = opLog.filter(e => e.state === 'fail' || e.state === 'lost' || e.state === 'unknown' || (e.state === 'ok' && e.stillDue)).length;
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const todayOk = opLog.filter(e => e.state === 'ok' && e.t >= todayStart.getTime()).length;
+  el.opLogSummary.textContent = '今天成功 ' + todayOk + ' 筆 · 進行中 ' + pending + ' 筆 · 失敗／沒送出 ' + failed + ' 筆'
+    + '（只記錄這台裝置、這個瀏覽器的操作）';
+
+  el.opLogList.innerHTML = '';
+  if (opLog.length === 0) {
+    el.opLogList.innerHTML = '<div class="empty-msg">還沒有任何操作記錄</div>';
+    return;
+  }
+  opLog.slice().reverse().forEach(entry => {
+    const row = document.createElement('div');
+    row.className = 'list-item';
+    const main = document.createElement('div');
+    main.className = 'list-item-main';
+    const text = document.createElement('div');
+    text.className = 'list-item-text';
+    text.textContent = (OPLOG_ACTION_LABELS[entry.action] || entry.action) + '｜' + (entry.text || '(無文字)')
+      + (entry.value ? ' → ' + entry.value : '');
+    const meta = document.createElement('div');
+    meta.className = 'list-item-meta';
+    meta.textContent = formatOpLogTime(entry.t)
+      + (entry.result && entry.result.newDate ? ' · 下次 ' + entry.result.newDate + '（第 ' + entry.result.row + ' 列）' : '')
+      + (entry.result && entry.result.oldValue !== undefined && /^update/.test(entry.action) ? ' · 原本「' + (entry.result.oldValue || '空白') + '」' : '')
+      + (entry.undone ? ' · 已復原（' + formatOpLogTime(entry.undone) + '）' : '')
+      + (entry.stillDue ? ' · 重新載入後仍在到期清單（' + formatOpLogTime(entry.stillDue) + ' 發現）' : '')
+      + (entry.err ? ' · ' + entry.err : '');
+    main.appendChild(text);
+    main.appendChild(meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'list-item-actions';
+    const stateInfo = entry.state === 'ok' && entry.stillDue
+      ? ['⚠️ 回報成功但沒生效', 'oplog-fail']
+      : (OPLOG_STATE_TEXT[entry.state] || [entry.state, '']);
+    const state = document.createElement('span');
+    state.className = 'oplog-item-state ' + stateInfo[1];
+    state.textContent = stateInfo[0];
+    actions.appendChild(state);
+    if (opLogCanResend(entry)) {
+      const btn = document.createElement('button');
+      btn.className = 'resend-btn';
+      btn.textContent = '重送';
+      btn.addEventListener('click', () => resendOpLogEntry(entry, btn));
+      actions.appendChild(btn);
+    }
+    if (opLogUndoRequest(entry)) {
+      const undoBtn = document.createElement('button');
+      undoBtn.className = 'undo-btn';
+      undoBtn.textContent = '復原';
+      armConfirmButton(undoBtn, '確認復原', () => undoOpLogEntry(entry, undoBtn));
+      actions.appendChild(undoBtn);
+    }
+    row.appendChild(main);
+    row.appendChild(actions);
+    el.opLogList.appendChild(row);
+  });
+}
+
+function resendOpLogEntry(entry, btn) {
+  btn.disabled = true;
+  entry.state = 'resent';
+  saveOpLog();
+  apiCallWithRetry(Object.assign({}, entry.params))
+    .then(() => { showStatus('重送成功：' + (entry.text || '')); loadAll(); })
+    .catch(err => showStatus('重送失敗：' + err.message, true))
+    .finally(renderOpLog);
+}
+
+if (opLogNewlyLost) {
+  showStatus('上次有 ' + opLogNewlyLost + ' 筆操作沒有確認送出（頁面在同步完成前被關掉），請到「📜 操作歷程」查看／重送', true);
+}
+
+el.openOpLogBtn.addEventListener('click', () => { renderOpLog(); el.opLogOverlay.classList.add('show'); });
+el.closeOpLogBtn.addEventListener('click', () => el.opLogOverlay.classList.remove('show'));
+el.opLogOverlay.addEventListener('click', (e) => {
+  if (e.target === el.opLogOverlay) el.opLogOverlay.classList.remove('show');
+});
+
+// ===== 列號類請求排隊：刪除一列後後面的列號會位移，照點擊順序一個一個送 =====
+const ROW_MUTATION_ACTIONS = new Set(['deleteByRow', 'completeByRow', 'undoCompleteByRow', 'updateCycleByRow', 'updateNoteByRow']);
+// 刪除、完成不能重試：逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
+const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow']);
+let mutationQueue = Promise.resolve();
+let mutationEpoch = 0;
+
+function rowMutation(params, logId) {
+  const row = params.row;
+  const isDelete = params.action === 'deleteByRow';
+  const epoch = mutationEpoch;
+  if (isDelete) reindexRowsAfterDelete(row);
+
+  const run = mutationQueue.then(async () => {
+    if (epoch !== mutationEpoch) throw new Error('前面有一筆刪除失敗，為避免對錯列，這個動作已取消，請等清單重新載入後再操作一次');
+    if (pageUnloading) await new Promise(resolve => afterPageRestore.push(resolve));
+    opLogUpdate(logId, { state: 'sent' });
+    const data = NO_RETRY_ACTIONS.has(params.action)
+      ? await apiCall(Object.assign({}, params), 45000)
+      : await apiCallRetrying(params);
+    if (data && data.success === false) throw new Error('伺服器沒有處理這一列（列號無效）');
+    return data;
+  });
+  run.catch((err) => {
+    if (isDelete) { mutationEpoch++; scheduleResync(err && err.message); }
+  });
+  mutationQueue = run.catch(() => {});
+  return run;
+}
+
+let resyncTimer = null;
+let resyncReasons = [];
+function scheduleResync(reason) {
+  if (reason && resyncReasons.indexOf(reason) === -1) resyncReasons.push(reason);
+  clearTimeout(resyncTimer);
+  resyncTimer = setTimeout(() => {
+    mutationQueue.then(() => {
+      showStatus('刪除失敗：' + resyncReasons.join('；') + '（已重新載入清單，請確認項目狀態）', true);
+      resyncReasons = [];
+      loadAll();
+    });
+  }, 500);
+}
+
+function reindexRowsAfterDelete(deletedRow) {
+  allItems.forEach(it => { if (it.row > deletedRow) it.row -= 1; });
+}
+
+function currentItem() { return viewItems.length ? viewItems[cachePos] : null; }
+
+// ===== 載入 =====
+let loadGeneration = 0;
+let loadFailed = false;
+function loadAll() {
+  loadGeneration++;
+  const generation = loadGeneration;
+  loadStartedAt = Date.now();
+  allItems = [];
+  viewItems = [];
+  cachePos = 0;
+  loadFailed = false;
+  renderEmptyState();
+  el.progress.textContent = '載入中...';
+  el.progressBreakdown.textContent = '';
+
+  apiCallRetrying({ action: 'getAllItems' })
+    .then(data => {
+      if (generation !== loadGeneration) return;
+      // 後端回傳 {row, name, cycle, note}，補上 text = name 共用卡片邏輯
+      allItems = (data.items || []).map(raw => Object.assign({}, raw, { text: raw.name || '' }));
+      opLogVerifyLoaded(allItems);
+      applyFilter();
+    })
+    .catch(err => {
+      if (generation !== loadGeneration) return;
+      loadFailed = true;
+      el.progress.textContent = '載入失敗';
+      showStatus('載入失敗：' + err.message, true);
+      updateBreakdown();
+    });
+}
+
+function shuffleItems(items) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+// 週期空白/無法辨識的排最前面，再由最長排到最短（跟 all.html 一致）
+function sortItemsByCycleDesc(items) {
+  const cycleIndex = (item) => {
+    const idx = CYCLE_OPTIONS.indexOf(String(item.cycle || '').trim());
+    return idx === -1 ? Infinity : idx;
+  };
+  items.sort((a, b) => cycleIndex(b) - cycleIndex(a));
+}
+
+function applyFilter() {
+  viewItems = allItems.slice();
+  if (el.randomOrderToggle.checked) shuffleItems(viewItems); else sortItemsByCycleDesc(viewItems);
+  cachePos = 0;
+  renderFromView(0);
+  updateBreakdown();
+}
+
+el.randomOrderToggle.addEventListener('change', () => {
+  stopSpeakingIfNeeded();
+  flushPendingSaveIfAny();
+  applyFilter();
+});
+
+function updateBreakdown() {
+  if (loadFailed) {
+    el.progressBreakdown.textContent = '🌐⚠️載入失敗（點這裡重新載入）';
+    el.progressBreakdown.style.cursor = 'pointer';
+    el.progressBreakdown.style.color = 'var(--text-danger)';
+  } else {
+    el.progressBreakdown.textContent = '🌐 今天待代禱 ' + allItems.length + ' 位';
+    el.progressBreakdown.style.cursor = '';
+    el.progressBreakdown.style.color = '';
+  }
+}
+el.progressBreakdown.addEventListener('click', () => {
+  if (!loadFailed) return;
+  showStatus('重新載入中...');
+  loadAll();
+});
+
+function autoGrow(textarea) {
+  textarea.style.height = 'auto';
+  textarea.style.height = textarea.scrollHeight + 'px';
+}
+
+function renderFromView(pos) {
+  if (viewItems.length === 0) { renderEmptyState(); return; }
+  cachePos = ((pos % viewItems.length) + viewItems.length) % viewItems.length;
+  const item = viewItems[cachePos];
+  markAsSeen(item);
+  itemShownAt = Date.now();
+
+  el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
+  el.itemText.value = item.text || '';
+  autoGrow(el.itemText);
+  el.readonlyHint.style.display = 'block';
+
+  el.noteText.style.display = 'block';
+  el.noteText.value = item.note || '';
+  el.noteText.readOnly = false;
+
+  el.cycleRow.style.display = 'flex';
+  el.cycleSelect.innerHTML = '<option value="">選擇週期</option>';
+  const cycle = String(item.cycle || '').trim();
+  const options = CYCLE_OPTIONS.indexOf(cycle) === -1 && cycle ? CYCLE_OPTIONS.concat([cycle]) : CYCLE_OPTIONS;
+  options.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    el.cycleSelect.appendChild(opt);
+  });
+  el.cycleSelect.value = cycle;
+  el.cycleSelect.classList.toggle('cycle-empty', !el.cycleSelect.value);
+
+  el.completeBtn.style.display = 'block';
+  el.deleteRow.style.display = 'flex';
+}
+
+function renderEmptyState() {
+  el.progress.textContent = '第 0 項 / 共 0 項';
+  el.itemText.value = '🎉 目前沒有待代禱的項目';
+  autoGrow(el.itemText);
+  el.readonlyHint.style.display = 'none';
+  el.noteText.value = '';
+  el.noteText.style.display = 'none';
+  el.cycleRow.style.display = 'none';
+  el.completeBtn.style.display = 'none';
+  el.deleteRow.style.display = 'none';
+}
+
+// ===== 備註編輯：打字停頓 1 秒後背景送出，切項目前先強制送出 =====
+el.noteText.addEventListener('input', () => {
+  const item = currentItem();
+  if (!item) return;
+  const value = el.noteText.value;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => { saveTimer = null; flushNoteSave(item, value); }, 1000);
+});
+
+function flushNoteSave(item, value) {
+  item.note = value;
+  ITEM_API.saveNote(item, value)
+    .then(() => showStatus('已同步'))
+    .catch(err => showStatus('同步失敗：' + err.message, true));
+}
+
+function flushPendingSaveIfAny() {
+  if (saveTimer === null) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const item = currentItem();
+  if (item && item.note !== el.noteText.value) flushNoteSave(item, el.noteText.value);
+}
+
+el.cycleSelect.addEventListener('change', () => {
+  const item = currentItem();
+  if (!item || !el.cycleSelect.value) return;
+  el.cycleSelect.classList.remove('cycle-empty');
+  const oldCycle = item.cycle;
+  const newCycle = el.cycleSelect.value;
+  item.cycle = newCycle;
+  showStatus('週期同步中...');
+  ITEM_API.saveCycle(item, newCycle)
+    .then(() => showStatus('週期已更新'))
+    .catch(err => {
+      item.cycle = oldCycle;
+      if (currentItem() === item) {
+        el.cycleSelect.value = oldCycle || '';
+        el.cycleSelect.classList.toggle('cycle-empty', !oldCycle);
+      }
+      showStatus('週期同步失敗，請重試一次：' + err.message, true);
+    });
+});
+
+function removeItemFromLists(item) {
+  recentlyRemovedItems = [item].concat(recentlyRemovedItems).slice(0, 50);
+  allItems = allItems.filter(it => it !== item);
+  const idx = viewItems.indexOf(item);
+  if (idx !== -1) viewItems.splice(idx, 1);
+  if (viewItems.length === 0) renderEmptyState();
+  else renderFromView(Math.min(cachePos, viewItems.length - 1));
+  updateBreakdown();
+}
+
+// 雙按確認（操作歷程「復原」、清除歷程用）
+const CONFIRM_TIMEOUT_MS = 1000;
+function armConfirmButton(btn, confirmText, onConfirmed) {
+  let confirming = false;
+  let resetTimer = null;
+  const originalText = btn.textContent;
+  function reset() { confirming = false; clearTimeout(resetTimer); btn.textContent = originalText; }
+  btn.addEventListener('click', () => {
+    if (!confirming) {
+      confirming = true;
+      btn.textContent = confirmText;
+      resetTimer = setTimeout(reset, CONFIRM_TIMEOUT_MS);
+      return;
+    }
+    reset();
+    onConfirmed();
+  });
+}
+armConfirmButton(el.clearOpLogBtn, '再按一次確認清除', () => {
+  opLog = opLog.filter(e => e.state === 'queued' || e.state === 'sent');
+  saveOpLog();
+  renderOpLog();
+});
+
+// 防誤觸（跟 all.html 一致）：新的一項顯示未滿 2 秒按完成不算；30 秒內已完成 4 項就暫停
+const COMPLETE_MIN_DWELL_MS = 2000;
+const COMPLETE_BURST_WINDOW_MS = 30000;
+const COMPLETE_BURST_MAX = 4;
+var itemShownAt = 0;
+const recentCompleteTimes = [];
+function completionAllowed() {
+  const now = Date.now();
+  if (now - itemShownAt < COMPLETE_MIN_DWELL_MS) {
+    showStatus('太快了，這項剛出現，請再按一次完成（防誤觸）');
+    return false;
+  }
+  while (recentCompleteTimes.length && now - recentCompleteTimes[0] > COMPLETE_BURST_WINDOW_MS) recentCompleteTimes.shift();
+  if (recentCompleteTimes.length >= COMPLETE_BURST_MAX) {
+    const waitSec = Math.ceil((COMPLETE_BURST_WINDOW_MS - (now - recentCompleteTimes[0])) / 1000);
+    showStatus('30 秒內已完成 ' + recentCompleteTimes.length + ' 項，疑似誤觸，暫停完成 ' + waitSec + ' 秒', true);
+    return false;
+  }
+  recentCompleteTimes.push(now);
+  return true;
+}
+
+el.completeBtn.addEventListener('click', () => {
+  const item = currentItem();
+  if (!item) return;
+  if (!completionAllowed()) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  removeItemFromLists(item);
+  showStatus('完成中…（等待伺服器確認）', true);
+  ITEM_API.complete(item).then(() => showStatus('已標記完成 ✓')).catch(err => {
+    showStatus('同步失敗，請檢查網路：' + err.message, true);
+    allItems.push(item);
+    applyFilter();
+  });
+});
+
+el.deleteBtn.addEventListener('click', () => {
+  const item = currentItem();
+  if (!item) return;
+  if (!confirm('⚠️ 這會直接從試算表刪掉這一列（可以到「📜 操作歷程」按復原加回來），確定要刪除嗎？')) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  removeItemFromLists(item);
+  showStatus('刪除中…（等待伺服器確認）', true);
+  ITEM_API.delete(item)
+    .then(() => showStatus('已刪除 ✓'))
+    .catch(err => {
+      showStatus('同步失敗，請檢查網路：' + err.message, true);
+      allItems.push(item);
+      applyFilter();
+    });
+});
+
+el.prevBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  renderFromView(cachePos - 1);
+});
+
+el.nextBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  renderFromView(cachePos + 1);
+});
+
+el.randomBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) return;
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  let notSeenYet = viewItems.filter(it => !drawnKeys.has(keyOf(it)));
+  if (notSeenYet.length === 0) {
+    viewItems.forEach(it => drawnKeys.delete(keyOf(it)));
+    notSeenYet = viewItems.slice();
+    showStatus('這一輪都看過了，重新開始');
+  }
+  const picked = notSeenYet[Math.floor(Math.random() * notSeenYet.length)];
+  renderFromView(viewItems.indexOf(picked));
+});
+
+el.jumpBtn.addEventListener('click', () => {
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  const val = parseInt(el.jumpInput.value, 10);
+  if (!val || val < 1) { showStatus('請輸入有效項次'); return; }
+  flushPendingSaveIfAny();
+  stopSpeakingIfNeeded();
+  renderFromView(val - 1);
+  el.jumpInput.value = '';
+});
+
+// ===== 朗讀（姓名＋備註），純朗讀模式關掉時邊唸邊標記完成 =====
+let repeatCount = parseInt(storageGet(REPEAT_STORAGE_KEY), 10) || 7;
+let autoPlayActive = false;
+let autoPlayInterrupted = false;
+let zhVoice = null;
+
+function updateRepeatButtons() {
+  el.repeatOptions.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.dataset.count, 10) === repeatCount);
+  });
+}
+el.repeatOptions.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-count]');
+  if (!btn) return;
+  repeatCount = parseInt(btn.dataset.count, 10);
+  storageSet(REPEAT_STORAGE_KEY, String(repeatCount));
+  updateRepeatButtons();
+});
+updateRepeatButtons();
+
+function loadVoices() {
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  zhVoice = voices.find(v => v.lang === 'zh-TW')
+        || voices.find(v => v.lang && v.lang.toLowerCase().startsWith('zh'))
+        || null;
+}
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+// 回傳 true＝真的有唸出來（要有 onstart 且唸超過 SPEAK_MIN_MS），避免語音引擎出錯時一秒完成好幾項
+const SPEAK_MIN_MS = 800;
+function speakOnePass(text, passNo) {
+  return new Promise((resolve) => {
+    if (!window.speechSynthesis || !text || !text.trim()) { resolve(false); return; }
+    const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
+    utter.lang = 'zh-TW';
+    if (zhVoice) utter.voice = zhVoice;
+    utter.rate = 0.95;
+    let startedAt = 0;
+    utter.onstart = () => { startedAt = Date.now(); };
+    utter.onend = () => resolve(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
+    utter.onerror = () => resolve(false);
+    window.speechSynthesis.speak(utter);
+  });
+}
+
+function speakTextOfCard() {
+  const text = (el.itemText.value || '').trim();
+  const note = el.noteText.style.display !== 'none' ? (el.noteText.value || '').trim() : '';
+  if (!note) return text;
+  return text ? `${text}。${note}` : note;
+}
+
+async function runAutoPlay() {
+  const isPureMode = el.pureReadToggle.checked;
+  const totalAtStart = viewItems.length;
+  let loopCount = 0;
+  const stop = (msg, persistent) => {
+    autoPlayActive = false;
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    if (msg) showStatus(msg, persistent);
+  };
+
+  try {
+    while (autoPlayActive) {
+      if (viewItems.length === 0) { stop('今天的禱告事項都完成了 🙏'); return; }
+
+      let spokeOk = true;
+      for (let i = 0; i < repeatCount; i++) {
+        if (!autoPlayActive) return;
+        el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
+        if (!(await speakOnePass(speakTextOfCard(), i + 1))) spokeOk = false;
+        if (autoPlayInterrupted) break;
+      }
+      if (!autoPlayActive) return;
+      if (autoPlayInterrupted) {
+        autoPlayInterrupted = false;
+        await new Promise(r => setTimeout(r, 300));
+        continue;
+      }
+      if (!spokeOk && !isPureMode) { stop('朗讀沒有正常播出，已停止連禱（這項沒有標記完成）', true); return; }
+
+      const item = viewItems[cachePos];
+      if (isPureMode) {
+        loopCount++;
+        if (loopCount >= totalAtStart) { stop('本輪已唸完一遍（未標記完成）🙏'); return; }
+        renderFromView(cachePos + 1);
+        continue;
+      }
+
+      flushPendingSaveIfAny();
+      ITEM_API.complete(item).catch(err => {
+        showStatus('同步失敗：' + err.message, true);
+        allItems.push(item);
+        applyFilter();
+      });
+      removeItemFromLists(item);
+      if (viewItems.length === 0) { stop('今天的禱告事項都完成了 🙏'); return; }
+    }
+  } finally {
+    releaseWakeLock();
+  }
+}
+
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if ('wakeLock' in navigator) {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  } catch (err) { /* 裝置不支援，忽略 */ }
+}
+async function releaseWakeLock() {
+  if (wakeLock) {
+    try { await wakeLock.release(); } catch (err) { /* 忽略 */ }
+    wakeLock = null;
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && autoPlayActive && !wakeLock) requestWakeLock();
+});
+
+el.speakBtn.addEventListener('click', () => {
+  if (autoPlayActive) {
+    autoPlayActive = false;
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    el.speakBtn.textContent = '🔊 開始朗讀';
+    releaseWakeLock();
+    return;
+  }
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  autoPlayActive = true;
+  autoPlayInterrupted = false;
+  requestWakeLock();
+  runAutoPlay();
+});
+
+function stopSpeakingIfNeeded() {
+  if (autoPlayActive) autoPlayInterrupted = true;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+// 一鍵輸出：目前清單的姓名（＋備註）複製到剪貼簿
+el.exportAllBtn.addEventListener('click', async () => {
+  if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
+  const text = viewItems.map((item, i) => (i + 1) + '. ' + item.text + (item.note ? '：' + String(item.note).replace(/\s*\n\s*/g, ' ') : '')).join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    // Apps Script 網頁是包在 iframe 裡，有些瀏覽器不給用 clipboard API，退回舊方法
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    if (!ok) { showStatus('複製失敗：' + err.message, true); return; }
+  }
+  showStatus('已複製共 ' + viewItems.length + ' 項到剪貼簿');
+});
+
+loadAll();
+</script>
+
+</body>
+</html>
