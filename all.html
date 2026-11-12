@@ -2254,6 +2254,15 @@ function speakOnePass(text, passNo) {
   });
 }
 
+// 朗讀內容＝卡片文字＋備註（2026-11-12：網絡禱告等有備註的項目，備註也要一起唸）。
+// 用畫面上的備註框，所以可編輯備註改到一半也會唸最新內容；沒顯示備註就只唸文字。
+function speakTextOfCard() {
+  const text = (el.itemText.value || '').trim();
+  const note = el.noteText.style.display !== 'none' ? (el.noteText.value || '').trim() : '';
+  if (!note) return text;
+  return text ? `${text}。${note}` : note;
+}
+
 // 跟 index.html 一致：「純朗讀模式」關掉時，連禱會邊唸邊標記完成（不是只翻頁）。
 // 只有這項的來源支援「完成」才會真的標記完成（habit 沒有完成概念，一律當純朗讀跳過）。
 async function runAutoPlay() {
@@ -2274,7 +2283,7 @@ async function runAutoPlay() {
       for (let i = 0; i < repeatCount; i++) {
         if (!autoPlayActive) return;
         el.speakBtn.textContent = `⏹ 停止朗讀（${i + 1}/${repeatCount}）`;
-        if (!(await speakOnePass(el.itemText.value, i + 1))) spokeOk = false;
+        if (!(await speakOnePass(speakTextOfCard(), i + 1))) spokeOk = false;
         if (autoPlayInterrupted) break;
       }
       if (!autoPlayActive) return;
