@@ -1008,6 +1008,10 @@ function doGet(e) {
       case 'updateTagByRow':
         result = updateFieldByRow(parseInt(e.parameter.row, 10), COL.TAG, normalizeCode(e.parameter.value, TAG_MAP));
         break;
+      case 'updateNoteByRow':
+        // home.html「最新輸入的禱告」編輯備註（D欄）用
+        result = updateFieldByRow(parseInt(e.parameter.row, 10), COL.NOTE, (e.parameter.value || '').toString());
+        break;
       case 'setDateToNearestWeekday':
         result = setDateToNearestWeekday(parseInt(e.parameter.row, 10));
         break;
@@ -2130,7 +2134,7 @@ function searchItems(keyword) {
  * 沒帶 expect 就不檢查，直接用傳進來的列號（舊行為）。
  */
 const ROW_TEXT_CHECKED_ACTIONS_ = [
-  'completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
+  'completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow', 'updateNoteByRow',
   'setDateToNearestWeekday', 'setDateToNearestWeekend', 'copyToTasks'
 ];
 

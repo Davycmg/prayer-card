@@ -296,6 +296,17 @@
   .recent-list li { height: 84px; padding: 8px 4px; border-bottom: 1px solid #eee; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
   .recent-text { font-size: 15px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
   .recent-meta { font-size: 12px; color: var(--text-sub); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .recent-list li.recent-item { cursor: pointer; }
+  .recent-list li.recent-item:active { background: #f3effa; }
+  .recent-list li.editing { height: auto; cursor: default; background: #faf8fd; justify-content: flex-start; }
+  .recent-edit label { display: block; font-size: 12px; color: var(--text-sub); margin: 8px 0 2px; }
+  .recent-edit textarea, .recent-edit input, .recent-edit select { width: 100%; box-sizing: border-box; font-size: 15px; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; background: white; }
+  .recent-edit textarea { resize: vertical; }
+  .recent-edit-btns { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .recent-edit-btns button { border-radius: 8px; padding: 6px 14px; font-size: 14px; border: 1px solid var(--purple); background: white; color: var(--purple); }
+  .recent-edit-btns button.primary { background: var(--purple); color: white; }
+  .recent-edit-btns button:disabled { opacity: .5; }
+  .recent-edit-msg { font-size: 12px; color: var(--text-sub); flex: 1; text-align: right; }
 </style>
 </head>
 <body>
@@ -423,6 +434,7 @@
   </div>
   <div class="recent-status" id="recentStatus">載入中…</div>
   <ul class="recent-list" id="recentList"></ul>
+  <datalist id="recentTagOptions"></datalist>
 </div>
 
 <script>
@@ -1086,23 +1098,106 @@ flushHighlightLogs();
 function escapeRecentHtml(str) {
   return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// 點一條就在原地展開編輯（文字／週期／標籤／備註），存檔走 updateTextByRow／updateCycleByRow／updateTagByRow／updateNoteByRow，
+// 都帶 expect（目前的事項文字）讓後端確認／找回正確的列。
+const RECENT_CYCLES = ['D每天', '2每兩天', '3每三天', '4每四天', '5每五天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'];
+const RECENT_TAGS = ['G工作日', 'W週末', 'F家庭會議', 'A安祺禱告', 'A安祺輸入'];
+let recentItems = [];
+let recentEditingIndex = -1;
+function recentMetaOf(it) {
+  return [it.timeText || ('第 ' + it.row + ' 列'), it.cycle, it.tag, it.note].filter(Boolean).join('｜');
+}
+function recentItemHtml(it, i) {
+  if (i !== recentEditingIndex) {
+    return '<li class="recent-item" data-i="' + i + '" title="點一下編輯"><div class="recent-text">' + escapeRecentHtml(it.text) +
+      '</div><div class="recent-meta">' + escapeRecentHtml(recentMetaOf(it)) + '</div></li>';
+  }
+  const cycles = RECENT_CYCLES.indexOf(it.cycle) === -1 && it.cycle ? [it.cycle].concat(RECENT_CYCLES) : RECENT_CYCLES;
+  const cycleOpts = '<option value="">（無）</option>' + cycles.map(c =>
+    '<option value="' + escapeRecentHtml(c) + '"' + (c === it.cycle ? ' selected' : '') + '>' + escapeRecentHtml(c) + '</option>').join('');
+  return '<li class="editing" data-i="' + i + '"><div class="recent-edit">' +
+    '<div class="recent-meta">' + escapeRecentHtml((it.timeText || '') + '（第 ' + it.row + ' 列）') + '</div>' +
+    '<label>事項</label><textarea class="re-text" rows="3">' + escapeRecentHtml(it.text) + '</textarea>' +
+    '<label>週期</label><select class="re-cycle">' + cycleOpts + '</select>' +
+    '<label>標籤</label><input class="re-tag" list="recentTagOptions" value="' + escapeRecentHtml(it.tag) + '" placeholder="（無）">' +
+    '<label>備註</label><textarea class="re-note" rows="2">' + escapeRecentHtml(it.note) + '</textarea>' +
+    '<div class="recent-edit-btns"><button type="button" class="primary re-save">儲存</button><button type="button" class="re-cancel">取消</button>' +
+    '<span class="recent-edit-msg"></span></div></div></li>';
+}
+function renderRecentItems() {
+  const list = document.getElementById('recentList');
+  list.innerHTML = recentItems.map(recentItemHtml).join('');
+}
+async function recentApi(params) {
+  const url = MULTI_API_URL + '?' + new URLSearchParams(Object.assign({ _t: Date.now() }, params)).toString();
+  const res = await fetch(url);
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  if (data.success === false) throw new Error('更新失敗');
+  return data;
+}
+async function saveRecentEdit(li) {
+  const i = parseInt(li.dataset.i, 10);
+  const it = recentItems[i];
+  const text = li.querySelector('.re-text').value.trim();
+  const cycle = li.querySelector('.re-cycle').value;
+  const tag = li.querySelector('.re-tag').value.trim();
+  const note = li.querySelector('.re-note').value.trim();
+  const msg = li.querySelector('.recent-edit-msg');
+  if (!text) { msg.textContent = '事項不能空白'; return; }
+  const changes = [];
+  if (text !== it.text) changes.push(['updateTextByRow', text, 'text']);
+  if (cycle !== String(it.cycle)) changes.push(['updateCycleByRow', cycle, 'cycle']);
+  if (tag !== String(it.tag)) changes.push(['updateTagByRow', tag, 'tag']);
+  if (note !== String(it.note)) changes.push(['updateNoteByRow', note, 'note']);
+  if (!changes.length) { recentEditingIndex = -1; renderRecentItems(); return; }
+  li.querySelectorAll('button, textarea, input, select').forEach(b => b.disabled = true);
+  msg.textContent = '儲存中…';
+  try {
+    for (const [action, value, field] of changes) {
+      // expect 用目前（可能剛改過）的文字，後端用它確認列號
+      const data = await recentApi({ action: action, row: it.row, value: value, expect: it.text });
+      if (data.row) it.row = data.row;
+      it[field] = value;
+    }
+    recentEditingIndex = -1;
+    renderRecentItems();
+  } catch (err) {
+    renderRecentItems();
+    const newLi = document.querySelector('#recentList li.editing .recent-edit-msg');
+    if (newLi) newLi.textContent = '儲存失敗：' + err.message;
+  }
+}
+document.getElementById('recentList').addEventListener('click', e => {
+  const li = e.target.closest('li');
+  if (!li) return;
+  if (li.classList.contains('editing')) {
+    if (e.target.closest('.re-save')) saveRecentEdit(li);
+    else if (e.target.closest('.re-cancel')) { recentEditingIndex = -1; renderRecentItems(); }
+    return;
+  }
+  recentEditingIndex = parseInt(li.dataset.i, 10);
+  renderRecentItems();
+  const editing = document.querySelector('#recentList li.editing');
+  if (editing) {
+    editing.scrollIntoView({ block: 'nearest' });
+    editing.querySelector('.re-text').focus();
+  }
+});
 async function loadRecentItems() {
   const status = document.getElementById('recentStatus');
   const list = document.getElementById('recentList');
   status.textContent = '載入中…';
   try {
-    const url = MULTI_API_URL + '?' + new URLSearchParams({ action: 'getRecentItems', limit: 100, _t: Date.now() }).toString();
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    const items = data.items || [];
-    list.innerHTML = items.map(it => {
-      const meta = [it.timeText || ('第 ' + it.row + ' 列'), it.cycle, it.tag, it.note].filter(Boolean).join('｜');
-      return '<li title="' + escapeRecentHtml(it.text) + '"><div class="recent-text">' + escapeRecentHtml(it.text) +
-        '</div><div class="recent-meta">' + escapeRecentHtml(meta) + '</div></li>';
-    }).join('');
+    const data = await recentApi({ action: 'getRecentItems', limit: 100 });
+    recentItems = (data.items || []).map(it => Object.assign({}, it, { cycle: String(it.cycle || ''), tag: String(it.tag || ''), note: String(it.note || '') }));
+    recentEditingIndex = -1;
+    const tags = new Set(RECENT_TAGS);
+    recentItems.forEach(it => { if (it.tag) tags.add(it.tag); });
+    document.getElementById('recentTagOptions').innerHTML = Array.from(tags).map(t => '<option value="' + escapeRecentHtml(t) + '">').join('');
+    renderRecentItems();
     list.scrollTop = 0;
-    status.textContent = items.length ? '最新 ' + items.length + ' 筆（往下捲看更多）' : '目前沒有資料';
+    status.textContent = recentItems.length ? '最新 ' + recentItems.length + ' 筆（往下捲看更多，點一條可編輯）' : '目前沒有資料';
   } catch (err) {
     status.textContent = '載入失敗：' + err.message;
   }
@@ -1111,7 +1206,7 @@ document.getElementById('recentReloadBtn').addEventListener('click', loadRecentI
 // 嵌入的表單送出後 iframe 會重新載入（第一次是初始載入），等幾秒讓試算表寫入後更新清單
 let pushFormLoads = 0;
 document.getElementById('pushFormFrame').addEventListener('load', () => {
-  if (++pushFormLoads > 1) setTimeout(loadRecentItems, 3000);
+  if (++pushFormLoads > 1) setTimeout(() => { if (recentEditingIndex === -1) loadRecentItems(); }, 3000);
 });
 loadRecentItems();
 </script>
