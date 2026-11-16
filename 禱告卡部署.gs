@@ -1049,6 +1049,14 @@ function doGet(e) {
       case 'exportCalendarEventToPrayerSheet':
         result = exportCalendarEventToPrayerSheet(e.parameter.value, e.parameter.cycle, e.parameter.note);
         break;
+      case 'copyTextToTasks':
+        // all.html 網絡禱告「輸出到 Tasks」：標題（前端已加前綴 1）＋備註複製到預設清單
+        result = (function () {
+          if (!e.parameter.title) throw new Error('缺少標題');
+          const copied = copyTextToDefaultTaskList_(e.parameter.title, e.parameter.note || '', 'all.html 網絡禱告');
+          return { success: copied, copied: copied };
+        })();
+        break;
       case 'exportCalendarEventToTasks':
         result = exportCalendarEventToTasks(e.parameter.value);
         break;
