@@ -632,7 +632,22 @@ function isLinelogTask(item) {
 function filterKeyOf(item) {
   return isLinelogTask(item) ? 'line' : item.source;
 }
-let activeSources = new Set(ALL_SOURCES);
+// 篩選選擇記在 localStorage，重新整理後接續（2026-11-16）
+const FILTER_STORAGE_KEY = 'allHtml_activeSources';
+function loadActiveSources() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FILTER_STORAGE_KEY) || 'null');
+    if (Array.isArray(saved)) {
+      const valid = saved.filter(s => ALL_SOURCES.includes(s));
+      if (valid.length) return new Set(valid);
+    }
+  } catch (e) {}
+  return new Set(ALL_SOURCES);
+}
+function saveActiveSources() {
+  try { localStorage.setItem(FILTER_STORAGE_KEY, JSON.stringify([...activeSources])); } catch (e) {}
+}
+let activeSources = loadActiveSources();
 let customTagsCache = [];
 let saveTimer = null;
 
@@ -1624,9 +1639,11 @@ el.filterRow.addEventListener('click', (e) => {
   } else {
     activeSources.add(source);
   }
+  saveActiveSources();
   updateFilterButtonsUI();
   applyFilter();
 });
+updateFilterButtonsUI(); // 載入時依記住的篩選標示按鈕
 
 // ===== 文字/備註編輯：打字停頓 1 秒後才背景送出，切項目前會先強制送出，避免存錯項目 =====
 // field 是 'text' 或 'note'，兩者各自獨立的計時器/儲存邏輯，寫法共用同一套
