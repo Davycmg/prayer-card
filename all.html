@@ -349,6 +349,12 @@
 
   <button class="copy-tasks-btn" id="exportToFormBtn" style="display:none;">📤 匯出到表單回覆1（並丟到原本的垃圾桶）</button>
 
+  <div class="quad-actions" id="networkTasksRow" style="display:none;">
+    <button class="quad-btn" id="networkToTasksBtn">📋 輸出到 Tasks</button>
+    <button class="quad-btn" id="networkDecideBtn">🎲 抉擇</button>
+  </div>
+  <div id="networkDecideResult" style="display:none; margin-top:8px; text-align:center; font-size:20px; font-weight:bold;"></div>
+
   <textarea class="note" id="noteText" placeholder="備註" rows="10" style="display:none;"></textarea>
 </div>
 
@@ -686,6 +692,10 @@ const el = {
   setWeekdayBtn: document.getElementById('setWeekdayBtn'),
   setWeekendBtn: document.getElementById('setWeekendBtn'),
   exportToFormBtn: document.getElementById('exportToFormBtn'),
+  networkTasksRow: document.getElementById('networkTasksRow'),
+  networkToTasksBtn: document.getElementById('networkToTasksBtn'),
+  networkDecideBtn: document.getElementById('networkDecideBtn'),
+  networkDecideResult: document.getElementById('networkDecideResult'),
   noteText: document.getElementById('noteText'),
   completeBtn: document.getElementById('completeBtn'),
   deleteRow: document.getElementById('deleteRow'),
@@ -808,7 +818,7 @@ const OPLOG_ACTION_LABELS = {
   completeByRow: '完成', completeTaskItem: '完成', deleteByRow: '刪除', deleteCalendarEvent: '刪除',
   updateTextByRow: '改文字', updateTaskTitle: '改文字', updateCalendarEventTitle: '改文字',
   updateCycleByRow: '改週期', updateCalendarEventCycle: '改週期', updateTagByRow: '改標籤',
-  updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks',
+  updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks', copyTextToTasks: '輸出到 Tasks',
   setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
   exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1',
   undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成', restoreRow: '復原刪除'
@@ -1143,7 +1153,7 @@ const ROW_MUTATION_ACTIONS = new Set([
   'updateNoteByRow', 'copyToTasks', 'setDateToNearestWeekday', 'setDateToNearestWeekend'
 ]);
 // 刪除、完成不能重試：請求逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
-const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow']);
+const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow', 'copyTextToTasks']); // copyTextToTasks：重試可能建出重複任務
 const mutationQueues = {};
 let mutationEpoch = 0; // 有刪除失敗就遞增，後面排隊中（列號假設已經位移）的請求全部作廢，避免對錯列
 
@@ -1527,6 +1537,10 @@ function renderFromView(pos) {
   // 匯出到表單回覆1：只有「習慣」「網絡」這兩個來源本來就不是表單回覆1，才需要這個「搬過去」的按鈕
   // （多方禱告本身就是表單回覆1，待辦是即時抓 Google Tasks，都不適用）
   el.exportToFormBtn.style.display = (item.source === 'habit' || item.source === 'network') ? 'block' : 'none';
+
+  // 網絡禱告：輸出到 Tasks（姓名加前綴 1、備註一起帶）＋「抉擇」50-50 抽籤。換項目時清掉上一次抽籤結果
+  el.networkTasksRow.style.display = item.source === 'network' ? 'flex' : 'none';
+  el.networkDecideResult.style.display = 'none';
 }
 
 // 「習慣」項目標示：重複行程／過去／今天／未來（2026-11-11）。
@@ -1580,6 +1594,8 @@ function renderEmptyState() {
   el.quadActionsRow.style.display = 'none';
   el.prayMoreLessRow.style.display = 'none';
   el.exportToFormBtn.style.display = 'none';
+  el.networkTasksRow.style.display = 'none';
+  el.networkDecideResult.style.display = 'none';
 }
 
 function updateFilterButtonsUI() {
@@ -2131,6 +2147,30 @@ armConfirmButton(el.exportToFormBtn, '再按一次確認匯出並刪除原始資
         });
     })
     .catch(err => showStatus('匯出失敗：' + err.message, true));
+});
+
+// 網絡禱告「輸出到 Tasks」（2026-11-16）：複製到 Google Tasks 預設清單，標題 = 「1」+ 姓名（跟多方禱告複製到 Tasks 同樣的前綴），
+// 備註一起帶。只是複製，網絡這邊的項目不動（不完成、不刪除）。後端 action copyTextToTasks 由禱告卡專案建立任務，之後才改得動。
+armConfirmButton(el.networkToTasksBtn, '再按一次確認輸出', () => {
+  const item = currentItem();
+  if (!item || item.source !== 'network') return;
+  flushPendingSaveIfAny();
+  const note = el.noteText.style.display !== 'none' ? el.noteText.value : (item.note || '');
+  showStatus('輸出到 Tasks 中...');
+  apiCallWithRetry(MULTI_API_URL, { action: 'copyTextToTasks', title: '1' + (item.text || ''), note: note })
+    .then(data => {
+      if (!data || !data.copied) { showStatus('輸出失敗，請稍後再試', true); return; }
+      showStatus('已輸出到 Google Tasks 預設清單：1' + (item.text || ''));
+    })
+    .catch(err => showStatus('輸出失敗：' + err.message, true));
+});
+
+// 「抉擇」：要不要輸出到 Tasks，50-50 抽籤，只顯示結果
+el.networkDecideBtn.addEventListener('click', () => {
+  const yes = Math.random() < 0.5;
+  el.networkDecideResult.textContent = yes ? '✅ 輸出' : '❌ 不輸出';
+  el.networkDecideResult.style.color = yes ? '#2e7d32' : '#c62828';
+  el.networkDecideResult.style.display = 'block';
 });
 
 // 「禱告更多／禱告更少」：把週期調整成更密集／更疏鬆的下一級，然後標記完成
