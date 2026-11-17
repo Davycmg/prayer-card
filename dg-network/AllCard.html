@@ -890,6 +890,7 @@ function renderFromView(pos) {
   const item = viewItems[cachePos];
   markAsSeen(item);
   itemShownAt = Date.now();
+  scheduleZephyrPrefetch();
 
   el.progress.textContent = `第 ${cachePos + 1} 項 / 共 ${viewItems.length} 項`;
   el.itemText.value = item.text || '';
@@ -1150,18 +1151,26 @@ function speakOnePassBrowser(text, passNo) {
   });
 }
 
-// ===== Zephyr 語音（Gemini TTS，後端 Zephyr朗讀.js 的 doPost action=tts）=====
-// 同一段文字只跟後端要一次（7 遍都用同一段音檔），遍數「1、2、3…」另外各要一次也快取起來；
-// 唸目前這項時先預抓下一項，換卡片時不用等。
+// ===== Zephyr 語音（Gemini TTS）=====
+// 後端是這個專案的 doPost action=tts（Zephyr朗讀.js）；跟 GitHub Pages 的 all.html 同一套程式（改一邊要同步改另一邊）。
+// 2026-11-17 加速：
+// 1. 切段：文字依句號切開，第一段很短先產生先播，後面幾段同時在背景產生（不用等整段生完）。
+// 2. 先抓：卡片停留 ZEPHYR_DWELL_MS 後就背景抓這張卡的語音；朗讀中也預抓下一張。
+// 3. 存起來：抓過的語音存在瀏覽器 IndexedDB（同樣的文字下次直接播），遍數「1～7」也是。
+const ZEPHYR_TTS_URL = API_URL;
 const zephyrAudioEl = new Audio();
 zephyrAudioEl.preload = 'auto';
-const zephyrClipCache = new Map(); // text → Promise<objectURL>
-const ZEPHYR_CACHE_MAX = 40;
+const zephyrClipCache = new Map(); // 文字 → Promise<objectURL>（這次開頁面的記憶體快取）
+const ZEPHYR_CACHE_MAX = 80;
+const ZEPHYR_DWELL_MS = 1200;
+const ZEPHYR_FIRST_CHUNK_MAX = 24;  // 第一段最多幾個字（越短越快開始唸）
+const ZEPHYR_CHUNK_MAX = 120;       // 之後每段最多幾個字
+const ZEPHYR_DB_MAX = 300;          // IndexedDB 最多存幾段，超過刪最舊的
 let zephyrFailStreak = 0;
 let zephyrDisabled = false; // 連續失敗 3 次就這次開頁面都改用瀏覽器語音，免得每段都等逾時
 let stopCurrentClip = null;
 
-function pcmBase64ToWavUrl(b64, sampleRate) {
+function pcmBase64ToWavBlob(b64, sampleRate) {
   const bin = atob(b64);
   const pcmLen = bin.length;
   const buf = new ArrayBuffer(44 + pcmLen);
@@ -1173,15 +1182,72 @@ function pcmBase64ToWavUrl(b64, sampleRate) {
   str(36, 'data'); v.setUint32(40, pcmLen, true);
   const bytes = new Uint8Array(buf, 44);
   for (let i = 0; i < pcmLen; i++) bytes[i] = bin.charCodeAt(i);
-  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  return new Blob([buf], { type: 'audio/wav' });
 }
 
-async function fetchZephyrClip(text) {
+// ----- IndexedDB：語音存在這台裝置的瀏覽器裡（打不開就略過，只用記憶體快取）-----
+let zephyrDbPromise = null;
+function zephyrDb() {
+  if (zephyrDbPromise) return zephyrDbPromise;
+  zephyrDbPromise = new Promise((resolve) => {
+    try {
+      const req = indexedDB.open('zephyrTts', 1);
+      req.onupgradeneeded = () => {
+        const store = req.result.createObjectStore('clips', { keyPath: 'text' });
+        store.createIndex('t', 't');
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch (err) { resolve(null); }
+  });
+  return zephyrDbPromise;
+}
+async function zephyrDbGet(text) {
+  const db = await zephyrDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction('clips', 'readonly').objectStore('clips').get(text);
+      req.onsuccess = () => resolve(req.result ? req.result.blob : null);
+      req.onerror = () => resolve(null);
+    } catch (err) { resolve(null); }
+  });
+}
+let zephyrDbWrites = 0;
+async function zephyrDbPut(text, blob) {
+  const db = await zephyrDb();
+  if (!db) return;
+  try {
+    const store = db.transaction('clips', 'readwrite').objectStore('clips');
+    store.put({ text, blob, t: Date.now() });
+    if (++zephyrDbWrites % 20 === 1) zephyrDbPrune(db);
+  } catch (err) { /* 存不進去就算了 */ }
+}
+function zephyrDbPrune(db) {
+  try {
+    const store = db.transaction('clips', 'readwrite').objectStore('clips');
+    const countReq = store.count();
+    countReq.onsuccess = () => {
+      let extra = countReq.result - ZEPHYR_DB_MAX;
+      if (extra <= 0) return;
+      store.index('t').openCursor().onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor || extra <= 0) return;
+        cursor.delete();
+        extra--;
+        cursor.continue();
+      };
+    };
+  } catch (err) { /* 忽略 */ }
+}
+
+async function fetchZephyrBlob(text) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 60000);
   try {
     // text/plain：不會觸發 CORS 預檢；備註可能很長，用 POST 不塞網址
-    const res = await fetch(API_URL, {
+    const res = await fetch(ZEPHYR_TTS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'tts', text }),
@@ -1189,10 +1255,10 @@ async function fetchZephyrClip(text) {
     });
     const data = JSON.parse(await res.text());
     if (data.error) throw new Error(data.error);
-    return pcmBase64ToWavUrl(data.audio, data.sampleRate || 24000);
+    return pcmBase64ToWavBlob(data.audio, data.sampleRate || 24000);
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Zephyr 語音逾時');
-    if (err instanceof SyntaxError) throw new Error('伺服器回應異常，可能還沒發布新版本');
+    if (err instanceof SyntaxError) throw new Error('伺服器回應異常');
     throw err;
   } finally {
     clearTimeout(timeoutId);
@@ -1206,7 +1272,14 @@ function getZephyrClip(text) {
     zephyrClipCache.set(text, p);
     return p;
   }
-  const p = fetchZephyrClip(text);
+  const p = (async () => {
+    let blob = await zephyrDbGet(text);
+    if (!blob) {
+      blob = await fetchZephyrBlob(text);
+      zephyrDbPut(text, blob);
+    }
+    return URL.createObjectURL(blob);
+  })();
   p.catch(() => zephyrClipCache.delete(text)); // 失敗的不快取，下次重抓
   zephyrClipCache.set(text, p);
   while (zephyrClipCache.size > ZEPHYR_CACHE_MAX) {
@@ -1217,22 +1290,49 @@ function getZephyrClip(text) {
   return p;
 }
 
-function prefetchZephyr(text) {
-  if (zephyrDisabled || !text) return;
-  getZephyrClip(text).catch(() => {});
+// 依句子切段：第一段盡量短（快開始唸），之後每段併到 ZEPHYR_CHUNK_MAX 字左右
+function splitForTts(text) {
+  text = String(text || '').trim();
+  if (!text) return [];
+  // 不用 lookbehind（舊版 iOS Safari 不支援，會讓整頁壞掉）
+  const sentences = text.replace(/([。！？!?；;\n])/g, '$1\u0000').split('\u0000').map(s => s.trim()).filter(Boolean);
+  const chunks = [];
+  let cur = '';
+  sentences.forEach(s => {
+    const limit = chunks.length === 0 ? ZEPHYR_FIRST_CHUNK_MAX : ZEPHYR_CHUNK_MAX;
+    if (cur && (cur + s).length > limit) { chunks.push(cur); cur = s; }
+    else cur += s;
+  });
+  if (cur) chunks.push(cur);
+  return chunks;
 }
 
-// 播放一段音檔，回傳是否真的播完（被停止／出錯／太短都算 false）
+function prefetchZephyr(text) {
+  if (zephyrDisabled || !text) return;
+  splitForTts(text).forEach(c => getZephyrClip(c).catch(() => {}));
+}
+
+// 卡片停留一下就先抓這張卡的語音（快速翻頁時不抓，省次數）
+let zephyrPrefetchTimer = null;
+function scheduleZephyrPrefetch() {
+  clearTimeout(zephyrPrefetchTimer);
+  const item = currentItem();
+  zephyrPrefetchTimer = setTimeout(() => {
+    if (item && currentItem() === item) prefetchZephyr(speakTextOfCard());
+  }, ZEPHYR_DWELL_MS);
+}
+
+// 播放一段音檔，回傳實際播了幾毫秒（被停止／出錯回 -1）
 function playClip(url) {
   return new Promise((resolve) => {
     let startedAt = 0;
     const done = (ok) => {
       zephyrAudioEl.onplaying = zephyrAudioEl.onended = zephyrAudioEl.onerror = null;
       stopCurrentClip = null;
-      resolve(ok);
+      resolve(ok && startedAt ? Date.now() - startedAt : -1);
     };
     zephyrAudioEl.onplaying = () => { if (!startedAt) startedAt = Date.now(); };
-    zephyrAudioEl.onended = () => done(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
+    zephyrAudioEl.onended = () => done(true);
     zephyrAudioEl.onerror = () => done(false);
     stopCurrentClip = () => { zephyrAudioEl.pause(); done(false); };
     zephyrAudioEl.src = url;
@@ -1243,24 +1343,34 @@ function playClip(url) {
 async function speakOnePass(text, passNo) {
   if (!text || !text.trim()) return false;
   if (zephyrDisabled) return speakOnePassBrowser(text, passNo);
-  let mainUrl, numUrl;
-  try {
-    // 遍數的小音檔失敗就略過不唸，不影響主文字
-    const numPromise = passNo ? getZephyrClip(String(passNo)).catch(() => null) : Promise.resolve(null);
-    mainUrl = await getZephyrClip(text);
-    numUrl = await numPromise;
-    zephyrFailStreak = 0;
-  } catch (err) {
-    zephyrFailStreak++;
-    if (zephyrFailStreak >= 3) zephyrDisabled = true;
-    showStatus('Zephyr 語音取得失敗，這次改用瀏覽器語音：' + err.message, true);
-    return speakOnePassBrowser(text, passNo);
+  const chunks = splitForTts(text);
+  // 全部段落＋遍數同時開始抓，第一段一到就開始唸
+  const promises = chunks.map(c => getZephyrClip(c));
+  promises.forEach(p => p.catch(() => {}));
+  const numPromise = passNo ? getZephyrClip(String(passNo)).catch(() => null) : Promise.resolve(null);
+  let playedMs = 0;
+  for (let i = 0; i < chunks.length; i++) {
+    let url;
+    try {
+      url = await promises[i];
+      zephyrFailStreak = 0;
+    } catch (err) {
+      zephyrFailStreak++;
+      if (zephyrFailStreak >= 3) zephyrDisabled = true;
+      showStatus('Zephyr 語音取得失敗，改用瀏覽器語音：' + err.message, true);
+      if (autoPlayInterrupted || !autoPlayActive) return false;
+      const rest = chunks.slice(i).join('');
+      const ok = await speakOnePassBrowser(rest, passNo);
+      return ok || playedMs >= SPEAK_MIN_MS;
+    }
+    if (autoPlayInterrupted || !autoPlayActive) return false;
+    const ms = await playClip(url);
+    if (ms < 0) return false;
+    playedMs += ms;
   }
-  if (autoPlayInterrupted || !autoPlayActive) return false;
-  const ok = await playClip(mainUrl);
-  if (!ok || !numUrl || autoPlayInterrupted || !autoPlayActive) return ok;
-  await playClip(numUrl); // 遍數很短，不拿來判斷有沒有唸出來
-  return ok;
+  const numUrl = await numPromise;
+  if (numUrl && !autoPlayInterrupted && autoPlayActive) await playClip(numUrl); // 遍數很短，不拿來判斷有沒有唸出來
+  return playedMs >= SPEAK_MIN_MS;
 }
 
 // iOS／手機瀏覽器：音檔要在使用者點擊當下先 play() 過一次，之後同一個 <audio> 才能自動播
@@ -1272,6 +1382,9 @@ function unlockZephyrAudio() {
     if (p) p.catch(() => {});
   } catch (err) { /* 忽略 */ }
 }
+
+// 遍數 1～7 很常用：開頁面就從 IndexedDB／後端備好
+setTimeout(() => { for (let n = 1; n <= 7; n++) getZephyrClip(String(n)).catch(() => {}); }, 3000);
 
 function textOfItem(item) {
   if (!item) return '';

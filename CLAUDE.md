@@ -162,6 +162,8 @@ all.html 也套用同一規則（2026-11-02）：上班時間 `applyFilter()` �
 
 all.html（GitHub Pages）的「🔊 開始朗讀」也改用 Gemini TTS Zephyr：程式跟 dg-network `AllCard.html` 同一套（同一段文字只抓一次、遍數另外快取、預抓下一項、取不到就該遍改用瀏覽器語音、連續失敗 3 次整頁改回瀏覽器語音），語音直接 POST 到 dg-network 的部署網址（`ZEPHYR_TTS_URL = NETWORK_API_URL`，用那邊的 `GEMINI_API_KEY`，主要專案不用另外設 key）。從 github.io 跨網域 POST `text/plain` 可行（2026-11-17 實測）。兩個頁面共用每天次數上限，所以 `ZEPHYR_DAILY_LIMIT` 調成 3000。
 
+加速（同日）：文字依句號切段（`splitForTts`，第一段 ≤24 字先產生先播，其餘 ≤120 字一段同時在背景產生）；卡片停留 1.2 秒就背景預抓這張卡的語音（`scheduleZephyrPrefetch`，在 `renderFromView` 呼叫），朗讀中也預抓下一張；抓過的語音存在瀏覽器 IndexedDB `zephyrTts`（以文字為 key，最多 300 段，超過刪最舊），遍數 1～7 開頁面 3 秒後就備好。實測（模擬）按下到出聲：沒預抓約 0.9 秒、有預抓／已存 0.05 秒。all.html 與 `AllCard.html` 的 Zephyr 區塊是同一份程式，改一邊要同步另一邊。注意：預抓會多用一些每日次數（翻過停留的卡片都會抓）。
+
 ## all.html 網絡禱告「📋 輸出到 Tasks」「🎲 抉擇」（2026-11-16）
 
 網絡卡片（`source === 'network'`）在「匯出到表單回覆1」下方多一排兩顆按鈕：「📋 輸出到 Tasks」（按兩下確認）把姓名加前綴 `1`（跟多方禱告「複製到 Tasks」一樣，`1` 後面沒有空格）當標題、備註框內容當 notes，複製到 Google Tasks 預設清單；只複製，網絡那邊的項目不完成、不刪除。後端是禱告卡的新 action `copyTextToTasks`（`title`、`note`，任務由禱告卡專案建立，之後改得動），不重試（避免重複建任務），**要手動發布新版本才生效**。「🎲 抉擇」純前端 50-50 抽「✅ 輸出／❌ 不輸出」，只顯示結果，換項目就清掉。
