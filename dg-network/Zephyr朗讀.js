@@ -19,7 +19,7 @@ const GEMINI_TTS_VOICES = [
 const GEMINI_TTS_MODELS = ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'];
 const ZEPHYR_DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
 const ZEPHYR_MAX_CHARS = 2000;
-const ZEPHYR_DAILY_LIMIT = 1000;
+const ZEPHYR_DAILY_LIMIT = 3000; // dg-network ?view=all 和 GitHub Pages 的 all.html 共用
 
 // 用 POST（text/plain）送文字：備註可能很長，放在 GET 網址參數會超過長度限制
 function doPost(e) {
