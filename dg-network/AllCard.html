@@ -1050,7 +1050,8 @@ if (window.speechSynthesis) {
 
 // 回傳 true＝真的有唸出來（要有 onstart 且唸超過 SPEAK_MIN_MS），避免語音引擎出錯時一秒完成好幾項
 const SPEAK_MIN_MS = 800;
-function speakOnePass(text, passNo) {
+// 瀏覽器內建語音：只在 Zephyr 取不到時當備援
+function speakOnePassBrowser(text, passNo) {
   return new Promise((resolve) => {
     if (!window.speechSynthesis || !text || !text.trim()) { resolve(false); return; }
     const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
@@ -1063,6 +1064,136 @@ function speakOnePass(text, passNo) {
     utter.onerror = () => resolve(false);
     window.speechSynthesis.speak(utter);
   });
+}
+
+// ===== Zephyr 語音（Gemini TTS，後端 Zephyr朗讀.js 的 doPost action=tts）=====
+// 同一段文字只跟後端要一次（7 遍都用同一段音檔），遍數「1、2、3…」另外各要一次也快取起來；
+// 唸目前這項時先預抓下一項，換卡片時不用等。
+const zephyrAudioEl = new Audio();
+zephyrAudioEl.preload = 'auto';
+const zephyrClipCache = new Map(); // text → Promise<objectURL>
+const ZEPHYR_CACHE_MAX = 40;
+let zephyrFailStreak = 0;
+let zephyrDisabled = false; // 連續失敗 3 次就這次開頁面都改用瀏覽器語音，免得每段都等逾時
+let stopCurrentClip = null;
+
+function pcmBase64ToWavUrl(b64, sampleRate) {
+  const bin = atob(b64);
+  const pcmLen = bin.length;
+  const buf = new ArrayBuffer(44 + pcmLen);
+  const v = new DataView(buf);
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) v.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + pcmLen, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true); v.setUint32(28, sampleRate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, pcmLen, true);
+  const bytes = new Uint8Array(buf, 44);
+  for (let i = 0; i < pcmLen; i++) bytes[i] = bin.charCodeAt(i);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
+
+async function fetchZephyrClip(text) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  try {
+    // text/plain：不會觸發 CORS 預檢；備註可能很長，用 POST 不塞網址
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'tts', text }),
+      signal: controller.signal
+    });
+    const data = JSON.parse(await res.text());
+    if (data.error) throw new Error(data.error);
+    return pcmBase64ToWavUrl(data.audio, data.sampleRate || 24000);
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Zephyr 語音逾時');
+    if (err instanceof SyntaxError) throw new Error('伺服器回應異常，可能還沒發布新版本');
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function getZephyrClip(text) {
+  if (zephyrClipCache.has(text)) {
+    const p = zephyrClipCache.get(text);
+    zephyrClipCache.delete(text); // 移到最後（最近使用）
+    zephyrClipCache.set(text, p);
+    return p;
+  }
+  const p = fetchZephyrClip(text);
+  p.catch(() => zephyrClipCache.delete(text)); // 失敗的不快取，下次重抓
+  zephyrClipCache.set(text, p);
+  while (zephyrClipCache.size > ZEPHYR_CACHE_MAX) {
+    const [oldText, oldP] = zephyrClipCache.entries().next().value;
+    zephyrClipCache.delete(oldText);
+    oldP.then(url => URL.revokeObjectURL(url), () => {});
+  }
+  return p;
+}
+
+function prefetchZephyr(text) {
+  if (zephyrDisabled || !text) return;
+  getZephyrClip(text).catch(() => {});
+}
+
+// 播放一段音檔，回傳是否真的播完（被停止／出錯／太短都算 false）
+function playClip(url) {
+  return new Promise((resolve) => {
+    let startedAt = 0;
+    const done = (ok) => {
+      zephyrAudioEl.onplaying = zephyrAudioEl.onended = zephyrAudioEl.onerror = null;
+      stopCurrentClip = null;
+      resolve(ok);
+    };
+    zephyrAudioEl.onplaying = () => { if (!startedAt) startedAt = Date.now(); };
+    zephyrAudioEl.onended = () => done(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
+    zephyrAudioEl.onerror = () => done(false);
+    stopCurrentClip = () => { zephyrAudioEl.pause(); done(false); };
+    zephyrAudioEl.src = url;
+    zephyrAudioEl.play().catch(() => done(false));
+  });
+}
+
+async function speakOnePass(text, passNo) {
+  if (!text || !text.trim()) return false;
+  if (zephyrDisabled) return speakOnePassBrowser(text, passNo);
+  let mainUrl, numUrl;
+  try {
+    const numPromise = passNo ? getZephyrClip(String(passNo)) : Promise.resolve(null);
+    mainUrl = await getZephyrClip(text);
+    numUrl = await numPromise;
+    zephyrFailStreak = 0;
+  } catch (err) {
+    zephyrFailStreak++;
+    if (zephyrFailStreak >= 3) zephyrDisabled = true;
+    showStatus('Zephyr 語音取得失敗，這次改用瀏覽器語音：' + err.message, true);
+    return speakOnePassBrowser(text, passNo);
+  }
+  if (autoPlayInterrupted || !autoPlayActive) return false;
+  const ok = await playClip(mainUrl);
+  if (!ok || !numUrl || autoPlayInterrupted || !autoPlayActive) return ok;
+  await playClip(numUrl); // 遍數很短，不拿來判斷有沒有唸出來
+  return ok;
+}
+
+// iOS／手機瀏覽器：音檔要在使用者點擊當下先 play() 過一次，之後同一個 <audio> 才能自動播
+const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=';
+function unlockZephyrAudio() {
+  try {
+    zephyrAudioEl.src = SILENT_WAV;
+    const p = zephyrAudioEl.play();
+    if (p) p.catch(() => {});
+  } catch (err) { /* 忽略 */ }
+}
+
+function textOfItem(item) {
+  if (!item) return '';
+  const text = String(item.text || '').trim();
+  const note = String(item.note || '').trim();
+  if (!note) return text;
+  return text ? `${text}。${note}` : note;
 }
 
 function speakTextOfCard() {
@@ -1085,6 +1216,9 @@ async function runAutoPlay() {
   try {
     while (autoPlayActive) {
       if (viewItems.length === 0) { stop('今天的禱告事項都完成了 🙏'); return; }
+
+      // 預抓下一項的 Zephyr 語音（翻到下一項或完成後下一項都是 cachePos + 1 那張）
+      if (viewItems.length > 1) prefetchZephyr(textOfItem(viewItems[(cachePos + 1) % viewItems.length]));
 
       let spokeOk = true;
       for (let i = 0; i < repeatCount; i++) {
@@ -1146,6 +1280,7 @@ el.speakBtn.addEventListener('click', () => {
   if (autoPlayActive) {
     autoPlayActive = false;
     if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (stopCurrentClip) stopCurrentClip();
     el.speakBtn.textContent = '🔊 開始朗讀';
     releaseWakeLock();
     return;
@@ -1153,6 +1288,8 @@ el.speakBtn.addEventListener('click', () => {
   if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
   autoPlayActive = true;
   autoPlayInterrupted = false;
+  unlockZephyrAudio();
+  el.speakBtn.textContent = '⏳ Zephyr 語音準備中…';
   requestWakeLock();
   runAutoPlay();
 });
@@ -1160,6 +1297,7 @@ el.speakBtn.addEventListener('click', () => {
 function stopSpeakingIfNeeded() {
   if (autoPlayActive) autoPlayInterrupted = true;
   if (window.speechSynthesis) window.speechSynthesis.cancel();
+  if (stopCurrentClip) stopCurrentClip();
 }
 
 // 一鍵輸出：目前清單的姓名（＋備註）複製到剪貼簿
