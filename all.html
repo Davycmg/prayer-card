@@ -313,7 +313,7 @@
     <button type="button" id="aiCreditBtn" title="檢查 Claude API key 與儲值">💳 查儲值</button>
     <button type="button" id="aiTidyBtn">✨ AI整理</button>
   </div>
-  <div class="readonly-hint" id="readonlyHint" style="display:none;">姓名要到「為網絡禱告」頁面才能改，這裡唯讀；備註可以直接在下面編輯</div>
+  <div class="readonly-hint" id="readonlyHint" style="display:none;">這個來源的文字唯讀</div>
 
   <div class="meta-row" id="cycleRow" style="display:none;">
     <div class="meta-field cycle">
@@ -561,13 +561,17 @@ const SOURCE_CONFIG = {
   },
   network: {
     label: '🌐 為網絡禱告', badgeClass: 'network',
-    text: { editable: false }, // 後端沒有「改姓名」的 action，姓名唯讀
+    // 改姓名（2026-11-18）：dg-network 的 updateNameByRow，expect 帶改之前的姓名讓後端確認列號；
+    // 後端會一併把「分眾負責」分頁裡同名的負責紀錄改成新姓名
+    text: {
+      editable: true, noAi: true, required: true,
+      save: (item, value, prevText) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNameByRow', row: item.row, value, expect: prevText })
+    },
     cycle: {
       show: true, options: NETWORK_CYCLE_OPTIONS,
       save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateCycleByRow', row: item.row, value, expect: item.text })
     },
     tag: { show: false },
-    // 跟 dg-network/CardIndex.html 一致：這個來源真正可以編輯的是備註，姓名反而不能改
     note: {
       editable: true,
       save: (item, value) => apiCallWithRetry(NETWORK_API_URL, { action: 'updateNoteByRow', row: item.row, value, expect: item.text })
@@ -835,7 +839,7 @@ const OPLOG_ACTION_LABELS = {
   completeByRow: '完成', completeTaskItem: '完成', deleteByRow: '刪除', deleteCalendarEvent: '刪除',
   updateTextByRow: '改文字', updateTaskTitle: '改文字', updateCalendarEventTitle: '改文字',
   updateCycleByRow: '改週期', updateCalendarEventCycle: '改週期', updateTagByRow: '改標籤',
-  updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks', copyTextToTasks: '輸出到 Tasks',
+  updateNoteByRow: '改備註', updateNameByRow: '改姓名', copyToTasks: '複製到 Tasks', copyTextToTasks: '輸出到 Tasks',
   setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
   exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1',
   undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成', restoreRow: '復原刪除',
@@ -870,6 +874,9 @@ function opLogUndoRequest(entry) {
       case 'updateNoteByRow':
         if (r.oldValue === undefined || !p.expect) return null;
         return { action: entry.action, row: r.row, expect: p.expect, value: r.oldValue };
+      case 'updateNameByRow':
+        if (!r.oldValue) return null;
+        return { action: 'updateNameByRow', row: r.row, expect: p.value, value: r.oldValue };
       default:
         return null;
     }
@@ -1168,7 +1175,7 @@ armConfirmButton(el.clearOpLogBtn, '再按一次確認清除', () => {
 // 每個請求排到時，伺服器的列號狀態剛好就是它點擊當下看到的狀態。
 const ROW_MUTATION_ACTIONS = new Set([
   'deleteByRow', 'completeByRow', 'undoCompleteByRow', 'updateTextByRow', 'updateCycleByRow', 'updateTagByRow',
-  'updateNoteByRow', 'copyToTasks', 'setDateToNearestWeekday', 'setDateToNearestWeekend'
+  'updateNoteByRow', 'updateNameByRow', 'copyToTasks', 'setDateToNearestWeekday', 'setDateToNearestWeekend'
 ]);
 // 刪除、完成不能重試：請求逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
 const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow', 'copyTextToTasks']); // copyTextToTasks：重試可能建出重複任務
@@ -1506,7 +1513,7 @@ function renderFromView(pos) {
   el.itemText.value = item.text || '';
   el.itemText.readOnly = !config.text.editable;
   el.readonlyHint.style.display = config.text.editable ? 'none' : 'block';
-  document.getElementById('aiRow').style.display = config.text.editable ? 'flex' : 'none';
+  document.getElementById('aiRow').style.display = config.text.editable && !config.text.noAi ? 'flex' : 'none';
 
   // 只有網絡禱告的備註可以編輯、內容通常也比較長，才需要一大格；其他來源備註大多是空的，
   // 顯示一個空的大格子只會把下面的按鈕往下擠，不能編輯又沒內容的話乾脆整欄隱藏。
@@ -1721,6 +1728,11 @@ document.getElementById('aiCreditBtn').addEventListener('click', async () => {
 });
 
 function flushSave(item, config, field, value) {
+  // 姓名這種不能空白的欄位：清空的當下先不送（後端也會拒絕），等使用者打好再存
+  if (field === 'text' && config.text.required && !String(value).trim()) {
+    showStatus('姓名不能空白，先不儲存', true);
+    return;
+  }
   // 改文字時把「改之前」的文字一起送出，後端用它確認／找回正確的列（列號可能已經位移）
   const prevValue = item[field];
   item[field] = value;

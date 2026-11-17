@@ -450,6 +450,9 @@ function handleCardApi_(e, action) {
       case 'addNetworkItem':
         result = addNetworkItem_(e.parameter.name, e.parameter.note, e.parameter.cycle);
         break;
+      case 'updateNameByRow':
+        result = updateNameByRow_(parseInt(e.parameter.row, 10), e.parameter.value);
+        break;
       case 'updateNoteByRow':
         result = updateFieldByRow_(parseInt(e.parameter.row, 10), COL.NOTE, e.parameter.value);
         break;
@@ -593,7 +596,7 @@ function getFixedRosterItems_() {
   return { items: items, total: items.length };
 }
 
-const ROW_NAME_CHECKED_ACTIONS_ = ['completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateNoteByRow', 'updateCycleByRow'];
+const ROW_NAME_CHECKED_ACTIONS_ = ['completeByRow', 'undoCompleteByRow', 'deleteByRow', 'updateNoteByRow', 'updateCycleByRow', 'updateNameByRow'];
 
 /**
  * 該列姓名跟 expect 一樣就用原列號；不一樣就整欄找同名的列（多筆取離原列號最近的），找不到報錯。
@@ -732,6 +735,32 @@ function updateFieldByRow_(row, col, value) {
   const oldValue = String(cell.getValue());
   cell.setValue(value);
   return { success: true, row: row, oldValue: oldValue };
+}
+
+/**
+ * 改姓名（all.html，2026-11-18）。「分眾負責」分頁是用姓名對應的，同名的負責紀錄一起改成新姓名，
+ * 不然這個人的負責人會掉。回傳改之前的姓名，給操作歷程「復原」用。
+ */
+function updateNameByRow_(row, value) {
+  const newName = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!newName) throw new Error('姓名不能是空白');
+  if (!row || row < 2) return { success: false };
+  const cell = getSheet_().getRange(row, COL.NAME);
+  const oldValue = String(cell.getValue());
+  cell.setValue(newName);
+  const oldNorm = groupNorm_(oldValue);
+  let groupRenamed = 0;
+  if (oldNorm && oldNorm !== newName) {
+    withGroupLock_(function () {
+      const gs = getGroupSheet_();
+      readGroupRows_(gs).forEach(function (g) {
+        if (g.name !== oldNorm) return;
+        gs.getRange(g.r, GROUP_COL.NAME).setValue(newName);
+        groupRenamed++;
+      });
+    });
+  }
+  return { success: true, row: row, oldValue: oldValue, groupRenamed: groupRenamed };
 }
 
 // ========== 代禱卡片：Google Sheet 內操作版本（選用） ==========
