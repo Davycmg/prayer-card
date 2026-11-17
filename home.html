@@ -392,8 +392,7 @@
     <button type="button" class="panel-btn secondary" id="highlightStopBtn">⏹ 提前結束（有進度，抽下一個）</button>
   </div>
   <div class="panel-actions" id="highlightOutcomeActions" style="display:none;">
-    <button type="button" class="panel-btn" data-outcome="有進度">🔜 有進度</button>
-    <button type="button" class="panel-btn secondary" data-outcome="沒做到">❌ 沒做到</button>
+    <button type="button" class="panel-btn" data-outcome="有進度">🔜 有進度（抽下一個）</button>
   </div>
 </div>
 
@@ -886,7 +885,7 @@ function playHighlightBeep() {
   if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
 }
 
-// 依目前的計時狀態更新畫面（計時中→倒數；時間到→選這階段的結果；提前結束直接記成有進度）
+// 依目前的計時狀態更新畫面（計時中→倒數；時間到→按「有進度」記錄並抽下一個）
 function renderHighlightSession() {
   const session = loadHighlightSession();
   const panel = document.getElementById('highlightResult');
@@ -916,7 +915,7 @@ function renderHighlightSession() {
       timerEl.textContent = '時間到 ⏰';
       running.style.display = 'none';
       outcome.style.display = '';
-      document.getElementById('highlightStatus').textContent = '這階段的結果？選了就記錄到日曆';
+      document.getElementById('highlightStatus').textContent = '按「有進度」記錄到日曆，並抽下一個';
       return;
     }
     timerEl.textContent = formatRemaining(remaining);
@@ -1081,19 +1080,19 @@ function finishHighlight(outcome) {
   flushHighlightLogs();
 }
 
-// 提前結束＝有進度，直接記錄，不用再選結果（只有時間到才要選），接著自動抽下一個開始計時
-document.getElementById('highlightStopBtn').addEventListener('click', function () {
+// 記成有進度，接著自動抽下一個開始計時（提前結束、時間到按「有進度」共用）
+function finishHighlightAndDrawNext() {
   unlockHighlightAudio();
   finishHighlight('有進度');
   const pool = highlightPool(loadHighlightSettings());
   if (!pool.length) return;
   beginHighlight(pool[Math.floor(Math.random() * pool.length)], document.getElementById('highlightDrawBtn'));
-});
+}
+
+document.getElementById('highlightStopBtn').addEventListener('click', finishHighlightAndDrawNext);
 
 document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
-  btn.addEventListener('click', function () {
-    finishHighlight(btn.dataset.outcome);
-  });
+  btn.addEventListener('click', finishHighlightAndDrawNext);
 });
 
 renderHighlightSummary();
