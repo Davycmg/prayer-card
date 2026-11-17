@@ -101,6 +101,7 @@ function doGet(e) {
   if (view === 'all') {
     const tmpl = HtmlService.createTemplateFromFile('AllCard');
     tmpl.apiUrl = ScriptApp.getService().getUrl();
+    tmpl.who = String(e.parameter.who || ''); // ?view=all&who=名字：直接打開某位負責人的「我的」清單
     return tmpl.evaluate()
       .setTitle('為網絡禱告')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -459,7 +460,9 @@ function handleCardApi_(e, action) {
         result = getPrayerProgress_();
         break;
       default:
-        result = { error: 'unknown action: ' + action };
+        // 分眾負責（分眾負責.js）的 action
+        result = handleGroupApi_(e, action);
+        if (result === undefined) result = { error: 'unknown action: ' + action };
     }
   } catch (err) {
     result = { error: err.toString() };

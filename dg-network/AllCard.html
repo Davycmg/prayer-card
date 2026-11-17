@@ -59,6 +59,35 @@
     color: white;
   }
   .source-badge.network { background: #3d9e8f; }
+  .group-bar {
+    width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 8px; margin-top: 6px;
+  }
+  .who-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-sub); justify-content: center; }
+  .who-row select {
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border-strong);
+    font-size: 15px; background: white; min-width: 140px;
+  }
+  .mode-row { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+  .mode-row button {
+    padding: 6px 12px; border-radius: 999px; border: 1px solid var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 13px;
+  }
+  .mode-row button.active { background: var(--main-primary); color: white; }
+  .mode-row button:disabled { opacity: 0.4; }
+  .assignee-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; font-size: 12px; color: var(--text-sub); }
+  .assignee-chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 10px; border-radius: 999px;
+    background: var(--main-primary-light); color: var(--main-primary-light-text); font-size: 13px;
+  }
+  .assignee-chip.me { background: #3d9e8f; color: white; }
+  .assignee-chip button {
+    border: none; background: transparent; color: inherit; font-size: 12px; padding: 0 4px; cursor: pointer; opacity: 0.7;
+  }
+  .assignee-add {
+    padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--main-primary);
+    background: white; color: var(--main-primary); font-size: 12px; cursor: pointer;
+  }
+  .assignee-none { color: var(--text-danger); }
   .prayer-text {
     font-size: 22px;
     line-height: 1.6;
@@ -207,6 +236,18 @@
   <div class="progress-breakdown" id="progressBreakdown"></div>
 </div>
 
+<div class="group-bar">
+  <div class="who-row">
+    <span>我是</span>
+    <select id="whoSelect"></select>
+  </div>
+  <div class="mode-row" id="modeRow">
+    <button type="button" data-mode="mine">👤 我的</button>
+    <button type="button" data-mode="unassigned">❓ 未分配</button>
+    <button type="button" data-mode="all">🌐 全部</button>
+  </div>
+</div>
+
 <div class="card">
   <span class="source-badge network">🌐 為網絡禱告</span>
   <textarea class="prayer-text" id="itemText" rows="1" readonly placeholder="今天沒有待代禱的項目"></textarea>
@@ -218,6 +259,8 @@
       <select id="cycleSelect"></select>
     </div>
   </div>
+
+  <div class="assignee-row" id="assigneeRow" style="display:none;"></div>
 
   <textarea class="note" id="noteText" placeholder="備註（可直接編輯）" rows="10" style="display:none;"></textarea>
 </div>
@@ -290,6 +333,18 @@
 <script>
 // 這個頁面由 dg-network 的 doGet（?view=all）發布，API 就是同一個部署網址
 const API_URL = '<?= apiUrl ?>';
+const URL_WHO = '<?= who ?>';
+
+// ===== 分眾（後端 分眾負責.js）=====
+// 模式：mine＝我負責的（依我自己的下次代禱日期）、unassigned＝還沒有負責人的、all＝全部（管理者總覽）。
+// 「我的」完成只推進我自己的日期（completeForAssignee），其他負責人不受影響；
+// 「未分配」「全部」的完成照舊推進「表單回覆 1」的日期（completeByRow）。
+const WHO_STORAGE_KEY = 'dgAllCard_who';
+const MODE_STORAGE_KEY = 'dgAllCard_mode';
+let currentWho = '';
+let currentMode = 'all';
+let knownAssignees = [];
+let myAssignedTotal = 0;
 
 // 跟 dg-network/CardIndex.html 一致：週期選項（由密集到疏鬆，「隨機排序」關掉時依這個順序排）
 const CYCLE_OPTIONS = ['每天','每兩天','每三天','每四天','每五天','每週','每兩週','每月','每兩個月','每季','每半年','每年'];
@@ -349,7 +404,10 @@ const el = {
   opLogSummary: document.getElementById('opLogSummary'),
   opLogList: document.getElementById('opLogList'),
   clearOpLogBtn: document.getElementById('clearOpLogBtn'),
-  status: document.getElementById('status')
+  status: document.getElementById('status'),
+  whoSelect: document.getElementById('whoSelect'),
+  modeRow: document.getElementById('modeRow'),
+  assigneeRow: document.getElementById('assigneeRow')
 };
 
 let statusClearTimer = null;
@@ -400,7 +458,9 @@ function apiCallWithRetry(params) {
   const logId = isWriteAction(params.action) ? opLogAdd(params, label) : null;
   const promise = (params.row !== undefined && ROW_MUTATION_ACTIONS.has(params.action))
     ? rowMutation(params, logId)
-    : (opLogUpdate(logId, { state: 'sent' }), apiCallRetrying(params));
+    : (opLogUpdate(logId, { state: 'sent' }),
+      // 完成類不重試：逾時不代表伺服器沒做，重試會把日期推進兩次
+      NO_RETRY_ACTIONS.has(params.action) ? apiCall(Object.assign({}, params), 45000) : apiCallRetrying(params));
   if (logId) {
     promise.then(
       (data) => opLogUpdate(logId, { state: 'ok', result: pickUndoInfo(data) }),
@@ -414,7 +474,9 @@ function apiCallWithRetry(params) {
 }
 
 const ITEM_API = {
-  complete: (item) => apiCallWithRetry({ action: 'completeByRow', row: item.row, expect: item.text }),
+  complete: (item) => currentMode === 'mine'
+    ? apiCallWithRetry({ action: 'completeForAssignee', name: item.text, who: currentWho })
+    : apiCallWithRetry({ action: 'completeByRow', row: item.row, expect: item.text }),
   delete: (item) => apiCallWithRetry({ action: 'deleteByRow', row: item.row, expect: item.text }),
   saveCycle: (item, value) => apiCallWithRetry({ action: 'updateCycleByRow', row: item.row, value, expect: item.text }),
   saveNote: (item, value) => apiCallWithRetry({ action: 'updateNoteByRow', row: item.row, value, expect: item.text })
@@ -424,7 +486,9 @@ const ITEM_API = {
 const OPLOG_MAX = 500;
 const OPLOG_ACTION_LABELS = {
   completeByRow: '完成', deleteByRow: '刪除', updateCycleByRow: '改週期', updateNoteByRow: '改備註',
-  undoCompleteByRow: '復原完成', restoreRow: '復原刪除'
+  undoCompleteByRow: '復原完成', restoreRow: '復原刪除',
+  completeForAssignee: '完成（我的）', undoCompleteForAssignee: '復原完成（我的）',
+  assignPerson: '加負責人', unassignPerson: '移除負責人', reassignPerson: '復原移除負責人'
 };
 function isWriteAction(action) { return Object.prototype.hasOwnProperty.call(OPLOG_ACTION_LABELS, action); }
 
@@ -453,6 +517,13 @@ function opLogUndoRequest(entry) {
     case 'updateNoteByRow':
       if (r.oldValue === undefined || !p.expect) return null;
       return { action: entry.action, row: r.row, expect: p.expect, value: r.oldValue };
+    case 'completeForAssignee':
+      if (r.oldNext === undefined) return null;
+      return { action: 'undoCompleteForAssignee', name: p.name, who: p.who, oldThis: r.oldThis, oldNext: r.oldNext };
+    case 'assignPerson':
+      return { action: 'unassignPerson', name: p.name, who: p.who };
+    case 'unassignPerson':
+      return { action: 'reassignPerson', name: p.name, who: p.who, oldThis: r.oldThis || '', oldNext: r.oldNext || '' };
     default:
       return null;
   }
@@ -502,7 +573,7 @@ function opLogAdd(params, label) {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     t: Date.now(),
     action: params.action,
-    text: label || params.expect || (item && item.text) || '',
+    text: label || params.expect || (params.name ? params.name + (params.who ? '（' + params.who + '）' : '') : '') || (item && item.text) || '',
     value: isUpdate ? String(params.value || '') : '',
     state: 'queued',
     params: Object.assign({}, params)
@@ -584,7 +655,8 @@ function formatOpLogTime(ms) {
 // 重送只開放給帶 expect（姓名）的請求：伺服器能用姓名找回正確的列
 function opLogCanResend(entry) {
   if (entry.state !== 'lost' && entry.state !== 'fail') return false;
-  return !!(entry.params && entry.params.expect);
+  const p = entry.params || {};
+  return !!(p.expect || (p.name && p.who));
 }
 
 function renderOpLog() {
@@ -672,7 +744,7 @@ el.opLogOverlay.addEventListener('click', (e) => {
 // ===== 列號類請求排隊：刪除一列後後面的列號會位移，照點擊順序一個一個送 =====
 const ROW_MUTATION_ACTIONS = new Set(['deleteByRow', 'completeByRow', 'undoCompleteByRow', 'updateCycleByRow', 'updateNoteByRow']);
 // 刪除、完成不能重試：逾時不代表伺服器沒做，重試可能刪到下一列／把日期推進兩次
-const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow']);
+const NO_RETRY_ACTIONS = new Set(['deleteByRow', 'completeByRow', 'completeForAssignee']);
 let mutationQueue = Promise.resolve();
 let mutationEpoch = 0;
 
@@ -734,12 +806,18 @@ function loadAll() {
   el.progress.textContent = '載入中...';
   el.progressBreakdown.textContent = '';
 
-  apiCallRetrying({ action: 'getAllItems' })
+  const req = currentMode === 'mine'
+    ? { action: 'getGroupItems', who: currentWho }
+    : { action: 'getAllItemsWithAssignees' };
+  apiCallRetrying(req)
     .then(data => {
       if (generation !== loadGeneration) return;
-      // 後端回傳 {row, name, cycle, note}，補上 text = name 共用卡片邏輯
-      allItems = (data.items || []).map(raw => Object.assign({}, raw, { text: raw.name || '' }));
-      opLogVerifyLoaded(allItems);
+      // 後端回傳 {row, name, cycle, note, assignees}，補上 text = name 共用卡片邏輯
+      let items = (data.items || []).map(raw => Object.assign({ assignees: [] }, raw, { text: raw.name || '' }));
+      if (currentMode === 'unassigned') items = items.filter(it => it.assignees.length === 0);
+      myAssignedTotal = data.assignedTotal || 0;
+      allItems = items;
+      if (currentMode !== 'mine') opLogVerifyLoaded(allItems); // 「我的」用自己的日期，不跟主表比對
       applyFilter();
     })
     .catch(err => {
@@ -786,7 +864,11 @@ function updateBreakdown() {
     el.progressBreakdown.style.cursor = 'pointer';
     el.progressBreakdown.style.color = 'var(--text-danger)';
   } else {
-    el.progressBreakdown.textContent = '🌐 今天待代禱 ' + allItems.length + ' 位';
+    el.progressBreakdown.textContent = currentMode === 'mine'
+      ? '👤 ' + currentWho + '：今天待代禱 ' + allItems.length + ' 位（共負責 ' + myAssignedTotal + ' 位）'
+      : currentMode === 'unassigned'
+        ? '❓ 未分配：今天待代禱 ' + allItems.length + ' 位'
+        : '🌐 全部：今天待代禱 ' + allItems.length + ' 位';
     el.progressBreakdown.style.cursor = '';
     el.progressBreakdown.style.color = '';
   }
@@ -833,6 +915,7 @@ function renderFromView(pos) {
 
   el.completeBtn.style.display = 'block';
   el.deleteRow.style.display = 'flex';
+  renderAssignees(item);
 }
 
 function renderEmptyState() {
@@ -845,6 +928,7 @@ function renderEmptyState() {
   el.cycleRow.style.display = 'none';
   el.completeBtn.style.display = 'none';
   el.deleteRow.style.display = 'none';
+  el.assigneeRow.style.display = 'none';
 }
 
 // ===== 備註編輯：打字停頓 1 秒後背景送出，切項目前先強制送出 =====
@@ -1322,6 +1406,156 @@ el.exportAllBtn.addEventListener('click', async () => {
   showStatus('已複製共 ' + viewItems.length + ' 項到剪貼簿');
 });
 
+// ===== 分眾：負責人選單、模式切換、卡片上的負責人 =====
+const NEW_WHO_OPTION = '__new__';
+
+function renderWhoSelect() {
+  const names = knownAssignees.slice();
+  if (currentWho && names.indexOf(currentWho) === -1) names.push(currentWho);
+  el.whoSelect.innerHTML = '';
+  const add = (value, text) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    el.whoSelect.appendChild(opt);
+  };
+  add('', '（請選擇）');
+  names.forEach(n => add(n, n));
+  add(NEW_WHO_OPTION, '➕ 新增名字…');
+  el.whoSelect.value = currentWho;
+}
+
+function updateModeButtons() {
+  el.modeRow.querySelectorAll('button[data-mode]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === currentMode);
+    if (btn.dataset.mode === 'mine') btn.disabled = !currentWho;
+  });
+}
+
+function setMode(mode) {
+  if (mode === 'mine' && !currentWho) mode = 'all';
+  currentMode = mode;
+  storageSet(MODE_STORAGE_KEY, mode);
+  updateModeButtons();
+}
+
+function loadAssignees() {
+  return apiCallRetrying({ action: 'getGroupAssignees' })
+    .then(data => { knownAssignees = data.assignees || []; renderWhoSelect(); })
+    .catch(() => { /* 選單少了名字不影響主要功能 */ });
+}
+
+el.whoSelect.addEventListener('change', () => {
+  let value = el.whoSelect.value;
+  if (value === NEW_WHO_OPTION) {
+    const input = prompt('輸入你的名字（之後代禱對象可以指派給這個名字）：');
+    value = input === null ? currentWho : input.trim();
+  }
+  stopSpeakingIfNeeded();
+  flushPendingSaveIfAny();
+  currentWho = value;
+  storageSet(WHO_STORAGE_KEY, currentWho);
+  renderWhoSelect();
+  setMode(currentWho ? 'mine' : 'all');
+  loadAll();
+});
+
+el.modeRow.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-mode]');
+  if (!btn || btn.disabled || btn.dataset.mode === currentMode) return;
+  stopSpeakingIfNeeded();
+  flushPendingSaveIfAny();
+  setMode(btn.dataset.mode);
+  loadAll();
+});
+
+function renderAssignees(item) {
+  const row = el.assigneeRow;
+  row.innerHTML = '';
+  row.style.display = 'flex';
+  const label = document.createElement('span');
+  label.textContent = '負責人：';
+  row.appendChild(label);
+  const list = item.assignees || [];
+  if (list.length === 0) {
+    const none = document.createElement('span');
+    none.className = 'assignee-none';
+    none.textContent = '未分配';
+    row.appendChild(none);
+  }
+  list.forEach(who => {
+    const chip = document.createElement('span');
+    chip.className = 'assignee-chip' + (who === currentWho ? ' me' : '');
+    chip.appendChild(document.createTextNode(who));
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '✕';
+    x.title = '移除負責人';
+    armConfirmButton(x, '確定？', () => unassign(item, who));
+    chip.appendChild(x);
+    row.appendChild(chip);
+  });
+  if (currentWho && list.indexOf(currentWho) === -1) {
+    const mine = document.createElement('button');
+    mine.type = 'button';
+    mine.className = 'assignee-add';
+    mine.textContent = '🙋 我來負責';
+    mine.addEventListener('click', () => assign(item, currentWho));
+    row.appendChild(mine);
+  }
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'assignee-add';
+  addBtn.textContent = '➕ 指派';
+  addBtn.addEventListener('click', () => {
+    const others = knownAssignees.filter(n => list.indexOf(n) === -1);
+    const input = prompt('指派給誰？' + (others.length ? '\n\n目前的負責人：' + others.join('、') : ''));
+    if (input && input.trim()) assign(item, input.trim());
+  });
+  row.appendChild(addBtn);
+}
+
+function assign(item, who) {
+  if ((item.assignees || []).indexOf(who) !== -1) return;
+  item.assignees = (item.assignees || []).concat([who]);
+  if (knownAssignees.indexOf(who) === -1) { knownAssignees.push(who); renderWhoSelect(); }
+  // 「未分配」清單裡的人一指派就不屬於未分配了
+  if (currentMode === 'unassigned') removeItemFromLists(item);
+  else if (currentItem() === item) renderAssignees(item);
+  showStatus('指派中…');
+  apiCallWithRetry({ action: 'assignPerson', name: item.text, who: who })
+    .then(() => showStatus('已指派給「' + who + '」'
+      + (currentMode === 'mine' && who === currentWho ? '（重新整理後會出現在「我的」）' : '')))
+    .catch(err => {
+      item.assignees = item.assignees.filter(n => n !== who);
+      showStatus('指派失敗：' + err.message, true);
+      loadAll();
+    });
+}
+
+function unassign(item, who) {
+  const before = item.assignees || [];
+  item.assignees = before.filter(n => n !== who);
+  // 「我的」清單移除自己＝這張卡不再是我的
+  if (currentMode === 'mine' && who === currentWho) removeItemFromLists(item);
+  else if (currentItem() === item) renderAssignees(item);
+  showStatus('移除中…');
+  apiCallWithRetry({ action: 'unassignPerson', name: item.text, who: who })
+    .then(() => showStatus('已移除負責人「' + who + '」（可在操作歷程復原）'))
+    .catch(err => {
+      item.assignees = before;
+      showStatus('移除失敗：' + err.message, true);
+      loadAll();
+    });
+}
+
+// 初始化：網址 ?who= 優先，其次是這台裝置上次選的人
+currentWho = (URL_WHO || storageGet(WHO_STORAGE_KEY) || '').trim();
+if (URL_WHO) storageSet(WHO_STORAGE_KEY, currentWho);
+const savedMode = storageGet(MODE_STORAGE_KEY);
+setMode(URL_WHO ? 'mine' : (savedMode || (currentWho ? 'mine' : 'all')));
+renderWhoSelect();
+loadAssignees();
 loadAll();
 </script>
 
