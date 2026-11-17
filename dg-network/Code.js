@@ -447,6 +447,9 @@ function handleCardApi_(e, action) {
       case 'restoreRow':
         result = restoreRow_(e.parameter.values);
         break;
+      case 'addNetworkItem':
+        result = addNetworkItem_(e.parameter.name, e.parameter.note, e.parameter.cycle);
+        break;
       case 'updateNoteByRow':
         result = updateFieldByRow_(parseInt(e.parameter.row, 10), COL.NOTE, e.parameter.value);
         break;
@@ -670,6 +673,42 @@ function deleteByRow_(row) {
   const values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
   sheet.deleteRow(row);
   return { success: true, deletedRow: row, rowValues: JSON.stringify(values.map(serializeCell_)) };
+}
+
+/**
+ * all.html 待辦／LINE 卡片「🌐 加入禱告網絡」（2026-11-17）：新增一位代禱對象到「表單回覆 1」。
+ * 跟代禱表單一樣：本次＝現在、下次＝依週期（預設每月）算。姓名已存在就不新增，
+ * 只把備註接在原本備註後面（同樣內容已經在就不重複接，前端重試不會變兩份）。
+ */
+function addNetworkItem_(rawName, rawNote, rawCycle) {
+  const name = String(rawName || '').trim();
+  const note = String(rawNote || '').trim();
+  if (!name) throw new Error('姓名為必填');
+  const key = String(rawCycle || '').trim().toUpperCase();
+  const cycle = CYCLE_MAP[key] || String(rawCycle || '').trim() || '每月';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sheet = getSheet_();
+    const lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      const data = sheet.getRange(2, 1, lastRow - 1, COLUMNS.note).getValues();
+      for (let i = 0; i < data.length; i++) {
+        if (String(data[i][COLUMNS.name - 1]).trim() !== name) continue;
+        const row = i + 2;
+        const oldNote = String(data[i][COLUMNS.note - 1] || '');
+        if (note && oldNote.indexOf(note) === -1) {
+          sheet.getRange(row, COLUMNS.note).setValue(oldNote ? oldNote + '\n' + note : note);
+        }
+        return { success: true, status: 'existing', row: row, name: name, oldNote: oldNote };
+      }
+    }
+    const now = new Date();
+    sheet.appendRow([now, name, cycle, note, '', now, computeNextDate_(now, cycle)]);
+    return { success: true, status: 'created', row: sheet.getLastRow(), name: name, cycle: cycle };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**

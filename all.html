@@ -373,6 +373,7 @@
   <button class="quad-btn" id="addToCalendarBtn">📅 加入日曆</button>
   <button class="quad-btn" id="workdayBtn">💼 工作日</button>
   <button class="quad-btn" id="weekendBtn">🛌 週末</button>
+  <button class="quad-btn" id="addToNetworkBtn">🌐 加入禱告網絡</button>
   <button class="quad-btn" id="setWeekdayBtn">📅 平日禱告</button>
   <button class="quad-btn" id="setWeekendBtn">📅 週末禱告</button>
 </div>
@@ -700,6 +701,7 @@ const el = {
   saveTagCheckbox: document.getElementById('saveTagCheckbox'),
   addTagBtn: document.getElementById('addTagBtn'),
   quadActionsRow: document.getElementById('quadActionsRow'),
+  addToNetworkBtn: document.getElementById('addToNetworkBtn'),
   copyToTasksBtn: document.getElementById('copyToTasksBtn'),
   addToCalendarBtn: document.getElementById('addToCalendarBtn'),
   workdayBtn: document.getElementById('workdayBtn'),
@@ -836,7 +838,8 @@ const OPLOG_ACTION_LABELS = {
   updateNoteByRow: '改備註', copyToTasks: '複製到 Tasks', copyTextToTasks: '輸出到 Tasks',
   setDateToNearestWeekday: '改到平日', setDateToNearestWeekend: '改到週末',
   exportCalendarEventToPrayerSheet: '匯出到表單回覆1', addItem: '新增到表單回覆1',
-  undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成', restoreRow: '復原刪除'
+  undoCompleteByRow: '復原完成', undoDeleteByRow: '復原刪除', uncompleteTaskItem: '復原完成', restoreRow: '復原刪除',
+  addNetworkItem: '加入禱告網絡'
 };
 
 // 伺服器回傳裡「復原」需要的資料：完成前的日期、垃圾桶列號、改之前的值、任務所在清單
@@ -1546,6 +1549,7 @@ function renderFromView(pos) {
   el.quadActionsRow.style.display = (isMulti || isTask) ? 'flex' : 'none';
   el.workdayBtn.style.display = isTask ? '' : 'none';
   el.weekendBtn.style.display = isTask ? '' : 'none';
+  el.addToNetworkBtn.style.display = isTask ? '' : 'none';
   [el.copyToTasksBtn, el.setWeekdayBtn, el.setWeekendBtn].forEach(b => { b.style.display = isMulti ? '' : 'none'; });
   el.prayMoreLessRow.style.display = isMulti ? 'flex' : 'none';
 
@@ -2180,6 +2184,39 @@ armConfirmButton(el.networkToTasksBtn, '再按一次確認輸出', () => {
       showStatus('已輸出到 Google Tasks 預設清單：1' + (item.text || ''));
     })
     .catch(err => showStatus('輸出失敗：' + err.message, true));
+});
+
+// 待辦／LINE「🌐 加入禱告網絡」（2026-11-17）：把這個人加進 dg-network「表單回覆 1」。
+// 姓名：標題裡第一段引號（"呂信偉" 或 “呂信偉”）；沒有引號就取去掉「1 」前綴後、第一個冒號前的文字。
+// 其餘資訊（整個標題＋待辦備註）放備註。按下先跳視窗讓使用者確認／修改姓名。待辦本身不動。
+// 後端 addNetworkItem：週期預設每月；姓名已存在就只把備註接上去。
+function guessNetworkNameFromTitle(title) {
+  const t = String(title || '').trim();
+  const q = t.match(/["“”「]([^"“”」]{1,20})["“”」]/);
+  if (q && q[1].trim()) return q[1].trim();
+  const body = t.replace(/^1\s*/, '');
+  const c = body.split(/[：:]/)[0].trim();
+  return c.length <= 20 ? c : '';
+}
+
+el.addToNetworkBtn.addEventListener('click', () => {
+  const item = currentItem();
+  if (!item || item.source !== 'task') return;
+  flushPendingSaveIfAny();
+  const title = el.itemText.value || item.text || '';
+  const name = (window.prompt('加入禱告網絡：確認姓名（其餘資訊會放進備註）', guessNetworkNameFromTitle(title)) || '').trim();
+  if (!name) return;
+  const taskNote = el.noteText.style.display !== 'none' ? el.noteText.value : (item.note || '');
+  const note = [title.replace(/^1\s+/, '').trim(), String(taskNote || '').trim()].filter(Boolean).join('\n');
+  showStatus('加入禱告網絡中...');
+  apiCallWithRetry(NETWORK_API_URL, { action: 'addNetworkItem', name: name, note: note })
+    .then(data => {
+      if (!data || !data.success) { showStatus('加入禱告網絡失敗：' + ((data && data.error) || '請稍後再試'), true); return; }
+      showStatus(data.status === 'existing'
+        ? `「${name}」已在禱告網絡（第 ${data.row} 列），已把資訊接到備註`
+        : `已加入禱告網絡：${name}（${data.cycle}）`);
+    })
+    .catch(err => showStatus('加入禱告網絡失敗：' + err.message, true));
 });
 
 // 「抉擇」：要不要輸出到 Tasks，50-50 抽籤，只顯示結果
