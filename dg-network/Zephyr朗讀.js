@@ -9,6 +9,14 @@
 // 部署網址是公開的（ANYONE_ANONYMOUS），所以限制每段長度與每天次數，避免被濫用燒 API 額度。
 
 const ZEPHYR_VOICE_NAME = 'Zephyr';
+// 可以指定的 Gemini TTS 預設語音（試聽／之後換聲音用；不在清單裡的一律用 Zephyr）
+const GEMINI_TTS_VOICES = [
+  'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe',
+  'Enceladus', 'Iapetus', 'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar',
+  'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima', 'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat'
+];
+// 可以指定的模型（白名單，避免公開網址被拿去打別的模型）
+const GEMINI_TTS_MODELS = ['gemini-2.5-flash-preview-tts', 'gemini-2.5-pro-preview-tts'];
 const ZEPHYR_DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
 const ZEPHYR_MAX_CHARS = 2000;
 const ZEPHYR_DAILY_LIMIT = 1000;
@@ -19,7 +27,7 @@ function doPost(e) {
   try {
     const body = JSON.parse((e.postData && e.postData.contents) || '{}');
     if (body.action === 'tts') {
-      result = zephyrTts_(body.text);
+      result = zephyrTts_(body.text, body.voice, body.model);
     } else {
       result = { error: 'unknown action: ' + body.action };
     }
@@ -31,7 +39,7 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function zephyrTts_(text) {
+function zephyrTts_(text, voice, modelOverride) {
   text = String(text || '').trim();
   if (!text) throw new Error('沒有文字可以朗讀');
   if (text.length > ZEPHYR_MAX_CHARS) text = text.slice(0, ZEPHYR_MAX_CHARS);
@@ -41,14 +49,17 @@ function zephyrTts_(text) {
   if (!apiKey) throw new Error('還沒設定 GEMINI_API_KEY（指令碼屬性）');
   zephyrCountUsage_();
 
-  const model = props.getProperty('GEMINI_TTS_MODEL') || ZEPHYR_DEFAULT_MODEL;
+  const model = GEMINI_TTS_MODELS.indexOf(modelOverride) !== -1
+    ? modelOverride
+    : (props.getProperty('GEMINI_TTS_MODEL') || ZEPHYR_DEFAULT_MODEL);
+  const voiceName = GEMINI_TTS_VOICES.indexOf(voice) !== -1 ? voice : ZEPHYR_VOICE_NAME;
   // TTS 模型遇到很短的文字（例如「測試」「1」）會當成提問、想回文字而回 400
   // （Model tried to generate text…）。前面加明確的朗讀指示（指示本身不會被唸出來），
   // 而且這個錯誤是隨機的，遇到就再試，最多 3 次。
   let lastErr;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return zephyrCallGemini_(apiKey, model, text);
+      return zephyrCallGemini_(apiKey, model, text, voiceName);
     } catch (err) {
       lastErr = err;
       if (!/should only be used for TTS|generate text/i.test(err.message)) throw err;
@@ -57,7 +68,7 @@ function zephyrTts_(text) {
   throw lastErr;
 }
 
-function zephyrCallGemini_(apiKey, model, text) {
+function zephyrCallGemini_(apiKey, model, text, voiceName) {
   const prompt = 'Read the following Traditional Chinese text aloud, word for word, in a warm and calm voice. '
     + 'Do not add, answer, or translate anything:\n' + text;
   const res = UrlFetchApp.fetch(
@@ -71,7 +82,7 @@ function zephyrCallGemini_(apiKey, model, text) {
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseModalities: ['AUDIO'],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ZEPHYR_VOICE_NAME } } }
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceName } } }
         }
       })
     }
