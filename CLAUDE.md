@@ -4,7 +4,13 @@
 
 在這個 repo 開的 PR，預設**不用每次先問過使用者，開完就直接 merge**。例外：CI 沒過（紅字）或 PR 有 merge conflict 時，維持原本規則，先跟使用者確認再處理，不要自動 merge。
 
-Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workflows/deploy.yml` 讓 merge 進 `main` 後自動 `clasp push` 到 Apps Script（不含 deploy，發布新版本仍需手動，因為 API 建立的 web app 部署對 `executeAs: USER_DEPLOYING` 有已知的授權限制）。
+Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workflows/deploy.yml` 讓 merge 進 `main` 後自動 `clasp push` 到 Apps Script。
+
+## 自動發布新版本（2026-11-17 起）
+
+`deploy.yml` 在 push 之後，主要 prayer-card 專案與 dg-network 各自跑 `.github/scripts/redeploy.sh`：用 `clasp deploy -i <部署ID>` 把**編輯器 UI 建立的既有部署**更新到新版本（網址不變；不用 API 新建部署，因為 API 新建的 web app 部署對 `executeAs: USER_DEPLOYING` 有已知的授權限制）。更新後打 `?action=getPrayerProgress` 冒煙測試（最多 4 次、每次隔 10 秒），回的不是正常 JSON 就自動改回原本的版本、workflow 標紅。部署 ID 寫在 `deploy.yml` 的 `MAIN_DEPLOYMENT_ID`／`DG_NETWORK_DEPLOYMENT_ID`；找不到該部署就只 push、跳警告。這次 merge 沒改到該專案的 `.gs/.js/.html/appsscript.json` 就不發布（每次發布用掉一個版本號，每個專案上限 200 個版本，快滿時要到編輯器刪舊版本）；手動執行 workflow（workflow_dispatch）兩個專案一律發布。舊的 `linelog/` 專案不自動發布。
+
+所以下面各段寫的「要手動發布新版本才生效」，現在 merge 後等 workflow 跑完（約 1～2 分鐘）就生效；workflow 紅字時再看 Actions 的 log。例外：新增了需要新授權範圍的功能（例如第一次用 `UrlFetchApp`），還是要先在編輯器手動執行一次授權，否則冒煙測試可能過、但新功能執行時報授權錯誤。
 
 ## 正確的 Apps Script scriptId
 
