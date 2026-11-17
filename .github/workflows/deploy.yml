@@ -1,13 +1,21 @@
 name: Push to Apps Script
 
-# 只自動 push 程式碼，不自動建立/更新正式部署版本：
-# Apps Script API 建立的網頁應用程式部署（executeAs: USER_DEPLOYING）沒辦法正確帶入
-# 部署者的 Sheets 授權狀態，只有透過 Apps Script 編輯器 UI 建立的部署才能正常運作。
-# 所以「發布新版本」這步維持手動：部署 → 管理部署作業 → 編輯 → 新版本 → 部署。
+# merge 進 main 後：clasp push 程式碼，再自動「發布新版本」（2026-11-17 起）。
+# Apps Script API「新建」的網頁應用程式部署（executeAs: USER_DEPLOYING）沒辦法正確帶入
+# 部署者的 Sheets 授權狀態，所以不新建部署，只把編輯器 UI 建立的既有部署更新到新版本
+# （clasp deploy -i <部署ID>，網址不變），更新後打一次 API 冒煙測試，不通就自動改回原本的版本
+# （.github/scripts/redeploy.sh）。這次 merge 沒改到該專案的程式碼就不發布（每次發布都會用掉
+# 一個版本號，Apps Script 每個專案最多 200 個版本）。手動執行 workflow 一律發布。
 on:
   push:
     branches: [main]
   workflow_dispatch: {}
+
+env:
+  # 編輯器 UI 建立的正式部署（網址裡的 ID）
+  MAIN_DEPLOYMENT_ID: AKfycbyaeqMjoNHYhTSMeu6uTCHipau8egCa72-SOWIARZJ-85GE82Bc0Audu62lQS8IEgxmyw
+  DG_NETWORK_DEPLOYMENT_ID: AKfycbxVIblgOu-oH0viw2Poowfda4a_feDaySi0bU5IQzVC_IDbKIm0oOEDhoVaqfmQuBfe
+  COMMIT_TITLE: ${{ github.event.head_commit.message }}
 
 jobs:
   push:
@@ -15,6 +23,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -22,7 +32,7 @@ jobs:
           node-version: '20'
 
       - name: Install clasp
-        run: npm install -g @google/clasp
+        run: npm install -g @google/clasp@3
 
       - name: Restore clasp credentials
         run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
@@ -30,11 +40,27 @@ jobs:
       - name: Push source to Apps Script
         run: clasp push --force
 
+      - name: Check whether main project code changed
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || ! git rev-parse -q --verify HEAD~1 >/dev/null; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files="$(git -c core.quotepath=false diff --name-only HEAD~1 HEAD | grep -Ev '^(dg-network|linelog|\.github)/' | grep -E '\.(gs|js|html)$|(^|/)appsscript\.json$' || true)"
+          echo "$files"
+          if [ -n "$files" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; else echo "deploy=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Publish new version (update existing deployment)
+        if: steps.changed.outputs.deploy == 'true'
+        run: bash .github/scripts/redeploy.sh "$MAIN_DEPLOYMENT_ID" getPrayerProgress
+
   push-dg-network:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -42,7 +68,7 @@ jobs:
           node-version: '20'
 
       - name: Install clasp
-        run: npm install -g @google/clasp
+        run: npm install -g @google/clasp@3
 
       - name: Restore clasp credentials
         run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
@@ -51,11 +77,28 @@ jobs:
         working-directory: dg-network
         run: clasp push --force
 
+      - name: Check whether dg-network code changed
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || ! git rev-parse -q --verify HEAD~1 >/dev/null; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files="$(git -c core.quotepath=false diff --name-only HEAD~1 HEAD -- dg-network | grep -E '\.(gs|js|html)$|appsscript\.json$' || true)"
+          echo "$files"
+          if [ -n "$files" ]; then echo "deploy=true" >> "$GITHUB_OUTPUT"; else echo "deploy=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Publish new version (update existing deployment)
+        if: steps.changed.outputs.deploy == 'true'
+        working-directory: dg-network
+        run: bash ../.github/scripts/redeploy.sh "$DG_NETWORK_DEPLOYMENT_ID" getPrayerProgress
+
   push-linelog:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -63,7 +106,7 @@ jobs:
           node-version: '20'
 
       - name: Install clasp
-        run: npm install -g @google/clasp
+        run: npm install -g @google/clasp@3
 
       - name: Restore clasp credentials
         run: echo '${{ secrets.CLASPRC_JSON }}' > ~/.clasprc.json
