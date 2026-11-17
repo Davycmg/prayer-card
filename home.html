@@ -389,7 +389,7 @@
   <div id="highlightTimer" class="hl-timer"></div>
   <div id="highlightStatus" class="hl-sub"></div>
   <div class="panel-actions" id="highlightRunningActions">
-    <button type="button" class="panel-btn secondary" id="highlightStopBtn">⏹ 提前結束</button>
+    <button type="button" class="panel-btn secondary" id="highlightStopBtn">⏹ 提前結束（有進度）</button>
   </div>
   <div class="panel-actions" id="highlightOutcomeActions" style="display:none;">
     <button type="button" class="panel-btn" data-outcome="有進度">🔜 有進度</button>
@@ -886,7 +886,7 @@ function playHighlightBeep() {
   if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
 }
 
-// 依目前的計時狀態更新畫面（計時中→倒數；時間到或提前結束→選這階段的結果）
+// 依目前的計時狀態更新畫面（計時中→倒數；時間到→選這階段的結果；提前結束直接記成有進度）
 function renderHighlightSession() {
   const session = loadHighlightSession();
   const panel = document.getElementById('highlightResult');
@@ -1064,29 +1064,31 @@ document.getElementById('highlightPickCancel').addEventListener('click', functio
   document.getElementById('highlightPick').style.display = 'none';
 });
 
-document.getElementById('highlightStopBtn').addEventListener('click', function () {
+// 結束這段 Highlight：放進待送記錄（背景寫日曆），清掉計時狀態
+// 日曆事件的結束時間＝按下按鈕的這一刻（提前結束／選結果的時間）
+function finishHighlight(outcome) {
   const session = loadHighlightSession();
   if (!session) return;
-  session.stoppedMs = Date.now();
-  saveHighlightSession(session);
+  const logs = loadHighlightPendingLogs();
+  logs.push({
+    text: session.text + (session.sub ? '：' + session.sub : ''),
+    startMs: session.startMs, endMs: Date.now(), minutes: session.minutes, outcome: outcome,
+    eventId: session.eventId // 舊版開始計時就建好事件的，沿用它，不重複建立
+  });
+  saveHighlightPendingLogs(logs);
+  saveHighlightSession(null);
   renderHighlightSession();
+  flushHighlightLogs();
+}
+
+// 提前結束＝有進度，直接記錄，不用再選結果（只有時間到才要選）
+document.getElementById('highlightStopBtn').addEventListener('click', function () {
+  finishHighlight('有進度');
 });
 
 document.querySelectorAll('#highlightOutcomeActions button').forEach(btn => {
   btn.addEventListener('click', function () {
-    const session = loadHighlightSession();
-    if (!session) return;
-    // 日曆事件的結束時間＝按下結果按鈕的這一刻（不是時間到／提前結束的時間）
-    const logs = loadHighlightPendingLogs();
-    logs.push({
-      text: session.text + (session.sub ? '：' + session.sub : ''),
-      startMs: session.startMs, endMs: Date.now(), minutes: session.minutes, outcome: btn.dataset.outcome,
-      eventId: session.eventId // 舊版開始計時就建好事件的，沿用它，不重複建立
-    });
-    saveHighlightPendingLogs(logs);
-    saveHighlightSession(null);
-    renderHighlightSession();
-    flushHighlightLogs();
+    finishHighlight(btn.dataset.outcome);
   });
 });
 
