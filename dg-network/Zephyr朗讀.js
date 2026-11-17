@@ -1,0 +1,94 @@
+// ========== AllCard.html（?view=all）朗讀用：Gemini TTS「Zephyr」語音 ==========
+// 瀏覽器內建的 speechSynthesis 沒有 Zephyr，這是 Gemini API 的預設語音之一，
+// 所以由後端呼叫 Gemini TTS 產生語音（24kHz、16-bit、單聲道 PCM，base64），前端包成 WAV 播放。
+//
+// 設定：指令碼屬性 GEMINI_API_KEY（到 aistudio.google.com 建 API key，不進 repo）。
+// 第一次要在編輯器手動執行 checkZephyrTts() 授權「連線到外部服務」並確認 key 可用，再發布新版本。
+// 可選：指令碼屬性 GEMINI_TTS_MODEL 覆寫模型名稱（預設 gemini-2.5-flash-preview-tts）。
+//
+// 部署網址是公開的（ANYONE_ANONYMOUS），所以限制每段長度與每天次數，避免被濫用燒 API 額度。
+
+const ZEPHYR_VOICE_NAME = 'Zephyr';
+const ZEPHYR_DEFAULT_MODEL = 'gemini-2.5-flash-preview-tts';
+const ZEPHYR_MAX_CHARS = 2000;
+const ZEPHYR_DAILY_LIMIT = 1000;
+
+// 用 POST（text/plain）送文字：備註可能很長，放在 GET 網址參數會超過長度限制
+function doPost(e) {
+  let result;
+  try {
+    const body = JSON.parse((e.postData && e.postData.contents) || '{}');
+    if (body.action === 'tts') {
+      result = zephyrTts_(body.text);
+    } else {
+      result = { error: 'unknown action: ' + body.action };
+    }
+  } catch (err) {
+    result = { error: err.message || String(err) };
+  }
+  return ContentService
+    .createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function zephyrTts_(text) {
+  text = String(text || '').trim();
+  if (!text) throw new Error('沒有文字可以朗讀');
+  if (text.length > ZEPHYR_MAX_CHARS) text = text.slice(0, ZEPHYR_MAX_CHARS);
+
+  const props = PropertiesService.getScriptProperties();
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('還沒設定 GEMINI_API_KEY（指令碼屬性）');
+  zephyrCountUsage_();
+
+  const model = props.getProperty('GEMINI_TTS_MODEL') || ZEPHYR_DEFAULT_MODEL;
+  const res = UrlFetchApp.fetch(
+    'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-goog-api-key': apiKey },
+      muteHttpExceptions: true,
+      payload: JSON.stringify({
+        contents: [{ parts: [{ text: text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ZEPHYR_VOICE_NAME } } }
+        }
+      })
+    }
+  );
+  const code = res.getResponseCode();
+  const data = JSON.parse(res.getContentText() || '{}');
+  if (code !== 200) {
+    throw new Error('Gemini TTS 錯誤 ' + code + '：' + ((data.error && data.error.message) || res.getContentText().slice(0, 200)));
+  }
+  const parts = (((data.candidates || [])[0] || {}).content || {}).parts || [];
+  const audioPart = parts.find(p => p.inlineData && p.inlineData.data);
+  if (!audioPart) throw new Error('Gemini TTS 沒有回傳語音');
+  const mime = audioPart.inlineData.mimeType || '';
+  const rateMatch = mime.match(/rate=(\d+)/);
+  return { audio: audioPart.inlineData.data, sampleRate: rateMatch ? Number(rateMatch[1]) : 24000 };
+}
+
+function zephyrCountUsage_() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const today = Utilities.formatDate(new Date(), 'Asia/Taipei', 'yyyy-MM-dd');
+    let usage = {};
+    try { usage = JSON.parse(props.getProperty('ZEPHYR_TTS_USAGE') || '{}'); } catch (err) { usage = {}; }
+    const count = usage.date === today ? usage.count : 0;
+    if (count >= ZEPHYR_DAILY_LIMIT) throw new Error('今天 Zephyr 朗讀次數已達上限（' + ZEPHYR_DAILY_LIMIT + ' 次）');
+    props.setProperty('ZEPHYR_TTS_USAGE', JSON.stringify({ date: today, count: count + 1 }));
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// 在編輯器手動執行：授權 UrlFetchApp，並確認 GEMINI_API_KEY 可以產生 Zephyr 語音
+function checkZephyrTts() {
+  const r = zephyrTts_('平安，這是 Zephyr 語音測試。');
+  Logger.log('OK，取得語音 ' + r.audio.length + ' 字元（base64），取樣率 ' + r.sampleRate);
+}
