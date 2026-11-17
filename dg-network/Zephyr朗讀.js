@@ -42,6 +42,24 @@ function zephyrTts_(text) {
   zephyrCountUsage_();
 
   const model = props.getProperty('GEMINI_TTS_MODEL') || ZEPHYR_DEFAULT_MODEL;
+  // TTS 模型遇到很短的文字（例如「測試」「1」）會當成提問、想回文字而回 400
+  // （Model tried to generate text…）。前面加明確的朗讀指示（指示本身不會被唸出來），
+  // 而且這個錯誤是隨機的，遇到就再試，最多 3 次。
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return zephyrCallGemini_(apiKey, model, text);
+    } catch (err) {
+      lastErr = err;
+      if (!/should only be used for TTS|generate text/i.test(err.message)) throw err;
+    }
+  }
+  throw lastErr;
+}
+
+function zephyrCallGemini_(apiKey, model, text) {
+  const prompt = 'Read the following Traditional Chinese text aloud, word for word, in a warm and calm voice. '
+    + 'Do not add, answer, or translate anything:\n' + text;
   const res = UrlFetchApp.fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/' + encodeURIComponent(model) + ':generateContent',
     {
@@ -50,7 +68,7 @@ function zephyrTts_(text) {
       headers: { 'x-goog-api-key': apiKey },
       muteHttpExceptions: true,
       payload: JSON.stringify({
-        contents: [{ parts: [{ text: text }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseModalities: ['AUDIO'],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: ZEPHYR_VOICE_NAME } } }

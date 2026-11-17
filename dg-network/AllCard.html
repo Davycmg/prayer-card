@@ -1161,7 +1161,8 @@ async function speakOnePass(text, passNo) {
   if (zephyrDisabled) return speakOnePassBrowser(text, passNo);
   let mainUrl, numUrl;
   try {
-    const numPromise = passNo ? getZephyrClip(String(passNo)) : Promise.resolve(null);
+    // 遍數的小音檔失敗就略過不唸，不影響主文字
+    const numPromise = passNo ? getZephyrClip(String(passNo)).catch(() => null) : Promise.resolve(null);
     mainUrl = await getZephyrClip(text);
     numUrl = await numPromise;
     zephyrFailStreak = 0;
