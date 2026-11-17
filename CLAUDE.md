@@ -51,7 +51,7 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
   - `.../exec?form=simple` → 代禱表單簡化版（不顯示 DG 週期，有舊資料就沿用原週期，沒有就預設「每月」）
   - `.../exec?view=card` → 代禱卡片網頁（今日待代禱名單，可翻頁、朗讀）
   - `.../exec?view=all` → 為網絡禱告（`AllCard.html`，2026-11-12）：根目錄 all.html 的版面，但只有「網絡」這個來源，拿掉所有 Google Tasks／日曆／多方禱告相關的按鈕（篩選列、AI整理、標籤、複製到 Tasks、加入日曆、垃圾桶、LINE 等）。保留：翻頁／隨機／跳到、完成（含防誤觸）、刪除、改週期、改備註、朗讀（姓名＋備註）、一鍵輸出、操作歷程（重送／復原）。API 打同一個部署網址（`tmpl.apiUrl`）。要手動發布新版本才生效。
-    - **朗讀用 Gemini TTS「Zephyr」語音（2026-11-17，`dg-network/Zephyr朗讀.js`）**：瀏覽器內建語音沒有 Zephyr，所以前端 POST（`text/plain`，`{action:'tts',text}`）到 dg-network 的 `doPost` → 後端呼叫 Gemini API（預設模型 `gemini-2.5-flash-preview-tts`，可用指令碼屬性 `GEMINI_TTS_MODEL` 覆寫）回傳 24kHz PCM base64，前端包成 WAV 播放。同一段文字只抓一次（7 遍共用），遍數「1、2…」另外抓並快取，唸目前這項時預抓下一項。API key 存指令碼屬性 `GEMINI_API_KEY`（不進 repo）；部署公開所以每段最多 2000 字、每天 1000 次（`ZEPHYR_TTS_USAGE`）。取不到 Zephyr 時該遍改用瀏覽器語音，連續失敗 3 次就整個頁面改用瀏覽器語音。第一次要在編輯器手動執行 `checkZephyrTts()` 授權外部連線，再發布新版本。
+    - **朗讀用 Gemini TTS「Zephyr」語音（2026-11-17，`dg-network/Zephyr朗讀.js`）**：瀏覽器內建語音沒有 Zephyr，所以前端 POST（`text/plain`，`{action:'tts',text}`）到 dg-network 的 `doPost` → 後端呼叫 Gemini API（預設模型 `gemini-2.5-flash-preview-tts`，可用指令碼屬性 `GEMINI_TTS_MODEL` 覆寫）回傳 24kHz PCM base64，前端包成 WAV 播放。同一段文字只抓一次（7 遍共用），遍數「1、2…」另外抓並快取，唸目前這項時預抓下一項。API key 存指令碼屬性 `GEMINI_API_KEY`（不進 repo）；部署公開所以每段最多 2000 字、每天 1000 次（`ZEPHYR_TTS_USAGE`）。取不到 Zephyr 時該遍改用瀏覽器語音，連續失敗 3 次就整個頁面改用瀏覽器語音。第一次要在編輯器手動執行 `checkZephyrTts()` 授權外部連線，再發布新版本。短文字（例如遍數「1」）Gemini 會當提問回 400「Model tried to generate text」，所以送出前加英文朗讀指示＋遇錯重試 3 次（2026-11-17）。`doPost` 的 `tts` 也接受 `voice`（`GEMINI_TTS_VOICES` 30 個預設語音之一）和 `model`（`GEMINI_TTS_MODELS` 白名單），給試聽其他聲音用；頁面目前固定 Zephyr。
   - `.../exec?action=xxx` → 代禱卡片專用資料 API（前端 fetch 用）
 - 也內建 Google Sheet 內操作版的代禱卡片（`onOpen` 選單「🙏 代禱卡片」），含自動合併同名重複資料、朗讀連禱等功能。
 
