@@ -52,13 +52,15 @@ function zephyrTts_(text, voice, modelOverride, engine) {
   const props = PropertiesService.getScriptProperties();
   zephyrCountUsage_();
   const voiceName = GEMINI_TTS_VOICES.indexOf(voice) !== -1 ? voice : ZEPHYR_VOICE_NAME;
+  // Google Cloud 的台灣國語聲音（cmn-TW-Standard/Wavenet-A～C），試聽用
+  const twVoice = /^cmn-TW-(Standard|Wavenet)-[A-C]$/.test(String(voice || '')) ? voice : '';
 
   // 優先用 Google Cloud Text-to-Speech（engine: 'gemini' 可以強制用 Gemini，比較聲音用）
   const cloudKey = props.getProperty('CLOUD_TTS_API_KEY');
   let cloudErr = null;
   if (cloudKey && engine !== 'gemini' && !modelOverride) {
     try {
-      return cloudTts_(cloudKey, text, voiceName);
+      return cloudTts_(cloudKey, text, voiceName, twVoice);
     } catch (err) {
       cloudErr = err;
     }
@@ -130,7 +132,7 @@ function zephyrCallGemini_(apiKey, model, text, voiceName) {
 
 // Google Cloud Text-to-Speech：Chirp 3 HD 的中文只有 cmn-CN。回傳 MP3（比 PCM 小，傳輸快）。
 // 每次請求上限 5000 bytes（中文一字 3 bytes），所以截到 1500 字。
-function cloudTts_(apiKey, text, voiceName) {
+function cloudTts_(apiKey, text, voiceName, twVoice) {
   if (text.length > 1500) text = text.slice(0, 1500);
   const res = UrlFetchApp.fetch(
     'https://texttospeech.googleapis.com/v1/text:synthesize',
@@ -141,7 +143,9 @@ function cloudTts_(apiKey, text, voiceName) {
       muteHttpExceptions: true,
       payload: JSON.stringify({
         input: { text: text },
-        voice: { languageCode: 'cmn-CN', name: 'cmn-CN-Chirp3-HD-' + voiceName },
+        voice: twVoice
+          ? { languageCode: 'cmn-TW', name: twVoice }
+          : { languageCode: 'cmn-CN', name: 'cmn-CN-Chirp3-HD-' + voiceName },
         audioConfig: { audioEncoding: 'MP3' }
       })
     }
