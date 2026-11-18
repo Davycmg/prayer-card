@@ -66,6 +66,17 @@ function zephyrTts_(text, voice, modelOverride, engine) {
 
   const apiKey = props.getProperty('GEMINI_API_KEY');
   if (!apiKey) throw cloudErr || new Error('還沒設定 CLOUD_TTS_API_KEY 或 GEMINI_API_KEY（指令碼屬性）');
+  if (cloudErr) console.log('Cloud TTS 失敗，改用 Gemini：' + cloudErr.message);
+  try {
+    return zephyrGeminiTts_(apiKey, props, text, voiceName, modelOverride);
+  } catch (err) {
+    // 兩邊都失敗：把 Cloud 的錯誤也帶上，不然只看得到 Gemini 的錯誤
+    if (cloudErr) throw new Error(cloudErr.message + '；Gemini 也失敗：' + err.message);
+    throw err;
+  }
+}
+
+function zephyrGeminiTts_(apiKey, props, text, voiceName, modelOverride) {
 
   const model = GEMINI_TTS_MODELS.indexOf(modelOverride) !== -1
     ? modelOverride
