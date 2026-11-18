@@ -2369,6 +2369,9 @@ function speakOnePassBrowser(text, passNo) {
 // 2. 先抓：卡片停留 ZEPHYR_DWELL_MS 後就背景抓這張卡的語音；朗讀中也預抓下一張。
 // 3. 存起來：抓過的語音存在瀏覽器 IndexedDB（同樣的文字下次直接播），遍數「1～7」也是。
 const ZEPHYR_TTS_URL = NETWORK_API_URL;
+// 朗讀的聲音（Google Cloud Chirp 3 HD／Gemini 同名預設語音）。2026-11-18 使用者選 Gacrux（成熟、播音員感）。
+// 換聲音只要改這裡；快取以「聲音|文字」為 key，換聲音後舊聲音的快取自然不會再用到。
+const TTS_VOICE = 'Gacrux';
 const zephyrAudioEl = new Audio();
 zephyrAudioEl.preload = 'auto';
 const zephyrClipCache = new Map(); // 文字 → Promise<objectURL>（這次開頁面的記憶體快取）
@@ -2461,7 +2464,7 @@ async function fetchZephyrBlob(text) {
     const res = await fetch(ZEPHYR_TTS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'tts', text }),
+      body: JSON.stringify({ action: 'tts', text, voice: TTS_VOICE }),
       signal: controller.signal
     });
     const data = JSON.parse(await res.text());
@@ -2484,22 +2487,23 @@ async function fetchZephyrBlob(text) {
 }
 
 function getZephyrClip(text) {
-  if (zephyrClipCache.has(text)) {
-    const p = zephyrClipCache.get(text);
-    zephyrClipCache.delete(text); // 移到最後（最近使用）
-    zephyrClipCache.set(text, p);
+  const key = TTS_VOICE + '|' + text;
+  if (zephyrClipCache.has(key)) {
+    const p = zephyrClipCache.get(key);
+    zephyrClipCache.delete(key); // 移到最後（最近使用）
+    zephyrClipCache.set(key, p);
     return p;
   }
   const p = (async () => {
-    let blob = await zephyrDbGet(text);
+    let blob = await zephyrDbGet(key);
     if (!blob) {
       blob = await fetchZephyrBlob(text);
-      zephyrDbPut(text, blob);
+      zephyrDbPut(key, blob);
     }
     return URL.createObjectURL(blob);
   })();
-  p.catch(() => zephyrClipCache.delete(text)); // 失敗的不快取，下次重抓
-  zephyrClipCache.set(text, p);
+  p.catch(() => zephyrClipCache.delete(key)); // 失敗的不快取，下次重抓
+  zephyrClipCache.set(key, p);
   while (zephyrClipCache.size > ZEPHYR_CACHE_MAX) {
     const [oldText, oldP] = zephyrClipCache.entries().next().value;
     zephyrClipCache.delete(oldText);

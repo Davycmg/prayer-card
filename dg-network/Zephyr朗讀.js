@@ -13,7 +13,7 @@
 // 每月前 100 萬字免費，之後每 100 萬字 30 美元）。指令碼屬性 CLOUD_TTS_API_KEY 有設才用 Cloud，
 // Cloud 失敗或沒設就退回 Gemini。設好 key 後在編輯器執行一次 checkCloudTts() 確認。
 
-const ZEPHYR_VOICE_NAME = 'Zephyr';
+const ZEPHYR_VOICE_NAME = 'Gacrux'; // 沒指定 voice 時的預設聲音（2026-11-18 使用者選 Gacrux；變數名稱沿用舊名）
 // 可以指定的 Gemini TTS 預設語音（試聽／之後換聲音用；不在清單裡的一律用 Zephyr）
 const GEMINI_TTS_VOICES = [
   'Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe',
@@ -162,7 +162,7 @@ function cloudTts_(apiKey, text, voiceName, twVoice) {
 function checkCloudTts() {
   const key = PropertiesService.getScriptProperties().getProperty('CLOUD_TTS_API_KEY');
   if (!key) throw new Error('還沒設定指令碼屬性 CLOUD_TTS_API_KEY');
-  const r = cloudTts_(key, '平安，這是 Google Cloud 的 Zephyr 語音測試。', ZEPHYR_VOICE_NAME);
+  const r = cloudTts_(key, '平安，這是 Google Cloud 的 ' + ZEPHYR_VOICE_NAME + ' 語音測試。', ZEPHYR_VOICE_NAME);
   Logger.log('OK，取得 MP3 語音 ' + r.audio.length + ' 字元（base64）');
 }
 
