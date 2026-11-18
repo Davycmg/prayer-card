@@ -7,6 +7,11 @@
 // 可選：指令碼屬性 GEMINI_TTS_MODEL 覆寫模型名稱（預設 gemini-2.5-flash-preview-tts）。
 //
 // 部署網址是公開的（ANYONE_ANONYMOUS），所以限制每段長度與每天次數，避免被濫用燒 API 額度。
+//
+// 2026-11-18：Gemini TTS 在目前的付費等級（Tier 1）每天只能 100 次（generate_requests_per_model_per_day），
+// 不夠用，所以優先改用 Google Cloud Text-to-Speech 的 Chirp 3 HD「Zephyr」（cmn-CN-Chirp3-HD-Zephyr，
+// 每月前 100 萬字免費，之後每 100 萬字 30 美元）。指令碼屬性 CLOUD_TTS_API_KEY 有設才用 Cloud，
+// Cloud 失敗或沒設就退回 Gemini。設好 key 後在編輯器執行一次 checkCloudTts() 確認。
 
 const ZEPHYR_VOICE_NAME = 'Zephyr';
 // 可以指定的 Gemini TTS 預設語音（試聽／之後換聲音用；不在清單裡的一律用 Zephyr）
@@ -27,7 +32,7 @@ function doPost(e) {
   try {
     const body = JSON.parse((e.postData && e.postData.contents) || '{}');
     if (body.action === 'tts') {
-      result = zephyrTts_(body.text, body.voice, body.model);
+      result = zephyrTts_(body.text, body.voice, body.model, body.engine);
     } else {
       result = { error: 'unknown action: ' + body.action };
     }
@@ -39,20 +44,32 @@ function doPost(e) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function zephyrTts_(text, voice, modelOverride) {
+function zephyrTts_(text, voice, modelOverride, engine) {
   text = String(text || '').trim();
   if (!text) throw new Error('沒有文字可以朗讀');
   if (text.length > ZEPHYR_MAX_CHARS) text = text.slice(0, ZEPHYR_MAX_CHARS);
 
   const props = PropertiesService.getScriptProperties();
-  const apiKey = props.getProperty('GEMINI_API_KEY');
-  if (!apiKey) throw new Error('還沒設定 GEMINI_API_KEY（指令碼屬性）');
   zephyrCountUsage_();
+  const voiceName = GEMINI_TTS_VOICES.indexOf(voice) !== -1 ? voice : ZEPHYR_VOICE_NAME;
+
+  // 優先用 Google Cloud Text-to-Speech（engine: 'gemini' 可以強制用 Gemini，比較聲音用）
+  const cloudKey = props.getProperty('CLOUD_TTS_API_KEY');
+  let cloudErr = null;
+  if (cloudKey && engine !== 'gemini' && !modelOverride) {
+    try {
+      return cloudTts_(cloudKey, text, voiceName);
+    } catch (err) {
+      cloudErr = err;
+    }
+  }
+
+  const apiKey = props.getProperty('GEMINI_API_KEY');
+  if (!apiKey) throw cloudErr || new Error('還沒設定 CLOUD_TTS_API_KEY 或 GEMINI_API_KEY（指令碼屬性）');
 
   const model = GEMINI_TTS_MODELS.indexOf(modelOverride) !== -1
     ? modelOverride
     : (props.getProperty('GEMINI_TTS_MODEL') || ZEPHYR_DEFAULT_MODEL);
-  const voiceName = GEMINI_TTS_VOICES.indexOf(voice) !== -1 ? voice : ZEPHYR_VOICE_NAME;
   // TTS 模型遇到很短的文字（例如「測試」「1」）會當成提問、想回文字而回 400
   // （Model tried to generate text…）。前面加明確的朗讀指示（指示本身不會被唸出來），
   // 而且這個錯誤是隨機的，遇到就再試，最多 3 次。
@@ -98,6 +115,40 @@ function zephyrCallGemini_(apiKey, model, text, voiceName) {
   const mime = audioPart.inlineData.mimeType || '';
   const rateMatch = mime.match(/rate=(\d+)/);
   return { audio: audioPart.inlineData.data, sampleRate: rateMatch ? Number(rateMatch[1]) : 24000 };
+}
+
+// Google Cloud Text-to-Speech：Chirp 3 HD 的中文只有 cmn-CN。回傳 MP3（比 PCM 小，傳輸快）。
+// 每次請求上限 5000 bytes（中文一字 3 bytes），所以截到 1500 字。
+function cloudTts_(apiKey, text, voiceName) {
+  if (text.length > 1500) text = text.slice(0, 1500);
+  const res = UrlFetchApp.fetch(
+    'https://texttospeech.googleapis.com/v1/text:synthesize',
+    {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-goog-api-key': apiKey },
+      muteHttpExceptions: true,
+      payload: JSON.stringify({
+        input: { text: text },
+        voice: { languageCode: 'cmn-CN', name: 'cmn-CN-Chirp3-HD-' + voiceName },
+        audioConfig: { audioEncoding: 'MP3' }
+      })
+    }
+  );
+  const code = res.getResponseCode();
+  const data = JSON.parse(res.getContentText() || '{}');
+  if (code !== 200 || !data.audioContent) {
+    throw new Error('Cloud TTS 錯誤 ' + code + '：' + ((data.error && data.error.message) || res.getContentText().slice(0, 200)));
+  }
+  return { audio: data.audioContent, format: 'mp3', engine: 'cloud' };
+}
+
+// 在編輯器手動執行：確認 CLOUD_TTS_API_KEY 可以產生 Zephyr 語音
+function checkCloudTts() {
+  const key = PropertiesService.getScriptProperties().getProperty('CLOUD_TTS_API_KEY');
+  if (!key) throw new Error('還沒設定指令碼屬性 CLOUD_TTS_API_KEY');
+  const r = cloudTts_(key, '平安，這是 Google Cloud 的 Zephyr 語音測試。', ZEPHYR_VOICE_NAME);
+  Logger.log('OK，取得 MP3 語音 ' + r.audio.length + ' 字元（base64）');
 }
 
 function zephyrCountUsage_() {

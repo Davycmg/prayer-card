@@ -2466,6 +2466,13 @@ async function fetchZephyrBlob(text) {
     });
     const data = JSON.parse(await res.text());
     if (data.error) throw new Error(data.error);
+    // Google Cloud TTS 回 MP3；Gemini 回 PCM，要自己包成 WAV
+    if (data.format === 'mp3') {
+      const bin = atob(data.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Blob([bytes], { type: 'audio/mpeg' });
+    }
     return pcmBase64ToWavBlob(data.audio, data.sampleRate || 24000);
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('Zephyr 語音逾時');
@@ -2567,8 +2574,11 @@ async function speakOnePass(text, passNo) {
       zephyrFailStreak = 0;
     } catch (err) {
       zephyrFailStreak++;
-      if (zephyrFailStreak >= 3) zephyrDisabled = true;
-      showStatus('Zephyr 語音取得失敗，改用瀏覽器語音：' + err.message, true);
+      const quota = /429|quota|上限/i.test(err.message);
+      if (zephyrFailStreak >= 3 || quota) zephyrDisabled = true;
+      showStatus(quota
+        ? '今天 Zephyr 語音額度用完了，這次改用手機內建聲音（重新整理頁面會再試）'
+        : 'Zephyr 語音取得失敗，改用瀏覽器語音：' + err.message, true);
       if (autoPlayInterrupted || !autoPlayActive) return false;
       const rest = chunks.slice(i).join('');
       const ok = await speakOnePassBrowser(rest, passNo);
