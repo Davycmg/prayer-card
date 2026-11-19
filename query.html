@@ -80,6 +80,28 @@
     white-space: nowrap;
   }
   .query-row button:active { opacity: 0.7; }
+  .tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .tag-chip {
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid #d5d8dc;
+    background: var(--gray-bg);
+    color: var(--text-main);
+    font-size: 15px;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+  .tag-chip:active { opacity: 0.7; }
+  .tag-chip.selected {
+    background: var(--purple);
+    border-color: var(--purple);
+    color: white;
+  }
+  .tag-chips-empty { font-size: 13px; color: var(--text-sub); }
   .export-all-row {
     display: flex;
     align-items: center;
@@ -618,7 +640,9 @@
 
 <div class="card" id="listView">
   <h2>依標籤查詢</h2>
-  <div class="query-row">
+  <!-- 標籤用膠囊按鈕呈現，點一下就查詢；select／按鈕保留但隱藏，沿用原本的查詢流程 -->
+  <div class="tag-chips" id="tagQueryChips"><span class="tag-chips-empty">載入標籤中…</span></div>
+  <div class="query-row" style="display:none;">
     <select id="tagQuerySelect"></select>
     <button id="tagQueryBtn">查詢</button>
   </div>
@@ -1019,6 +1043,31 @@ function populateTagQuerySelect() {
       opt.textContent = '"' + v + '"（文字）';
       el.tagQuerySelect.appendChild(opt);
     });
+
+  renderTagQueryChips();
+}
+
+// 把下拉選單的選項畫成膠囊按鈕（標籤內容跟下拉選單完全相同），點一下＝選這個標籤並查詢
+function renderTagQueryChips() {
+  const box = document.getElementById('tagQueryChips');
+  box.innerHTML = '';
+  Array.from(el.tagQuerySelect.options).forEach(opt => {
+    if (!opt.value) return;
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'tag-chip' + (opt.value === el.tagQuerySelect.value ? ' selected' : '');
+    const isQuoted = opt.textContent.endsWith('（文字）');
+    chip.textContent = isQuoted ? '"' + opt.value + '"' : '#' + opt.value;
+    if (isQuoted) chip.title = '事項文字含這個詞的也會一起找出來';
+    chip.addEventListener('click', () => {
+      el.tagQuerySelect.value = opt.value;
+      box.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
+      chip.classList.add('selected');
+      el.tagQueryBtn.click();
+    });
+    box.appendChild(chip);
+  });
+  if (!box.children.length) box.innerHTML = '<span class="tag-chips-empty">目前沒有標籤</span>';
 }
 
 // 標籤下拉選單（跟 index.html 一致：內建 + 自訂，星期獨立一個選單）
