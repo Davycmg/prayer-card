@@ -183,3 +183,7 @@ all.html（GitHub Pages）的「🔊 開始朗讀」也改用 Gemini TTS Zephyr�
 ## all.html 網絡禱告可改姓名（2026-11-18）
 
 網絡卡片的姓名（卡片大字）現在可以直接編輯（停 1 秒自動存，跟其他來源改文字一樣），備註本來就可編輯。後端 dg-network 新 action `updateNameByRow`（`expect`＝改之前的姓名，`resolveRowByName_` 確認列號），同時把「分眾負責」分頁裡同名的負責紀錄改成新姓名（分眾用姓名對應）。姓名清空不送出；網絡卡片不顯示「✨ AI整理」。操作歷程記為「改姓名」，可復原。後端靠 workflow 自動發布 dg-network 新版本。
+
+## 「📅 加入日曆」一律不重複行程（2026-11-19）
+
+all.html／index.html／query.html／today.html／nonwork.html 的「加入日曆」都改成固定建立**不重複**行程：不再依週期帶 `recur`（RRULE），today／nonwork／all 的待辦也不再跳視窗問週期，index／query 週期沒設定也能加入。要重複的話在 Google 日曆編輯畫面自己設。純前端，merge 進 main 就生效。

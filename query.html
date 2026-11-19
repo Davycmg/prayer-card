@@ -1467,13 +1467,12 @@ armConfirmButton(el.tcCopyToTasksBtn, '再按一次確認複製', () => {
     .catch(err => showStatus(el.tcStatus, '複製失敗：' + err.message));
 });
 
-// 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，依目前這項的週期帶入對應的重複規則（RRULE）
+// 新增到 Google 日曆：開啟 Google Calendar 的建立活動網址，預設一律是不重複行程（2026-11-19）
 armConfirmButton(el.tcAddToCalendarBtn, '再按一次確認加入日曆', () => {
   if (tcItemsCache.length === 0) return;
   const item = tcItemsCache[tcCachePos];
 
-  const rrule = CYCLE_RRULE_MAP[item.cycle];
-  if (!rrule) { showStatus(el.tcStatus, '請先設定週期才能加入日曆'); return; }
+  // 2026-11-19：一律建立不重複行程（不帶週期 RRULE），週期沒設定也能加入；要重複再到日曆裡自己設
 
   const title = (item.text || '禱告事項').split('\n')[0].slice(0, 100) || '禱告事項';
 
@@ -1489,8 +1488,7 @@ armConfirmButton(el.tcAddToCalendarBtn, '再按一次確認加入日曆', () => 
     action: 'TEMPLATE',
     text: title,
     dates: `${fmt(start)}/${fmt(end)}`,
-    details: item.text || '',
-    recur: rrule
+    details: item.text || ''
   });
 
   window.open('https://calendar.google.com/calendar/render?' + params.toString(), '_blank');
