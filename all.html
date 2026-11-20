@@ -2343,19 +2343,45 @@ if (window.speechSynthesis) {
 // 或不到 SPEAK_MIN_MS 就結束的，都算沒唸出來，連禱會停下來、不標記完成。
 const SPEAK_MIN_MS = 800;
 // 瀏覽器內建語音：只在 Zephyr 取不到時當備援
-function speakOnePassBrowser(text, passNo) {
+// 2026-11-20 長內容「卡住」：Android Chrome 內建語音唸很長的一段時，常常唸到一半就停、而且永遠不觸發 onend，
+// 連禱就一直等下去。現在切成短段一段一段唸，每段有看門狗（依字數估時間，超過就當這段結束、接著唸下一段）。
+function speakUtterOnce(text) {
   return new Promise((resolve) => {
-    if (!window.speechSynthesis || !text || !text.trim()) { resolve(false); return; }
-    const utter = new SpeechSynthesisUtterance(passNo ? `${text}。${passNo}` : text);
+    const utter = new SpeechSynthesisUtterance(text);
     utter.lang = 'zh-TW';
     if (zhVoice) utter.voice = zhVoice;
     utter.rate = 0.95;
     let startedAt = 0;
+    let finished = false;
+    const finish = (ok) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(guard);
+      resolve(ok ? (startedAt ? Date.now() - startedAt : 0) : -1);
+    };
+    // 中文大約每秒 3～4 字；從沒開始唸的話 8 秒就放棄
+    const guard = setTimeout(() => {
+      try { window.speechSynthesis.cancel(); } catch (e) {}
+      finish(startedAt > 0);
+    }, 8000 + text.length * 450);
     utter.onstart = () => { startedAt = Date.now(); };
-    utter.onend = () => resolve(startedAt > 0 && Date.now() - startedAt >= SPEAK_MIN_MS);
-    utter.onerror = () => resolve(false);
+    utter.onend = () => finish(startedAt > 0);
+    utter.onerror = () => finish(false);
     window.speechSynthesis.speak(utter);
   });
+}
+
+async function speakOnePassBrowser(text, passNo) {
+  if (!window.speechSynthesis || !text || !text.trim()) return false;
+  const pieces = splitForTts(passNo ? `${text}。${passNo}` : text);
+  let spokenMs = 0;
+  for (const piece of pieces) {
+    if (autoPlayInterrupted || !autoPlayActive) break;
+    const ms = await speakUtterOnce(piece);
+    if (ms < 0) break;
+    spokenMs += ms;
+  }
+  return spokenMs >= SPEAK_MIN_MS;
 }
 
 // ===== Zephyr 語音（Gemini TTS）=====
@@ -2454,7 +2480,7 @@ function zephyrDbPrune(db) {
 
 async function fetchZephyrBlob(text) {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000);
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
   try {
     // text/plain：不會觸發 CORS 預檢；備註可能很長，用 POST 不塞網址
     const res = await fetch(ZEPHYR_TTS_URL, {
@@ -2593,12 +2619,24 @@ function scheduleZephyrPrefetch() {
 function playClip(url) {
   return new Promise((resolve) => {
     let startedAt = 0;
+    let isDone = false;
     const done = (ok) => {
+      if (isDone) return;
+      isDone = true;
+      clearTimeout(guard);
       zephyrAudioEl.onplaying = zephyrAudioEl.onended = zephyrAudioEl.onerror = null;
       stopCurrentClip = null;
       resolve(ok && startedAt ? Date.now() - startedAt : -1);
     };
-    zephyrAudioEl.onplaying = () => { if (!startedAt) startedAt = Date.now(); };
+    // 看門狗：15 秒都沒開始播就放棄；開始播後超過音檔長度＋5 秒還沒 onended 也當播完（避免卡住）
+    let guard = setTimeout(() => { zephyrAudioEl.pause(); done(false); }, 15000);
+    zephyrAudioEl.onplaying = () => {
+      if (startedAt) return;
+      startedAt = Date.now();
+      clearTimeout(guard);
+      const dur = isFinite(zephyrAudioEl.duration) && zephyrAudioEl.duration > 0 ? zephyrAudioEl.duration : 60;
+      guard = setTimeout(() => { zephyrAudioEl.pause(); done(true); }, dur * 1000 + 5000);
+    };
     zephyrAudioEl.onended = () => done(true);
     zephyrAudioEl.onerror = () => done(false);
     stopCurrentClip = () => { zephyrAudioEl.pause(); done(false); };
@@ -2618,10 +2656,14 @@ async function speakOnePass(text, passNo) {
   let playedMs = 0;
   for (let i = 0; i < chunks.length; i++) {
     let url;
+    // 等太久（伺服器忙）就在畫面上說一聲，讓人知道不是當掉
+    const waitNote = setTimeout(() => showStatus('語音準備中…（第 ' + (i + 1) + '／' + chunks.length + ' 段）'), 3000);
     try {
       url = await promises[i];
+      clearTimeout(waitNote);
       zephyrFailStreak = 0;
     } catch (err) {
+      clearTimeout(waitNote);
       zephyrFailStreak++;
       const quota = /429|quota|上限/i.test(err.message);
       if (zephyrFailStreak >= 3 || quota) zephyrDisabled = true;
