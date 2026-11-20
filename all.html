@@ -2366,7 +2366,7 @@ function speakUtterOnce(text) {
     }, 8000 + text.length * 450);
     utter.onstart = () => { startedAt = Date.now(); };
     utter.onend = () => finish(startedAt > 0);
-    utter.onerror = () => finish(false);
+    utter.onerror = (e) => finish(e && e.error === 'interrupted' && startedAt > 0 && !autoPlayInterrupted && autoPlayActive ? true : false);
     window.speechSynthesis.speak(utter);
   });
 }
@@ -2616,32 +2616,58 @@ function scheduleZephyrPrefetch() {
 }
 
 // 播放一段音檔，回傳實際播了幾毫秒（被停止／出錯回 -1）
+// 2026-11-20 跟「朗讀時聽語音指令」一起用時：Android 每次重開語音辨識都會搶一下音訊（藍牙切通話模式），
+// 正在播的音檔會被系統暫停（沒有 ended、也沒有 error）、或 play() 被拒絕，連禱就停住或中斷。
+// 現在：被系統暫停就自動接著播（最多 8 次）、play() 被拒絕先重試 3 次；看門狗依剩餘長度重算。
 function playClip(url) {
   return new Promise((resolve) => {
     let startedAt = 0;
     let isDone = false;
+    let resumeTries = 0;
+    let playTries = 0;
+    let guard = null;
     const done = (ok) => {
       if (isDone) return;
       isDone = true;
       clearTimeout(guard);
-      zephyrAudioEl.onplaying = zephyrAudioEl.onended = zephyrAudioEl.onerror = null;
+      zephyrAudioEl.onplaying = zephyrAudioEl.onended = zephyrAudioEl.onerror = zephyrAudioEl.onpause = null;
       stopCurrentClip = null;
       resolve(ok && startedAt ? Date.now() - startedAt : -1);
     };
-    // 看門狗：15 秒都沒開始播就放棄；開始播後超過音檔長度＋5 秒還沒 onended 也當播完（避免卡住）
-    let guard = setTimeout(() => { zephyrAudioEl.pause(); done(false); }, 15000);
-    zephyrAudioEl.onplaying = () => {
-      if (startedAt) return;
-      startedAt = Date.now();
+    const armGuard = () => {
       clearTimeout(guard);
       const dur = isFinite(zephyrAudioEl.duration) && zephyrAudioEl.duration > 0 ? zephyrAudioEl.duration : 60;
-      guard = setTimeout(() => { zephyrAudioEl.pause(); done(true); }, dur * 1000 + 5000);
+      const left = Math.max(0, dur - (zephyrAudioEl.currentTime || 0));
+      guard = setTimeout(() => { isDone || zephyrAudioEl.pause(); done(true); }, left * 1000 + 5000);
+    };
+    const tryPlay = () => {
+      if (isDone) return;
+      const p = zephyrAudioEl.play();
+      if (p) p.catch(() => {
+        if (isDone) return;
+        if (++playTries <= 3) setTimeout(tryPlay, 500);
+        else done(false);
+      });
+    };
+    // 看門狗：15 秒都沒開始播就放棄；開始播後超過剩餘長度＋5 秒還沒 onended 也當播完（避免卡住）
+    guard = setTimeout(() => { zephyrAudioEl.pause(); done(false); }, 15000);
+    zephyrAudioEl.onplaying = () => {
+      if (!startedAt) startedAt = Date.now();
+      armGuard();
+    };
+    zephyrAudioEl.onpause = () => {
+      if (isDone || zephyrAudioEl.ended) return;
+      // 不是我們自己停的（stopCurrentClip／看門狗都會先設 isDone）→ 系統搶走音訊，稍後接著播
+      clearTimeout(guard);
+      if (++resumeTries > 8) { done(true); return; }
+      guard = setTimeout(() => { done(startedAt > 0); }, 15000);
+      setTimeout(tryPlay, 400);
     };
     zephyrAudioEl.onended = () => done(true);
     zephyrAudioEl.onerror = () => done(false);
-    stopCurrentClip = () => { zephyrAudioEl.pause(); done(false); };
+    stopCurrentClip = () => { done(false); zephyrAudioEl.pause(); };
     zephyrAudioEl.src = url;
-    zephyrAudioEl.play().catch(() => done(false));
+    tryPlay();
   });
 }
 
@@ -2929,6 +2955,8 @@ const VOICE_STALE_MS = 20000;
 let voiceLastEventAt = 0;
 let voiceWatchdog = null;
 let voiceRetryTimer = null;
+let voiceLastStartAt = 0;
+const VOICE_MIN_RESTART_MS = 2000;
 
 function voiceTouch() { voiceLastEventAt = Date.now(); }
 
@@ -2999,6 +3027,10 @@ function startVoiceCommands() {
   if (!voiceWatchdog) voiceWatchdog = setInterval(voiceWatchdogTick, VOICE_WATCHDOG_MS);
   if (voiceRecRunning) return;
   if (document.visibilityState === 'hidden') return; // 背景時開不了，回到前景再開（visibilitychange）
+  // 太頻繁重開（每次都會搶一下音訊、打斷朗讀）：距離上次開始不到 2 秒就晚一點再開
+  const sinceLast = Date.now() - voiceLastStartAt;
+  if (sinceLast < VOICE_MIN_RESTART_MS) { scheduleVoiceRestart(VOICE_MIN_RESTART_MS - sinceLast); return; }
+  voiceLastStartAt = Date.now();
   try {
     voiceRecSession++;
     voiceRec.start();
