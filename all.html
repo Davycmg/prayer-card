@@ -403,10 +403,10 @@
 
 <div class="toggle-row">
   <label class="switch">
-    <input type="checkbox" id="voiceCmdToggle">
+    <input type="checkbox" id="voiceCmdToggle" checked>
     <span class="slider"></span>
   </label>
-  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／安祺禱告／停止朗讀）</span>
+  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／下一項／安祺禱告／停止朗讀）</span>
 </div>
 <div class="toggle-row" id="voiceCmdHeard" style="display:none; margin-top:4px;"></div>
 
@@ -2761,6 +2761,7 @@ const VOICE_COMMANDS = [
   { name: '禱告更少', re: /禱告更少|祷告更少|少禱告|少祷告/, btn: () => el.prayLessBtn },
   { name: '安祺禱告', re: /安[祺琪其旗棋淇騏奇][禱祷]告/, run: voiceSetAnchiTag },
   { name: '停止朗讀', re: /停止朗[讀读誦]|停止[唸念]|^停止$|^暫停$|^暂停$/, btn: () => el.speakBtn },
+  { name: '下一項', re: /下一[項项個个則则條条]|^下一$|^下一個$/, btn: () => el.nextBtn },
   { name: '完成', re: /完成/, btn: () => el.completeBtn },
 ];
 const el_voiceCmdToggle = document.getElementById('voiceCmdToggle');
@@ -2771,7 +2772,8 @@ let voiceRecRunning = false;
 let voiceLastCmdAt = 0;
 let voiceRecSession = 0;
 const voiceHandledResults = new Set();
-try { el_voiceCmdToggle.checked = localStorage.getItem(VOICE_CMD_KEY) === '1'; } catch (e) {}
+// 預設開啟（2026-11-20），使用者自己關掉才記成 '0'
+try { el_voiceCmdToggle.checked = localStorage.getItem(VOICE_CMD_KEY) !== '0'; } catch (e) { el_voiceCmdToggle.checked = true; }
 el_voiceCmdToggle.addEventListener('change', () => {
   try { localStorage.setItem(VOICE_CMD_KEY, el_voiceCmdToggle.checked ? '1' : '0'); } catch (e) {}
   if (!el_voiceCmdToggle.checked) stopVoiceCommands();
