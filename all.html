@@ -406,7 +406,7 @@
     <input type="checkbox" id="voiceCmdToggle">
     <span class="slider"></span>
   </label>
-  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／安祺禱告）</span>
+  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／安祺禱告／停止朗讀）</span>
 </div>
 <div class="toggle-row" id="voiceCmdHeard" style="display:none; margin-top:4px;"></div>
 
@@ -2760,6 +2760,7 @@ const VOICE_COMMANDS = [
   { name: '禱告更多', re: /禱告更多|祷告更多|多禱告|多祷告/, btn: () => el.prayMoreBtn },
   { name: '禱告更少', re: /禱告更少|祷告更少|少禱告|少祷告/, btn: () => el.prayLessBtn },
   { name: '安祺禱告', re: /安[祺琪其旗棋淇騏奇][禱祷]告/, run: voiceSetAnchiTag },
+  { name: '停止朗讀', re: /停止朗[讀读誦]|停止[唸念]|^停止$|^暫停$|^暂停$/, btn: () => el.speakBtn },
   { name: '完成', re: /完成/, btn: () => el.completeBtn },
 ];
 const el_voiceCmdToggle = document.getElementById('voiceCmdToggle');
@@ -2802,7 +2803,7 @@ function voiceSetAnchiTag() {
 }
 
 function handleVoiceTranscript(text) {
-  const t = text.replace(/\s+/g, '');
+  const t = text.replace(/[\s。，、,.!！?？]+/g, '');
   const cmd = VOICE_COMMANDS.find(c => c.re.test(t));
   if (!cmd) return false;
   if (!autoPlayActive) return true;
