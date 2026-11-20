@@ -201,3 +201,5 @@ all.html 與 dg-network `AllCard.html` 朗讀時，卡片文字／備註裡的�
 all.html 與 `AllCard.html`（同一份 Zephyr 程式）：備註很長時以前會把十幾段同時打 Apps Script，部分逾時／失敗就把剩下整段改用內建聲音。現在 `zephyrEnqueue()` 同時最多 3 個 TTS 請求（`ZEPHYR_MAX_INFLIGHT`），正在唸的段落（`getZephyrClip(text, true)`）優先於預抓；每段失敗自動重試一次（額度錯誤不重試）；仍失敗只有那一段改用內建聲音，後面照樣 Zephyr。`splitForTts` 另外把超過 120 字的單句依逗號／空白再切、還太長就硬切。
 
 長內容「卡住」（同日）：Android Chrome 內建語音唸很長一段時常常唸到一半就停、永遠不觸發 `onend`，連禱就一直等。現在 `speakOnePassBrowser` 也用 `splitForTts` 切短段逐段唸（`speakUtterOnce`），每段看門狗＝8 秒＋每字 0.45 秒，超過就 `cancel()` 當這段結束；`playClip` 也有看門狗（15 秒沒開始播放棄、開始後超過音檔長度＋5 秒當播完）；TTS 請求逾時從 60 秒改 25 秒；等語音超過 3 秒畫面顯示「語音準備中…（第 i／n 段）」。
+
+跟語音指令互相干擾（同日）：Android 每次重開語音辨識會搶一下音訊（藍牙切通話模式），正在播的音檔被系統暫停（沒有 ended／error）或 `play()` 被拒絕，朗讀就停住或中斷。`playClip` 現在：`onpause` 不是自己停的就 0.4 秒後接著播（最多 8 次），`play()` 被拒絕重試 3 次，看門狗依剩餘長度重算；內建語音 `interrupted` 錯誤若已開始唸就當這段唸過（不讓連禱停掉）。all.html 語音辨識重開至少間隔 2 秒（`VOICE_MIN_RESTART_MS`）。要判斷是不是語音指令造成的，可以先關掉「🎤 朗讀時聽語音指令」比較。
