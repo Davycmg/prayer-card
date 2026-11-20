@@ -406,7 +406,7 @@
     <input type="checkbox" id="voiceCmdToggle" checked>
     <span class="slider"></span>
   </label>
-  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／下一項／安祺禱告／停止朗讀）</span>
+  <span>🎤 朗讀時聽語音指令（更多／更少／完成／下一項／安祺／停止）</span>
 </div>
 <div class="toggle-row" id="voiceCmdHeard" style="display:none; margin-top:4px;"></div>
 
@@ -2757,11 +2757,12 @@ el.speakBtn.addEventListener('click', () => {
 const VOICE_CMD_KEY = 'allHtml_voiceCmd';
 const VOICE_CMD_COOLDOWN_MS = 2500;
 const VOICE_COMMANDS = [
-  { name: '禱告更多', re: /禱告更多|祷告更多|多禱告|多祷告/, btn: () => el.prayMoreBtn },
-  { name: '禱告更少', re: /禱告更少|祷告更少|少禱告|少祷告/, btn: () => el.prayLessBtn },
-  { name: '安祺禱告', re: /安[祺琪其旗棋淇騏奇][禱祷]告/, run: voiceSetAnchiTag },
-  { name: '停止朗讀', re: /停止朗[讀读誦]|停止[唸念]|^停止$|^暫停$|^暂停$/, btn: () => el.speakBtn },
-  { name: '下一項', re: /下一[項项個个則则條条]|^下一$|^下一個$/, btn: () => el.nextBtn },
+  // 2026-11-20 改成短指令：更多／更少／完成／下一項／安祺／停止（舊的長說法也還認得）
+  { name: '更多', re: /更多|多禱告|多祷告/, btn: () => el.prayMoreBtn },
+  { name: '更少', re: /更少|少禱告|少祷告/, btn: () => el.prayLessBtn },
+  { name: '安祺', re: /安[祺琪其旗棋淇騏奇齊齐]/, run: voiceSetAnchiTag },
+  { name: '停止', re: /停止|暫停|暂停/, btn: () => el.speakBtn },
+  { name: '下一項', re: /下一[項项個个則则條条]|^下一$/, btn: () => el.nextBtn },
   { name: '完成', re: /完成/, btn: () => el.completeBtn },
 ];
 const el_voiceCmdToggle = document.getElementById('voiceCmdToggle');
