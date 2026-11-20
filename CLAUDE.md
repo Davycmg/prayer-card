@@ -195,3 +195,7 @@ all.html／index.html／query.html／today.html／nonwork.html 的「加入日�
 ## 朗讀不唸網址（2026-11-20）
 
 all.html 與 dg-network `AllCard.html` 朗讀時，卡片文字／備註裡的網址（`http(s)://…`、`www.…`）不唸出來，改唸「有網址」（`speakableText()`，`speakTextOfCard()`／`textOfItem()` 都套用）。all.html 純前端 merge 進 main 就生效；AllCard.html 靠 workflow 自動發布 dg-network。
+
+## 長內容朗讀（2026-11-20）
+
+all.html 與 `AllCard.html`（同一份 Zephyr 程式）：備註很長時以前會把十幾段同時打 Apps Script，部分逾時／失敗就把剩下整段改用內建聲音。現在 `zephyrEnqueue()` 同時最多 3 個 TTS 請求（`ZEPHYR_MAX_INFLIGHT`），正在唸的段落（`getZephyrClip(text, true)`）優先於預抓；每段失敗自動重試一次（額度錯誤不重試）；仍失敗只有那一段改用內建聲音，後面照樣 Zephyr。`splitForTts` 另外把超過 120 字的單句依逗號／空白再切、還太長就硬切。
