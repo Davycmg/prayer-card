@@ -2482,9 +2482,42 @@ async function fetchZephyrBlob(text) {
   }
 }
 
-function getZephyrClip(text) {
+// 長內容（2026-11-20）：一張卡切成十幾段時，以前全部同時打 Apps Script，後端同時執行數有限，
+// 一部分逾時／失敗就整段改用內建聲音。現在同時最多 ZEPHYR_MAX_INFLIGHT 個請求，
+// 正在唸的（urgent）排在預抓的前面；失敗自動重試一次。
+const ZEPHYR_MAX_INFLIGHT = 3;
+const zephyrQueue = [];
+let zephyrInflight = 0;
+function zephyrEnqueue(text, urgent) {
+  return new Promise((resolve, reject) => {
+    zephyrQueue.push({ text, urgent: !!urgent, resolve, reject });
+    zephyrPump();
+  });
+}
+function zephyrBump(text) {
+  const job = zephyrQueue.find(j => j.text === text);
+  if (job) job.urgent = true;
+}
+function zephyrPump() {
+  while (zephyrInflight < ZEPHYR_MAX_INFLIGHT && zephyrQueue.length) {
+    let idx = zephyrQueue.findIndex(j => j.urgent);
+    if (idx < 0) idx = 0;
+    const job = zephyrQueue.splice(idx, 1)[0];
+    zephyrInflight++;
+    fetchZephyrBlob(job.text)
+      .catch(err => {
+        if (/429|quota|上限/i.test(err.message)) throw err;
+        return new Promise(r => setTimeout(r, 1500)).then(() => fetchZephyrBlob(job.text));
+      })
+      .then(job.resolve, job.reject)
+      .finally(() => { zephyrInflight--; zephyrPump(); });
+  }
+}
+
+function getZephyrClip(text, urgent) {
   const key = TTS_VOICE + '|' + text;
   if (zephyrClipCache.has(key)) {
+    if (urgent) zephyrBump(text);
     const p = zephyrClipCache.get(key);
     zephyrClipCache.delete(key); // 移到最後（最近使用）
     zephyrClipCache.set(key, p);
@@ -2493,7 +2526,7 @@ function getZephyrClip(text) {
   const p = (async () => {
     let blob = await zephyrDbGet(key);
     if (!blob) {
-      blob = await fetchZephyrBlob(text);
+      blob = await zephyrEnqueue(text, urgent);
       zephyrDbPut(key, blob);
     }
     return URL.createObjectURL(blob);
@@ -2514,9 +2547,25 @@ function splitForTts(text) {
   if (!text) return [];
   // 不用 lookbehind（舊版 iOS Safari 不支援，會讓整頁壞掉）
   const sentences = text.replace(/([。！？!?；;\n])/g, '$1\u0000').split('\u0000').map(s => s.trim()).filter(Boolean);
+  // 單句太長（只用逗號、空白連起來的長段）再依逗號／空白切，還是太長就硬切
+  const pieces = [];
+  sentences.forEach(s => {
+    if (s.length <= ZEPHYR_CHUNK_MAX) { pieces.push(s); return; }
+    let buf = '';
+    s.replace(/([，,、：:\s　])/g, '$1\u0000').split('\u0000').forEach(part => {
+      while (part.length > ZEPHYR_CHUNK_MAX) {
+        if (buf) { pieces.push(buf); buf = ''; }
+        pieces.push(part.slice(0, ZEPHYR_CHUNK_MAX));
+        part = part.slice(ZEPHYR_CHUNK_MAX);
+      }
+      if (buf && (buf + part).length > ZEPHYR_CHUNK_MAX) { pieces.push(buf); buf = part; }
+      else buf += part;
+    });
+    if (buf.trim()) pieces.push(buf);
+  });
   const chunks = [];
   let cur = '';
-  sentences.forEach(s => {
+  pieces.map(x => x.trim()).filter(Boolean).forEach(s => {
     const limit = chunks.length === 0 ? ZEPHYR_FIRST_CHUNK_MAX : ZEPHYR_CHUNK_MAX;
     if (cur && (cur + s).length > limit) { chunks.push(cur); cur = s; }
     else cur += s;
@@ -2563,7 +2612,7 @@ async function speakOnePass(text, passNo) {
   if (zephyrDisabled) return speakOnePassBrowser(text, passNo);
   const chunks = splitForTts(text);
   // 全部段落＋遍數同時開始抓，第一段一到就開始唸
-  const promises = chunks.map(c => getZephyrClip(c));
+  const promises = chunks.map(c => getZephyrClip(c, true));
   promises.forEach(p => p.catch(() => {}));
   const numPromise = passNo ? getZephyrClip(String(passNo)).catch(() => null) : Promise.resolve(null);
   let playedMs = 0;
@@ -2580,9 +2629,14 @@ async function speakOnePass(text, passNo) {
         ? '今天 Zephyr 語音額度用完了，這次改用手機內建聲音（重新整理頁面會再試）'
         : 'Zephyr 語音取得失敗，改用瀏覽器語音：' + err.message, true);
       if (autoPlayInterrupted || !autoPlayActive) return false;
-      const rest = chunks.slice(i).join('');
-      const ok = await speakOnePassBrowser(rest, passNo);
-      return ok || playedMs >= SPEAK_MIN_MS;
+      if (zephyrDisabled) {
+        const ok = await speakOnePassBrowser(chunks.slice(i).join(''), passNo);
+        return ok || playedMs >= SPEAK_MIN_MS;
+      }
+      // 只有這一段改用內建聲音，後面的段落照樣用 Zephyr
+      if (await speakOnePassBrowser(chunks[i], null)) playedMs += SPEAK_MIN_MS;
+      if (autoPlayInterrupted || !autoPlayActive) return false;
+      continue;
     }
     if (autoPlayInterrupted || !autoPlayActive) return false;
     const ms = await playClip(url);
