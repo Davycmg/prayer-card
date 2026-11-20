@@ -2822,45 +2822,129 @@ function handleVoiceTranscript(text) {
   return true;
 }
 
+// 2026-11-20 使用者回報「一陣子之後就不聽了」。可能原因（都補上）：
+// 1. onend 後 300ms 重開時 start() 丟錯（上一輪還沒完全收掉），被 catch 吞掉就再也不重開
+// 2. Android 偶爾 start() 成功但之後沒有任何事件、也不觸發 onend，voiceRecRunning 卡在 true
+// 3. 螢幕暗掉／切到別的 App 時 start() 回 not-allowed，以前會直接把開關關掉並記住
+// 現在：每 3 秒看門狗檢查，沒在跑就重開；「在跑」但 20 秒都沒任何事件就 abort 重開；
+// not-allowed 只有麥克風權限真的是「拒絕」才關開關，其他情況等一下再試。
+const VOICE_WATCHDOG_MS = 3000;
+const VOICE_STALE_MS = 20000;
+let voiceLastEventAt = 0;
+let voiceWatchdog = null;
+let voiceRetryTimer = null;
+
+function voiceTouch() { voiceLastEventAt = Date.now(); }
+
+function voiceWanted() { return autoPlayActive && el_voiceCmdToggle.checked; }
+
+function scheduleVoiceRestart(delay) {
+  clearTimeout(voiceRetryTimer);
+  voiceRetryTimer = setTimeout(() => { if (voiceWanted()) startVoiceCommands(); }, delay);
+}
+
+function ensureVoiceRec() {
+  if (voiceRec) return;
+  voiceRec = new SpeechRec();
+  voiceRec.lang = 'zh-TW';
+  voiceRec.continuous = true;
+  voiceRec.interimResults = true;
+  voiceRec.onstart = voiceRec.onaudiostart = voiceRec.onspeechstart = voiceRec.onsoundstart = () => {
+    voiceTouch();
+    if (!/聽到/.test(el_voiceCmdHeard.textContent)) showVoiceHeard('🎤 聆聽指令中…');
+  };
+  voiceRec.onresult = (e) => {
+    voiceTouch();
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const key = i + ':' + voiceRecSession;
+      if (voiceHandledResults.has(key)) continue;
+      if (handleVoiceTranscript(e.results[i][0].transcript)) voiceHandledResults.add(key);
+    }
+  };
+  voiceRec.onerror = (e) => {
+    voiceTouch();
+    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+      checkMicDenied().then(denied => {
+        if (denied) {
+          el_voiceCmdToggle.checked = false;
+          try { localStorage.setItem(VOICE_CMD_KEY, '0'); } catch (err) {}
+          stopVoiceCommands();
+          showStatus('麥克風權限被拒絕，語音指令已關閉（到瀏覽器網站設定允許麥克風再打開）', true);
+        }
+      });
+    }
+    // 其他錯誤（no-speech／aborted／network／audio-capture）交給 onend＋看門狗重開
+  };
+  voiceRec.onend = () => {
+    voiceRecRunning = false;
+    if (voiceWanted()) {
+      showVoiceHeard('🎤 重新聆聽中…');
+      scheduleVoiceRestart(400);
+    } else {
+      showVoiceHeard('');
+    }
+  };
+}
+
+function checkMicDenied() {
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      return navigator.permissions.query({ name: 'microphone' })
+        .then(st => st.state === 'denied').catch(() => false);
+    }
+  } catch (err) {}
+  return Promise.resolve(false);
+}
+
 function startVoiceCommands() {
   if (!el_voiceCmdToggle.checked) return;
   if (!SpeechRec) { showStatus('這個瀏覽器不支援語音辨識（請用 Android 的 Chrome）', true); return; }
-  if (!voiceRec) {
-    voiceRec = new SpeechRec();
-    voiceRec.lang = 'zh-TW';
-    voiceRec.continuous = true;
-    voiceRec.interimResults = true;
-    voiceRec.onresult = (e) => {
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const key = i + ':' + voiceRecSession;
-        if (voiceHandledResults.has(key)) continue;
-        if (handleVoiceTranscript(e.results[i][0].transcript)) voiceHandledResults.add(key);
-      }
-    };
-    voiceRec.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-        el_voiceCmdToggle.checked = false;
-        try { localStorage.setItem(VOICE_CMD_KEY, '0'); } catch (err) {}
-        showStatus('沒有麥克風權限，語音指令已關閉', true);
-      }
-      // no-speech／aborted／network 等交給 onend 重新開始
-    };
-    voiceRec.onend = () => {
-      voiceRecRunning = false;
-      if (autoPlayActive && el_voiceCmdToggle.checked) setTimeout(startVoiceCommands, 300);
-      else showVoiceHeard('');
-    };
-  }
+  ensureVoiceRec();
+  if (!voiceWatchdog) voiceWatchdog = setInterval(voiceWatchdogTick, VOICE_WATCHDOG_MS);
   if (voiceRecRunning) return;
+  if (document.visibilityState === 'hidden') return; // 背景時開不了，回到前景再開（visibilitychange）
   try {
     voiceRecSession++;
     voiceRec.start();
     voiceRecRunning = true;
+    voiceTouch();
     if (!el_voiceCmdHeard.textContent) showVoiceHeard('🎤 聆聽指令中…');
-  } catch (err) { /* 已在跑 */ }
+  } catch (err) {
+    // 上一輪還沒完全收掉：先 abort，稍後再試
+    try { voiceRec.abort(); } catch (e2) {}
+    voiceRecRunning = false;
+    scheduleVoiceRestart(1000);
+  }
 }
 
+function voiceWatchdogTick() {
+  if (!voiceWanted()) {
+    clearInterval(voiceWatchdog);
+    voiceWatchdog = null;
+    return;
+  }
+  if (!voiceRecRunning) { startVoiceCommands(); return; }
+  if (Date.now() - voiceLastEventAt > VOICE_STALE_MS) {
+    // 卡住了：說在跑但很久沒有任何事件
+    try { voiceRec.abort(); } catch (err) {}
+    voiceRecRunning = false;
+    scheduleVoiceRestart(500);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && voiceWanted()) {
+    if (voiceRecRunning && Date.now() - voiceLastEventAt > VOICE_STALE_MS / 2) {
+      try { voiceRec.abort(); } catch (err) {}
+      voiceRecRunning = false;
+    }
+    scheduleVoiceRestart(300);
+  }
+});
+
 function stopVoiceCommands() {
+  clearTimeout(voiceRetryTimer);
+  if (voiceWatchdog) { clearInterval(voiceWatchdog); voiceWatchdog = null; }
   if (voiceRec && voiceRecRunning) { try { voiceRec.stop(); } catch (err) {} }
   showVoiceHeard('');
 }
