@@ -187,3 +187,7 @@ all.html（GitHub Pages）的「🔊 開始朗讀」也改用 Gemini TTS Zephyr�
 ## 「📅 加入日曆」一律不重複行程（2026-11-19）
 
 all.html／index.html／query.html／today.html／nonwork.html 的「加入日曆」都改成固定建立**不重複**行程：不再依週期帶 `recur`（RRULE），today／nonwork／all 的待辦也不再跳視窗問週期，index／query 週期沒設定也能加入。要重複的話在 Google 日曆編輯畫面自己設。純前端，merge 進 main 就生效。
+
+## all.html 朗讀時語音指令（2026-11-20）
+
+「純朗讀模式」下面多一個開關「🎤 朗讀時聽語音指令」（存 localStorage `allHtml_voiceCmd`）。打開後按「🔊 開始朗讀」會同時開麥克風（藍牙耳機的麥克風）聽：「禱告更多」「禱告更少」「完成」＝按對應按鈕（按鈕沒顯示就不做），「安祺禱告」＝把這項標籤設成 `A安祺禱告`（多方禱告本來就不顯示這個標籤，所以設完直接從清單移走、接著唸下一項；「安琪」等同音字也算）。只在朗讀進行中才執行，同一指令 2.5 秒內不重複。用瀏覽器 `SpeechRecognition`（`zh-TW`，Android Chrome），**沒用 Gemini Live**：Live API 要把 key／臨時 token 放進公開網頁、且 Gemini 免費層每天次數很少。Android 辨識沒聲音幾秒會自己結束，`onend` 時朗讀還在就重開。純前端，merge 進 main 就生效。注意：用藍牙麥克風時耳機會切到通話模式（音質變差），喇叭外放時朗讀內容若含「完成」可能被聽成指令。

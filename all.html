@@ -401,6 +401,15 @@
   <span>純朗讀模式（不標記完成）</span>
 </div>
 
+<div class="toggle-row">
+  <label class="switch">
+    <input type="checkbox" id="voiceCmdToggle">
+    <span class="slider"></span>
+  </label>
+  <span>🎤 朗讀時聽語音指令（禱告更多／禱告更少／完成／安祺禱告）</span>
+</div>
+<div class="toggle-row" id="voiceCmdHeard" style="display:none; margin-top:4px;"></div>
+
 <div class="toggle-row" id="randomOrderRow">
   <label class="switch">
     <input type="checkbox" id="randomOrderToggle" checked>
@@ -2721,6 +2730,7 @@ el.speakBtn.addEventListener('click', () => {
     if (stopCurrentClip) stopCurrentClip();
     el.speakBtn.textContent = '🔊 開始朗讀';
     releaseWakeLock();
+    stopVoiceCommands();
     return;
   }
   if (viewItems.length === 0) { showStatus('目前沒有待代禱的項目'); return; }
@@ -2728,8 +2738,122 @@ el.speakBtn.addEventListener('click', () => {
   autoPlayInterrupted = false;
   unlockZephyrAudio();
   requestWakeLock();
+  startVoiceCommands();
   runAutoPlay();
 });
+
+// ===== 朗讀時的語音指令（2026-11-20）=====
+// 朗讀中用麥克風（藍牙耳機的麥克風）聽指令：「禱告更多」「禱告更少」「完成」＝按對應按鈕，
+// 「安祺禱告」＝把這項標籤設成 A安祺禱告（多方禱告清單本來就不顯示這個標籤，所以設完就從畫面移走、接著唸下一項）。
+// 用瀏覽器內建的 SpeechRecognition（Android Chrome 走 Google 語音辨識），不用 Gemini Live：
+// Live API 要把 API key／臨時 token 交給公開網頁，而且 Gemini 免費層每天次數很少（TTS 就被 100 次卡過）。
+// 只在朗讀進行中才執行指令；Android 辨識幾秒沒聲音就會自己結束，onend 時朗讀還在就重新開始。
+const VOICE_CMD_KEY = 'allHtml_voiceCmd';
+const VOICE_CMD_COOLDOWN_MS = 2500;
+const VOICE_COMMANDS = [
+  { name: '禱告更多', re: /禱告更多|祷告更多|多禱告|多祷告/, btn: () => el.prayMoreBtn },
+  { name: '禱告更少', re: /禱告更少|祷告更少|少禱告|少祷告/, btn: () => el.prayLessBtn },
+  { name: '安祺禱告', re: /安[祺琪其旗棋淇騏奇][禱祷]告/, run: voiceSetAnchiTag },
+  { name: '完成', re: /完成/, btn: () => el.completeBtn },
+];
+const el_voiceCmdToggle = document.getElementById('voiceCmdToggle');
+const el_voiceCmdHeard = document.getElementById('voiceCmdHeard');
+const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+let voiceRec = null;
+let voiceRecRunning = false;
+let voiceLastCmdAt = 0;
+let voiceRecSession = 0;
+const voiceHandledResults = new Set();
+try { el_voiceCmdToggle.checked = localStorage.getItem(VOICE_CMD_KEY) === '1'; } catch (e) {}
+el_voiceCmdToggle.addEventListener('change', () => {
+  try { localStorage.setItem(VOICE_CMD_KEY, el_voiceCmdToggle.checked ? '1' : '0'); } catch (e) {}
+  if (!el_voiceCmdToggle.checked) stopVoiceCommands();
+  else if (autoPlayActive) startVoiceCommands();
+});
+
+function showVoiceHeard(msg) {
+  el_voiceCmdHeard.textContent = msg;
+  el_voiceCmdHeard.style.display = msg ? 'flex' : 'none';
+}
+
+function voiceSetAnchiTag() {
+  const item = currentItem();
+  const config = currentConfig();
+  if (!item || !config || !config.tag.show) { showStatus('這一項不能設標籤（只有多方禱告可以）', true); return; }
+  stopSpeakingIfNeeded();
+  const oldTag = item.tag;
+  item.tag = 'A安祺禱告';
+  removeItemFromLists(item);
+  showStatus('已設成「A安祺禱告」標籤（同步中…）');
+  config.tag.save(item, 'A安祺禱告')
+    .then(() => showStatus('已設成「A安祺禱告」標籤 ✓'))
+    .catch(err => {
+      item.tag = oldTag;
+      allItems.push(item);
+      applyFilter();
+      showStatus('安祺禱告標籤同步失敗：' + err.message, true);
+    });
+}
+
+function handleVoiceTranscript(text) {
+  const t = text.replace(/\s+/g, '');
+  const cmd = VOICE_COMMANDS.find(c => c.re.test(t));
+  if (!cmd) return false;
+  if (!autoPlayActive) return true;
+  const now = Date.now();
+  if (now - voiceLastCmdAt < VOICE_CMD_COOLDOWN_MS) return true;
+  voiceLastCmdAt = now;
+  showVoiceHeard('🎤 聽到：「' + cmd.name + '」');
+  if (cmd.run) { cmd.run(); return true; }
+  const btn = cmd.btn();
+  // 按鈕沒顯示（例如不是多方禱告就沒有禱告更多／更少）就不執行
+  if (!btn || btn.offsetParent === null) { showStatus('這一項沒有「' + cmd.name + '」可以按', true); return true; }
+  btn.click();
+  return true;
+}
+
+function startVoiceCommands() {
+  if (!el_voiceCmdToggle.checked) return;
+  if (!SpeechRec) { showStatus('這個瀏覽器不支援語音辨識（請用 Android 的 Chrome）', true); return; }
+  if (!voiceRec) {
+    voiceRec = new SpeechRec();
+    voiceRec.lang = 'zh-TW';
+    voiceRec.continuous = true;
+    voiceRec.interimResults = true;
+    voiceRec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const key = i + ':' + voiceRecSession;
+        if (voiceHandledResults.has(key)) continue;
+        if (handleVoiceTranscript(e.results[i][0].transcript)) voiceHandledResults.add(key);
+      }
+    };
+    voiceRec.onerror = (e) => {
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        el_voiceCmdToggle.checked = false;
+        try { localStorage.setItem(VOICE_CMD_KEY, '0'); } catch (err) {}
+        showStatus('沒有麥克風權限，語音指令已關閉', true);
+      }
+      // no-speech／aborted／network 等交給 onend 重新開始
+    };
+    voiceRec.onend = () => {
+      voiceRecRunning = false;
+      if (autoPlayActive && el_voiceCmdToggle.checked) setTimeout(startVoiceCommands, 300);
+      else showVoiceHeard('');
+    };
+  }
+  if (voiceRecRunning) return;
+  try {
+    voiceRecSession++;
+    voiceRec.start();
+    voiceRecRunning = true;
+    if (!el_voiceCmdHeard.textContent) showVoiceHeard('🎤 聆聽指令中…');
+  } catch (err) { /* 已在跑 */ }
+}
+
+function stopVoiceCommands() {
+  if (voiceRec && voiceRecRunning) { try { voiceRec.stop(); } catch (err) {} }
+  showVoiceHeard('');
+}
 
 function stopSpeakingIfNeeded() {
   if (autoPlayActive) autoPlayInterrupted = true;
