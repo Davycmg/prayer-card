@@ -1400,17 +1400,23 @@ function unlockZephyrAudio() {
 // 遍數 1～7 很常用：開頁面就從 IndexedDB／後端備好
 setTimeout(() => { for (let n = 1; n <= 7; n++) getZephyrClip(String(n)).catch(() => {}); }, 3000);
 
+// 朗讀時網址不唸出來，改唸「有網址」（2026-11-20）
+const URL_RE = /(?:https?:\/\/|www\.)[^\s\u3000，。！？、；：「」『』（）()<>"'“”]+/gi;
+function speakableText(s) {
+  return String(s || '').replace(URL_RE, '，有網址，').replace(/(，有網址，\s*)+/g, '，有網址，').replace(/^，|，$/g, '').trim();
+}
+
 function textOfItem(item) {
   if (!item) return '';
-  const text = String(item.text || '').trim();
-  const note = String(item.note || '').trim();
+  const text = speakableText(item.text);
+  const note = speakableText(item.note);
   if (!note) return text;
   return text ? `${text}。${note}` : note;
 }
 
 function speakTextOfCard() {
-  const text = (el.itemText.value || '').trim();
-  const note = el.noteText.style.display !== 'none' ? (el.noteText.value || '').trim() : '';
+  const text = speakableText(el.itemText.value);
+  const note = el.noteText.style.display !== 'none' ? speakableText(el.noteText.value) : '';
   if (!note) return text;
   return text ? `${text}。${note}` : note;
 }
