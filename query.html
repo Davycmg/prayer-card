@@ -102,6 +102,13 @@
     color: white;
   }
   .tag-chips-empty { font-size: 13px; color: var(--text-sub); }
+  .tag-select-row { margin-top: 12px; }
+  .tag-select-row #tagSelectedSummary { flex: 1; font-size: 14px; color: var(--text-sub); align-self: center; }
+  .tag-select-row #tagClearBtn { background: var(--gray-bg); color: var(--text-main); }
+  .due-card-btn {
+    margin-top: 8px; padding: 8px 14px; border-radius: 10px; border: none;
+    background: var(--purple); color: white; font-size: 14px; cursor: pointer;
+  }
   .export-all-row {
     display: flex;
     align-items: center;
@@ -640,11 +647,14 @@
 
 <div class="card" id="listView">
   <h2>依標籤查詢</h2>
-  <!-- 標籤用膠囊按鈕呈現，點一下就查詢；select／按鈕保留但隱藏，沿用原本的查詢流程 -->
+  <!-- 標籤用膠囊按鈕呈現，可複選（點一下選取、再點一下取消），按「查詢」列出所有符合任一個所選標籤的項目；
+       select 保留但隱藏，只當標籤選項的資料來源 -->
   <div class="tag-chips" id="tagQueryChips"><span class="tag-chips-empty">載入標籤中…</span></div>
-  <div class="query-row" style="display:none;">
-    <select id="tagQuerySelect"></select>
-    <button id="tagQueryBtn">查詢</button>
+  <select id="tagQuerySelect" style="display:none;"></select>
+  <div class="query-row tag-select-row">
+    <span id="tagSelectedSummary">點選標籤（可多選）</span>
+    <button id="tagClearBtn" type="button">清除</button>
+    <button id="tagQueryBtn" type="button">查詢</button>
   </div>
   <label class="export-all-row">
     <input type="checkbox" id="tagQueryAllCheckbox">
@@ -654,6 +664,9 @@
     <input type="checkbox" id="tagQueryCardViewCheckbox">
     <span>全部查詢（不管有沒有到期，用卡片形式瀏覽，可翻頁／編輯／完成）</span>
   </label>
+  <div class="result-count" id="tagResultCount"></div>
+  <button type="button" class="due-card-btn" id="tagDueCardBtn" style="display:none;"></button>
+  <div class="result-list" id="tagResultList"></div>
 
   <h2 style="margin-top:24px;">關鍵字查詢</h2>
   <div class="query-row">
@@ -901,6 +914,10 @@ const CYCLE_RRULE_MAP = {
 let customTagsCache = [];
 let quotedTagsCache = [];
 let currentKeywordResults = []; // 目前關鍵字查詢的結果，點進去編輯時用來對照
+let currentTagResults = [];     // 目前標籤查詢的結果（全部，含未到期）
+let selectedTags = [];          // 依標籤查詢目前選取的標籤（可多個，依點選順序）
+let editingFrom = 'keyword';    // 目前編輯面板是從哪個清單點進去的：'keyword' 或 'tag'
+
 let editingItem = null;         // 目前正在編輯的項目 {row, text, cycle, note, tag}
 let saveTimer = null;
 
@@ -915,6 +932,11 @@ const el = {
   keywordCardViewCheckbox: document.getElementById('keywordCardViewCheckbox'),
   keywordResultCount: document.getElementById('keywordResultCount'),
   keywordResultList: document.getElementById('keywordResultList'),
+  tagResultCount: document.getElementById('tagResultCount'),
+  tagResultList: document.getElementById('tagResultList'),
+  tagDueCardBtn: document.getElementById('tagDueCardBtn'),
+  tagSelectedSummary: document.getElementById('tagSelectedSummary'),
+  tagClearBtn: document.getElementById('tagClearBtn'),
   listView: document.getElementById('listView'),
   tagCardView: document.getElementById('tagCardView'),
   tcBackBtn: document.getElementById('tcBackBtn'),
@@ -1047,7 +1069,7 @@ function populateTagQuerySelect() {
   renderTagQueryChips();
 }
 
-// 把下拉選單的選項畫成膠囊按鈕（標籤內容跟下拉選單完全相同），點一下＝選這個標籤並查詢
+// 把下拉選單的選項畫成膠囊按鈕（標籤內容跟下拉選單完全相同），可複選：點一下選取、再點一下取消
 function renderTagQueryChips() {
   const box = document.getElementById('tagQueryChips');
   box.innerHTML = '';
@@ -1055,20 +1077,37 @@ function renderTagQueryChips() {
     if (!opt.value) return;
     const chip = document.createElement('button');
     chip.type = 'button';
-    chip.className = 'tag-chip' + (opt.value === el.tagQuerySelect.value ? ' selected' : '');
+    chip.className = 'tag-chip' + (selectedTags.includes(opt.value) ? ' selected' : '');
     const isQuoted = opt.textContent.endsWith('（文字）');
     chip.textContent = isQuoted ? '"' + opt.value + '"' : '#' + opt.value;
     if (isQuoted) chip.title = '事項文字含這個詞的也會一起找出來';
     chip.addEventListener('click', () => {
-      el.tagQuerySelect.value = opt.value;
-      box.querySelectorAll('.tag-chip').forEach(c => c.classList.remove('selected'));
-      chip.classList.add('selected');
-      el.tagQueryBtn.click();
+      const i = selectedTags.indexOf(opt.value);
+      if (i === -1) selectedTags.push(opt.value); else selectedTags.splice(i, 1);
+      chip.classList.toggle('selected', i === -1);
+      updateTagSelectedSummary();
     });
     box.appendChild(chip);
   });
   if (!box.children.length) box.innerHTML = '<span class="tag-chips-empty">目前沒有標籤</span>';
+  updateTagSelectedSummary();
 }
+
+function updateTagSelectedSummary() {
+  el.tagSelectedSummary.textContent = selectedTags.length
+    ? '已選 ' + selectedTags.length + ' 個標籤'
+    : '點選標籤（可多選）';
+}
+
+el.tagClearBtn.addEventListener('click', () => {
+  selectedTags = [];
+  document.querySelectorAll('#tagQueryChips .tag-chip').forEach(c => c.classList.remove('selected'));
+  updateTagSelectedSummary();
+  currentTagResults = [];
+  el.tagResultList.innerHTML = '';
+  el.tagResultCount.textContent = '';
+  el.tagDueCardBtn.style.display = 'none';
+});
 
 // 標籤下拉選單（跟 index.html 一致：內建 + 自訂，星期獨立一個選單）
 // 給編輯面板（editTagSelect）跟標籤卡片瀏覽（tcTagSelect）共用
@@ -1092,36 +1131,69 @@ function populateTagSelectInto(selectEl) {
     });
 }
 
-// ===== 依標籤查詢：跟 index.html 完全一樣的卡片瀏覽介面，依 E 欄日期由舊到新排列 =====
+// ===== 依標籤查詢（可複選）：每個標籤各打一次 getItemsByTag，合併去重（同一列只留一筆），依 E 欄日期由舊到新排列 =====
+// 多個標籤是「或」：符合任一個所選標籤的項目都列出來
+async function fetchItemsByTags(tags, includeAll) {
+  const results = await Promise.all(tags.map(tag => {
+    const params = { action: 'getItemsByTag', tag: tag };
+    if (includeAll) params.all = 'true';
+    return apiCall(params);
+  }));
+  const byRow = new Map();
+  results.forEach(data => (data.items || []).forEach(it => {
+    if (!byRow.has(it.row)) byRow.set(it.row, Object.assign({ source: 'sheet' }, it));
+  }));
+  // 空白日期排最前面（跟後端 getItemsByTag 一致），同日期依列號
+  return Array.from(byRow.values()).sort((a, b) =>
+    (a.dateText || '').localeCompare(b.dateText || '') || a.row - b.row);
+}
+
+function tagLabelOf(tags) {
+  return tags.join('＋');
+}
+
+function todayDateText() {
+  const d = new Date();
+  return d.getFullYear() + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + String(d.getDate()).padStart(2, '0');
+}
+
+// 已到期＝沒有日期，或日期在今天以前（含今天），跟後端不帶 all 時的規則一樣
+function isDueItem(item) {
+  return !item.dateText || item.dateText <= todayDateText();
+}
+
+function openTagCardView(items) {
+  tcItemsCache = items;
+  tcApplyOrderPreference(tcItemsCache); // 隨機排序開啟時洗牌，否則沿用 index.html 的週期排序規則
+  tcCachePos = 0;
+  tcFromTagQuery = true; // 這次卡片瀏覽是從「依標籤查詢」叫出來的，移除標籤後這張卡片要從清單消失
+  el.listView.style.display = 'none';
+  el.tagCardView.style.display = 'flex';
+  tcRenderFromCache(0);
+}
+
 el.tagQueryBtn.addEventListener('click', async () => {
-  const tag = el.tagQuerySelect.value;
-  if (!tag) { showStatus(el.status, '請先選擇標籤'); return; }
-
-  if (el.tagQueryAllCheckbox.checked) {
-    await exportTagAllAsText(tag);
-    return;
-  }
-
-  const showAll = el.tagQueryCardViewCheckbox.checked; // 勾選時不管有沒有到期，全部項目都用卡片瀏覽
-  const queryParams = { action: 'getItemsByTag', tag: tag };
-  if (showAll) queryParams.all = 'true';
+  if (!selectedTags.length) { showStatus(el.status, '請先點選標籤（可多選）'); return; }
+  const tags = selectedTags.slice();
 
   setLoading(true);
   try {
-    const data = await apiCall(queryParams);
-    tcItemsCache = data.items || [];
-    tcApplyOrderPreference(tcItemsCache); // 隨機排序開啟時洗牌，否則沿用 index.html 的週期排序規則
-    tcCachePos = 0;
-    tcFromTagQuery = true; // 這次卡片瀏覽是從「依標籤查詢」叫出來的，移除標籤後這張卡片要從清單消失
+    // 清單、全部輸出、全部查詢都不管有沒有到期，抓全部
+    const items = await fetchItemsByTags(tags, true);
 
-    if (tcItemsCache.length === 0) {
-      showStatus(el.status, '沒有符合此標籤的項目');
+    if (el.tagQueryAllCheckbox.checked) {
+      await exportItemsAsText(items, tagLabelOf(tags));
       return;
     }
 
-    el.listView.style.display = 'none';
-    el.tagCardView.style.display = 'flex';
-    tcRenderFromCache(0);
+    if (el.tagQueryCardViewCheckbox.checked) {
+      if (items.length === 0) { showStatus(el.status, '沒有符合所選標籤的項目'); return; }
+      openTagCardView(items);
+      return;
+    }
+
+    currentTagResults = items;
+    renderTagResults();
   } catch (err) {
     showStatus(el.status, '查詢失敗：' + err.message);
   } finally {
@@ -1129,18 +1201,11 @@ el.tagQueryBtn.addEventListener('click', async () => {
   }
 });
 
-// 「全部輸出」勾選時：不管有沒有到期，把這個標籤全部成員組成純文字複製到剪貼簿
-async function exportTagAllAsText(tag) {
-  setLoading(true);
-  try {
-    const data = await apiCall({ action: 'getItemsByTag', tag: tag, all: 'true' });
-    await exportItemsAsText(data.items || [], tag);
-  } catch (err) {
-    showStatus(el.status, '匯出失敗：' + err.message);
-  } finally {
-    setLoading(false);
-  }
-}
+el.tagDueCardBtn.addEventListener('click', () => {
+  const due = currentTagResults.filter(isDueItem);
+  if (due.length === 0) { showStatus(el.status, '沒有已到期的項目'); return; }
+  openTagCardView(due.slice());
+});
 
 // ===== 關鍵字查詢：列出所有符合的項目，可點進去個別編輯 =====
 // 查詢範圍同時涵蓋「表單回覆 1」跟使用者所有 Google Tasks 清單，
@@ -1211,16 +1276,31 @@ async function exportItemsAsText(items, label) {
 }
 
 function renderKeywordResults() {
-  el.keywordResultList.innerHTML = '';
+  renderResultList(currentKeywordResults, el.keywordResultList, el.keywordResultCount, 'keyword');
+}
 
-  if (currentKeywordResults.length === 0) {
-    el.keywordResultCount.textContent = '沒有符合的項目';
+function renderTagResults() {
+  renderResultList(currentTagResults, el.tagResultList, el.tagResultCount, 'tag');
+  const dueCount = currentTagResults.filter(isDueItem).length;
+  if (currentTagResults.length) {
+    el.tagResultCount.textContent = '共 ' + currentTagResults.length + ' 筆（已到期 ' + dueCount + ' 筆）';
+  }
+  el.tagDueCardBtn.style.display = dueCount ? '' : 'none';
+  el.tagDueCardBtn.textContent = '🃏 用卡片瀏覽已到期的 ' + dueCount + ' 筆';
+}
+
+// 關鍵字查詢、標籤查詢共用的清單介面，點一下進編輯面板
+function renderResultList(list, listEl, countEl, from) {
+  listEl.innerHTML = '';
+
+  if (list.length === 0) {
+    countEl.textContent = '沒有符合的項目';
     return;
   }
 
-  el.keywordResultCount.textContent = '共 ' + currentKeywordResults.length + ' 筆';
+  countEl.textContent = '共 ' + list.length + ' 筆';
 
-  currentKeywordResults.forEach((item, idx) => {
+  list.forEach((item, idx) => {
     const div = document.createElement('div');
     div.className = 'result-item';
     div.textContent = item.text;
@@ -1229,22 +1309,23 @@ function renderKeywordResults() {
       badge.className = 'tag-badge tag-badge-tasks';
       badge.textContent = '📋 Google Tasks' + (item.listTitle ? '・' + item.listTitle : '');
       div.appendChild(badge);
-    } else if (item.tag) {
+    } else if (item.tag || (from === 'tag' && item.dateText)) {
       const badge = document.createElement('div');
       badge.className = 'tag-badge';
-      badge.textContent = item.tag;
+      badge.textContent = [item.tag, from === 'tag' ? item.dateText : ''].filter(Boolean).join('・');
       div.appendChild(badge);
     }
-    div.addEventListener('click', () => openEditPanel(idx));
-    el.keywordResultList.appendChild(div);
+    div.addEventListener('click', () => openEditPanel(idx, from));
+    listEl.appendChild(div);
   });
 }
 
 // ===== 編輯面板 =====
 // Google Tasks 找到的項目沒有列號、也沒有週期/標籤這些表單回覆1才有的欄位，
 // 編輯面板只讓改標題（同步回 Google Tasks），隱藏週期/標籤/星期標籤，刪除鈕改成「標記完成」。
-function openEditPanel(idx) {
-  editingItem = currentKeywordResults[idx];
+function openEditPanel(idx, from) {
+  editingFrom = from || 'keyword';
+  editingItem = (editingFrom === 'tag' ? currentTagResults : currentKeywordResults)[idx];
   const isTask = editingItem.source === 'googleTasks';
 
   el.editText.value = editingItem.text || '';
@@ -1266,6 +1347,17 @@ function openEditPanel(idx) {
 
   el.listView.style.display = 'none';
   el.editPanel.classList.add('show');
+}
+
+// 編輯面板刪除／完成後，把項目從它所在的清單（關鍵字或標籤）拿掉並重畫
+function removeEditingItemFromList(keep) {
+  if (editingFrom === 'tag') {
+    currentTagResults = currentTagResults.filter(keep);
+    renderTagResults();
+  } else {
+    currentKeywordResults = currentKeywordResults.filter(keep);
+    renderKeywordResults();
+  }
 }
 
 function closeEditPanel() {
@@ -1327,8 +1419,7 @@ el.editDeleteBtn.addEventListener('click', async () => {
     setLoading(true);
     try {
       await apiCall({ action: 'completeTaskItem', taskId: editingItem.taskId, listId: editingItem.listId });
-      currentKeywordResults = currentKeywordResults.filter(it => it !== editingItem);
-      renderKeywordResults();
+      removeEditingItemFromList(it => it !== editingItem);
       closeEditPanel();
       showStatus(el.status, '已標記完成');
     } catch (err) {
@@ -1348,8 +1439,7 @@ el.editDeleteBtn.addEventListener('click', async () => {
   setLoading(true);
   try {
     await apiCall({ action: 'deleteByRow', row: editingItem.row, expect: editingItem.text });
-    currentKeywordResults = currentKeywordResults.filter(it => it.row !== editingItem.row);
-    renderKeywordResults();
+    removeEditingItemFromList(it => it.row !== editingItem.row);
     closeEditPanel();
     showStatus(el.status, '已刪除');
   } catch (err) {
@@ -1891,10 +1981,9 @@ armConfirmButton(el.tcMergeSearchBtn, '再按一次確認合併', async () => {
     }
     showStatus(el.tcStatus, '已合併 ' + selected.length + ' 項為一項');
     await tcPerformSearch();
-    if (el.tagQuerySelect.value) {
+    if (tcFromTagQuery && selectedTags.length) {
       // 目前標籤瀏覽清單的列號/內容可能已變動，重新查詢一次
-      const data = await apiCall({ action: 'getItemsByTag', tag: el.tagQuerySelect.value });
-      tcItemsCache = data.items || [];
+      tcItemsCache = await fetchItemsByTags(selectedTags, el.tagQueryCardViewCheckbox.checked);
       tcApplyOrderPreference(tcItemsCache);
       tcRenderFromCache(tcCachePos);
     }
