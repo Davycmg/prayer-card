@@ -1202,9 +1202,10 @@ function getTagList() {
  * 事項文字（B欄）裡被雙引號包起來的詞（例如 "祈願牆"），當作「引號標籤」用：
  * query.html 的標籤選單會列出來，選了之後 getItemsByTag 會找出 H 欄標籤相同、
  * 或事項文字裡含有這個詞的所有項目（不管那一條有沒有加引號）。
- * 半形 " 跟全形 “ ” 都算；只收 1～15 字、不跨行的詞，避免整段引號句子變成標籤。
+ * 半形 " 跟全形 “ ” ＂ 〝 〞 ‟ „ 都算，前後不必成對（“詞“、”詞”、"詞” 都可以）；
+ * 只收 1～15 字、不跨行的詞，避免整段引號句子變成標籤。
  */
-const QUOTED_WORD_REGEX_ = /["“”]([^"“”\r\n]{1,15})["“”]/g;
+const QUOTED_WORD_REGEX_ = /["“”＂〝〞‟„]([^"“”＂〝〞‟„\r\n]{1,15})["“”＂〝〞‟„]/g;
 
 function extractQuotedWords_(text, set) {
   const str = (text || '').toString();
