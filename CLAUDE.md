@@ -215,3 +215,7 @@ all.html 與 `AllCard.html`（同一份 Zephyr 程式）：備註很長時以前
 ## 週期新增「每三年」「每十年」（2026-11-24）
 
 週期多了 `3Y每三年`（完成後推 1095 天）、`10Y每十年`（3650 天），接在 `Y每年` 後面：all.html／index.html／query.html／add-item.html／home.html 的週期選單、「禱告更多／更少」的 `CYCLE_ORDER`、後端 `CYCLE_MAP`／`CYCLE_PERIOD_DAYS`、Sheet 版卡片（`程式碼.gs`）都有；日曆 RRULE 對應 `FREQ=YEARLY;INTERVAL=3／10`。網絡禱告（dg-network）沒加。後端靠 workflow 自動發布。
+
+## 朗讀唸週期、遍數改在前面（2026-11-24）
+
+all.html 與 `AllCard.html`：朗讀內容＝遍數（1～7）→ 卡片文字 → 備註 → 「週期，每兩週」（`speakableCycle()`，週期值前面的英文代碼如 `DW` 不唸；只有畫面上週期欄有顯示且有值才唸）。遍數以前接在最後，現在 `speakOnePass` 先播遍數再播內容；內建語音也是「N。內容」。`textOfItem()`（預抓下一張）同樣含週期。
