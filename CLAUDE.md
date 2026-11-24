@@ -211,3 +211,7 @@ all.html 與 `AllCard.html`（同一份 Zephyr 程式）：備註很長時以前
 ## home.html「禱告卡片查詢」移到上方卡片（2026-11-22）
 
 上方卡片區原本「🎲 隨機抽待辦任務」的位置改成「🔍 禱告卡片查詢」（連到 query.html）；隨機抽待辦任務改成下方按鈕列的一顆按鈕（同樣 `id="drawTaskBtn"`，功能不變，抽到的結果仍顯示在按鈕列上方）。純前端，merge 進 main 就生效。
+
+## 週期新增「每三年」「每十年」（2026-11-24）
+
+週期多了 `3Y每三年`（完成後推 1095 天）、`10Y每十年`（3650 天），接在 `Y每年` 後面：all.html／index.html／query.html／add-item.html／home.html 的週期選單、「禱告更多／更少」的 `CYCLE_ORDER`、後端 `CYCLE_MAP`／`CYCLE_PERIOD_DAYS`、Sheet 版卡片（`程式碼.gs`）都有；日曆 RRULE 對應 `FREQ=YEARLY;INTERVAL=3／10`。網絡禱告（dg-network）沒加。後端靠 workflow 自動發布。

@@ -505,7 +505,8 @@ const NETWORK_API_URL = 'https://script.google.com/macros/s/AKfycbxVIblgOu-oH0vi
 const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
   'W': 'W每週', 'DW': 'DW每兩週',
-  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
+  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年',
+  '3Y': '3Y每三年', '10Y': '10Y每十年'
 };
 const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
 const WEEKDAY_MAP = {
@@ -513,7 +514,7 @@ const WEEKDAY_MAP = {
   '週五': '週五', '週六': '週六', '週日': '週日'
 };
 // 週期由密集到疏鬆的順序，「禱告更多／禱告更少」按鈕依這個順序調整週期（只有多方禱告支援）
-const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y'];
+const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y', '3Y', '10Y'];
 // 週期文字 → Google 日曆的 RRULE 重複規則，「加入日曆」按鈕用（只有多方禱告支援）
 const CYCLE_RRULE_MAP = {
   'D每天': 'RRULE:FREQ=DAILY',
@@ -527,7 +528,9 @@ const CYCLE_RRULE_MAP = {
   '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
   'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
   'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
-  'Y每年': 'RRULE:FREQ=YEARLY'
+  'Y每年': 'RRULE:FREQ=YEARLY',
+  '3Y每三年': 'RRULE:FREQ=YEARLY;INTERVAL=3',
+  '10Y每十年': 'RRULE:FREQ=YEARLY;INTERVAL=10'
 };
 // 跟 calendar.html 一致：習慣禱告（日曆行程）的週期選項
 const CALENDAR_CYCLE_OPTIONS = [
@@ -536,7 +539,7 @@ const CALENDAR_CYCLE_OPTIONS = [
   'W每週', 'W每週（平日）', 'W每週（週末）',
   'W每週（一）', 'W每週（二）', 'W每週（三）', 'W每週（四）', 'W每週（五）', 'W每週（六）', 'W每週（日）',
   'DW每兩週',
-  'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'
+  'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年', '3Y每三年', '10Y每十年'
 ];
 // 跟 dg-network/CardIndex.html 一致：為網絡禱告的週期選項
 const NETWORK_CYCLE_OPTIONS = ['每天','每兩天','每三天','每四天','每五天','每週','每兩週','每月','每兩個月','每季','每半年','每年'];
