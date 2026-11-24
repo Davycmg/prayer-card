@@ -1166,7 +1166,7 @@ function speakUtterOnce(text) {
 
 async function speakOnePassBrowser(text, passNo) {
   if (!window.speechSynthesis || !text || !text.trim()) return false;
-  const pieces = splitForTts(passNo ? `${text}。${passNo}` : text);
+  const pieces = splitForTts(passNo ? `${passNo}。${text}` : text); // 2026-11-24 遍數改唸在前面
   let spokenMs = 0;
   for (const piece of pieces) {
     if (autoPlayInterrupted || !autoPlayActive) break;
@@ -1473,6 +1473,13 @@ async function speakOnePass(text, passNo) {
   promises.forEach(p => p.catch(() => {}));
   const numPromise = passNo ? getZephyrClip(String(passNo)).catch(() => null) : Promise.resolve(null);
   let playedMs = 0;
+  // 2026-11-24 遍數改成先唸（「1。內容…」），遍數很短，不拿來判斷有沒有唸出來
+  const numUrl = await numPromise;
+  if (autoPlayInterrupted || !autoPlayActive) return false;
+  if (numUrl) {
+    await playClip(numUrl);
+    if (autoPlayInterrupted || !autoPlayActive) return false;
+  }
   for (let i = 0; i < chunks.length; i++) {
     let url;
     // 等太久（伺服器忙）就在畫面上說一聲，讓人知道不是當掉
@@ -1491,7 +1498,7 @@ async function speakOnePass(text, passNo) {
         : 'Zephyr 語音取得失敗，改用瀏覽器語音：' + err.message, true);
       if (autoPlayInterrupted || !autoPlayActive) return false;
       if (zephyrDisabled) {
-        const ok = await speakOnePassBrowser(chunks.slice(i).join(''), passNo);
+        const ok = await speakOnePassBrowser(chunks.slice(i).join(''), null); // 遍數已經先唸過
         return ok || playedMs >= SPEAK_MIN_MS;
       }
       // 只有這一段改用內建聲音，後面的段落照樣用 Zephyr
@@ -1504,8 +1511,6 @@ async function speakOnePass(text, passNo) {
     if (ms < 0) return false;
     playedMs += ms;
   }
-  const numUrl = await numPromise;
-  if (numUrl && !autoPlayInterrupted && autoPlayActive) await playClip(numUrl); // 遍數很短，不拿來判斷有沒有唸出來
   return playedMs >= SPEAK_MIN_MS;
 }
 
@@ -1528,19 +1533,25 @@ function speakableText(s) {
   return String(s || '').replace(URL_RE, '，有網址，').replace(/(，有網址，\s*)+/g, '，有網址，').replace(/^，|，$/g, '').trim();
 }
 
+// 2026-11-24 朗讀也唸週期（例如「DW每兩週」唸成「週期，每兩週」，前面的英文代碼不唸）
+function speakableCycle(cycle) {
+  const c = String(cycle || '').replace(/^[A-Za-z]+\s*/, '').trim();
+  return c ? `週期，${c}` : '';
+}
+function joinSpeak(parts) {
+  return parts.filter(Boolean).join('。');
+}
+
 function textOfItem(item) {
   if (!item) return '';
-  const text = speakableText(item.text);
-  const note = speakableText(item.note);
-  if (!note) return text;
-  return text ? `${text}。${note}` : note;
+  return joinSpeak([speakableText(item.text), speakableText(item.note), speakableCycle(item.cycle)]);
 }
 
 function speakTextOfCard() {
   const text = speakableText(el.itemText.value);
   const note = el.noteText.style.display !== 'none' ? speakableText(el.noteText.value) : '';
-  if (!note) return text;
-  return text ? `${text}。${note}` : note;
+  const cycle = el.cycleRow.style.display !== 'none' ? speakableCycle(el.cycleSelect.value) : '';
+  return joinSpeak([text, note, cycle]);
 }
 
 async function runAutoPlay() {
