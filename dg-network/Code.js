@@ -182,6 +182,13 @@ function doGet(e) {
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // form=leader → 領袖班RPG（中午RPG 的副本，換一份固定名單：郭大衛、章勝傑、洪錫隆、李允中）
+  if (e.parameter.form === 'leader') {
+    return HtmlService.createHtmlOutputFromFile('領袖班RPG')
+      .setTitle('領袖班RPG')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+
   // form=custom → 中午RPG（自選名單）：進入表單前先輸入最多 7 位姓名，表單就只列出這幾位
   if (e.parameter.form === 'custom') {
     return HtmlService.createHtmlOutputFromFile('中午RPG自選')
