@@ -1,0 +1,21 @@
+{
+  "name": "存到 PUSH",
+  "short_name": "存到PUSH",
+  "description": "從 LINE「分享」把訊息存進 PUSH（表單回覆 1）",
+  "id": "./share.html",
+  "start_url": "./share.html",
+  "scope": "./share.html",
+  "display": "standalone",
+  "background_color": "#f5f5f7",
+  "theme_color": "#674ea7",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "share-icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "share-icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "share_target": {
+    "action": "./share.html",
+    "method": "GET",
+    "params": { "title": "title", "text": "text", "url": "url" }
+  }
+}

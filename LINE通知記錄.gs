@@ -34,6 +34,18 @@ var LINELOG_UNBLOCK_PREFIX = 'UB';
 var LINELOG_RULES_SINCE_PROP = 'LINELOG_RULES_SINCE';
 
 function doPost(e) {
+  // share.html（LINE 分享 → 存到 PUSH）：跟 GET ?action=addItem 一樣公開，不用金鑰；
+  // 用 POST 是因為 LINE 長訊息塞進網址會太長。body 是 text/plain 的 JSON {action:'addItem',text,cycle,note,tag}
+  var body = null;
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || ''); } catch (x) {}
+  if (body && body.action === 'addItem') {
+    try {
+      return linelogOut_(addItem(body.text, body.cycle, body.note, body.tag));
+    } catch (err) {
+      return linelogOut_({ error: String(err) });
+    }
+  }
+
   var expectedKey = PropertiesService.getScriptProperties().getProperty(LINELOG_KEY_PROP);
   if (!expectedKey) return linelogOut_({ ok: false, done: 0, error: '尚未設定金鑰，請在 Apps Script 執行 setupLinelogKey()' });
   if (!e || !e.parameter || e.parameter.key !== expectedKey) return linelogOut_({ ok: false, done: 0, error: '金鑰錯誤' });
