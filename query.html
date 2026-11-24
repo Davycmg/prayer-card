@@ -862,10 +862,11 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbyaeqMjoNHYhTSMeu6uTCHi
 const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
   'W': 'W每週', 'DW': 'DW每兩週',
-  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
+  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年',
+  '3Y': '3Y每三年', '10Y': '10Y每十年'
 };
 // 週期由密集到疏鬆的順序（跟 CYCLE_MAP 的 key 對應），「禱告更多／禱告更少」按鈕依這個順序調整週期
-const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y'];
+const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y', '3Y', '10Y'];
 // 依週期長短排序：週期空白/無法辨識的排最前面，接著是週期最長（如每年）排到最短（如每天）
 // 跟 index.html 的 sortItemsByCycleDesc 完全一致，標籤卡片瀏覽的排序要對齊首頁
 function sortItemsByCycleDesc(items) {
@@ -908,7 +909,9 @@ const CYCLE_RRULE_MAP = {
   '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
   'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
   'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
-  'Y每年': 'RRULE:FREQ=YEARLY'
+  'Y每年': 'RRULE:FREQ=YEARLY',
+  '3Y每三年': 'RRULE:FREQ=YEARLY;INTERVAL=3',
+  '10Y每十年': 'RRULE:FREQ=YEARLY;INTERVAL=10'
 };
 
 let customTagsCache = [];

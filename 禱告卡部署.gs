@@ -23,7 +23,8 @@ const COL = {
 const CYCLE_MAP = {
   'D': 'D每天', '2': '2每兩天', '3': '3每三天', '4': '4每四天', '5': '5每五天',
   'W': 'W每週', 'DW': 'DW每兩週',
-  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年'
+  'M': 'M每月', '2M': '2M每兩個月', 'S': 'S每季', 'HY': 'HY每半年', 'Y': 'Y每年',
+  '3Y': '3Y每三年', '10Y': '10Y每十年'
 };
 
 const TAG_MAP = {
@@ -43,7 +44,9 @@ const CYCLE_PERIOD_DAYS = {
   '2M每兩個月': 60,
   'S每季': 90,
   'HY每半年': 182,
-  'Y每年': 365
+  'Y每年': 365,
+  '3Y每三年': 1095,
+  '10Y每十年': 3650
 };
 
 /**
@@ -1407,7 +1410,9 @@ const CALENDAR_CYCLE_RRULE_MAP_ = {
   '2M每兩個月': 'RRULE:FREQ=MONTHLY;INTERVAL=2',
   'S每季': 'RRULE:FREQ=MONTHLY;INTERVAL=3',
   'HY每半年': 'RRULE:FREQ=MONTHLY;INTERVAL=6',
-  'Y每年': 'RRULE:FREQ=YEARLY'
+  'Y每年': 'RRULE:FREQ=YEARLY',
+  '3Y每三年': 'RRULE:FREQ=YEARLY;INTERVAL=3',
+  '10Y每十年': 'RRULE:FREQ=YEARLY;INTERVAL=10'
 };
 
 /**
@@ -1930,7 +1935,12 @@ function parseRRuleLabel_(rrule) {
     if (interval === 6) return 'HY每半年';
     return '每' + interval + '個月';
   }
-  if (freq === 'YEARLY') return 'Y每年';
+  if (freq === 'YEARLY') {
+    if (interval === 1) return 'Y每年';
+    if (interval === 3) return '3Y每三年';
+    if (interval === 10) return '10Y每十年';
+    return '每' + interval + '年';
+  }
 
   return '重複（' + rrule.replace('RRULE:', '') + '）';
 }

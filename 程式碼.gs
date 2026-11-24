@@ -40,7 +40,7 @@ function setupPrayerCard() {
   card.getRange('D13').setFontSize(14).setBackground('#cfe2f3');
 
 const cycleRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['D每天', '2每兩天', '3每三天', '4每四天', '5每五天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年'], true)
+    .requireValueInList(['D每天', '2每兩天', '3每三天', '4每四天', '5每五天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年', '3Y每三年', '10Y每十年'], true)
     .setAllowInvalid(true)
     .build();
   card.getRange('D6').setDataValidation(cycleRule);
@@ -241,7 +241,9 @@ function onEdit(e) {
       'W': 'W每週',
       'M': 'M每月',
       'S': 'S每季',
-      'Y': 'Y每年'
+      'Y': 'Y每年',
+      '3Y': '3Y每三年',
+      '10Y': '10Y每十年'
     };
 
     let matched = CYCLE_MAP[newValue];
