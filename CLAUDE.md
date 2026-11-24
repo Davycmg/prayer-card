@@ -221,3 +221,7 @@ all.html 與 `AllCard.html`（同一份 Zephyr 程式）：備註很長時以前
 ## 朗讀唸週期、遍數改在前面（2026-11-24）
 
 all.html 與 `AllCard.html`：朗讀內容＝遍數（1～7）→ 卡片文字 → 備註 → 「週期，每兩週」（`speakableCycle()`，週期值前面的英文代碼如 `DW` 不唸；只有畫面上週期欄有顯示且有值才唸）。遍數以前接在最後，現在 `speakOnePass` 先播遍數再播內容；內建語音也是「N。內容」。`textOfItem()`（預抓下一張）同樣含週期。
+
+## share.html「存到 PUSH」：LINE 分享 → 表單回覆 1（2026-11-24）
+
+不用 APK，用 PWA 的 Web Share Target：`share.html`＋`share.webmanifest`（`share_target` GET，參數 title／text／url）＋`share-sw.js`（空的 service worker，只為了可安裝；scope 只限 share.html；已加進 `.claspignore`）＋`share-icons/`。使用方式：Android Chrome 開 `https://davycmg.github.io/prayer-card/share.html` →「加到主畫面／安裝應用程式」，之後 LINE 長按訊息 →「分享」→「其他應用程式」→「存到PUSH」，確認後一鍵送出。分享內容放「事項」（B 欄），可選週期（預設每月）、標籤（預設無）、備註，週期／標籤記在 localStorage `shareHtml_prefs`；送失敗的存 `shareHtml_pending`，下次打開自動重送。後端走禱告卡 `doPost` 的 `{action:'addItem'}`（`LINE通知記錄.gs` 開頭，不用金鑰，跟公開的 GET `addItem` 一樣；用 POST 是因為長訊息塞網址太長），靠 workflow 自動發布。
