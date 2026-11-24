@@ -90,6 +90,8 @@ Google Sheets + Apps Script 禱告卡片工具。`.clasp.json`、`.github/workfl
 
 取代原本首頁的「今日待辦禱告」卡片（today.html 連結移到下方按鈕列）。「設定」（在頁面下方按鈕列）可輸入最多 7 個 Highlight（第 1 個固定是 Google Task，可取消勾選）和每次計時分鐘數，存在後端 PropertiesService（action `getHighlightSettings`／`saveHighlightSettings`，各裝置同步；頁面載入時抓最新的，localStorage `homeHtml_highlightSettings` 只當快取）。卡片上兩個按鈕：「指定」自己選一個、「Highlight 抽籤」隨機抽一個（抽到 Google Task 會再從預設清單未完成待辦隨機抽一個），開始倒數計時；時間到後只有「有進度」一個按鈕（2026-11-17 拿掉「沒做到」），「提前結束」也直接視為有進度；兩者按下後都會自動再抽下一個 Highlight 開始計時，**按下有進度／提前結束按鈕時才**記錄到「隨機抽待辦任務」同一個日曆（`DRAW_TASK_CALENDAR_ID`），結束時間＝按下按鈕的時間。記錄放背景做（不用等就能再抽）：先存進 localStorage `homeHtml_highlightPendingLogs`，再依序呼叫 `startHighlightSession`（建事件）＋`finishHighlightSession`（回填結束時間和結果），失敗的下次打開首頁自動重送（已建好的事件 ID 會存著，不會重複建）。計時中狀態存在 `homeHtml_highlightSession`，重新整理頁面可接續。
 
+設定面板（2026-11-24）：Highlight 7 格與新增的「📝 候選區」7 格（`candidates`，不參加抽籤、只是先記著，跟設定一起存後端）都改成緊湊排列（同一排並列、不逐行換行，手機會自動折成幾排）。後端 `saveHighlightSettings` 會保存 `candidates`，靠 workflow 自動發布。
+
 ## 日曆記錄的長度上限（隨機抽待辦任務／Highlight）
 
 「隨機抽待辦任務」是用下一次點擊的時間回填上一筆的結束時間，所以隔夜才再抽會產生跨夜的行程。`DRAW_TASK_MAX_DURATION_MINUTES`（`禱告卡部署.gs`，預設 60 分鐘）限制一筆最長只記到「開始 + 60 分鐘」；Highlight 則最多記到「預計結束 + 60 分鐘」。

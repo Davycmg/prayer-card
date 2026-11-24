@@ -1822,6 +1822,7 @@ function startHighlightSession(text, startMs, minutes) {
 // 「今天的 Highlight」設定（Highlight 清單、是否含 Google Task、計時分鐘數），存在 PropertiesService 讓各裝置同步
 const HIGHLIGHT_SETTINGS_PROP_KEY = 'highlightSettings';
 const HIGHLIGHT_MAX_ITEMS = 6; // 另外第 1 個固定是 Google Task，合計最多 7 個
+const HIGHLIGHT_MAX_CANDIDATES = 7; // 候選區（不參加抽籤）
 
 /** 回傳已存的 Highlight 設定；還沒存過時 settings 是 null（前端會改用自己的預設值）。 */
 function getHighlightSettings() {
@@ -1839,6 +1840,9 @@ function saveHighlightSettings(json) {
   const settings = {
     googleTask: input.googleTask !== false,
     items: (Array.isArray(input.items) ? input.items : []).slice(0, HIGHLIGHT_MAX_ITEMS).map(function (t) {
+      return String(t || '').trim();
+    }),
+    candidates: (Array.isArray(input.candidates) ? input.candidates : []).slice(0, HIGHLIGHT_MAX_CANDIDATES).map(function (t) {
       return String(t || '').trim();
     }),
     minutes: Math.min(240, Math.max(1, parseInt(input.minutes, 10) || 25))
