@@ -1494,6 +1494,24 @@ function exportCalendarEventToTasks(value) {
 }
 
 /**
+ * 抓某個清單「全部」未完成任務（Tasks API 一次最多回 100 筆，要用 nextPageToken 翻頁）。
+ * 2026-11-26：以前只抓第一頁，未完成超過 100 筆時，完成幾十項後重新整理，
+ * 後面原本沒抓到的任務補上來，數字看起來「又變回 100」（例如 📋14＋💬86）。
+ */
+function listAllOpenTasks_(listId) {
+  const all = [];
+  let pageToken;
+  do {
+    const opts = { showCompleted: false, showHidden: false, maxResults: 100 };
+    if (pageToken) opts.pageToken = pageToken;
+    const res = Tasks.Tasks.list(listId, opts);
+    (res.items || []).forEach(function (t) { all.push(t); });
+    pageToken = res.nextPageToken;
+  } while (pageToken && all.length < 2000);
+  return all;
+}
+
+/**
  * 給 today.html 用：從 Google Tasks 預設清單（第一個清單）抓出所有未完成的項目，
  * 當作「今天」的臨時清單——這份清單本身就是即時抓取，不額外存檔，
  * 所以每次打開 today.html 都會自動反映當下 Google Tasks 預設清單的最新內容（等同「每天更新」）。
@@ -1504,8 +1522,7 @@ function getTodayTasksList() {
     return { items: [], total: 0 };
   }
 
-  const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
-  const items = (tasksResult.items || []).map(function (t) {
+  const items = listAllOpenTasks_(defaultListId).map(function (t) {
     return {
       id: t.id,
       text: t.title || '(無標題)',
@@ -1760,8 +1777,7 @@ function getDrawState() {
   const defaultListId = getDefaultTaskListIdOrNull_();
   if (!defaultListId) return { items: [], drawnIds: [] };
 
-  const tasksResult = Tasks.Tasks.list(defaultListId, { showCompleted: false, maxResults: 100 });
-  const items = (tasksResult.items || []).map(function (t) {
+  const items = listAllOpenTasks_(defaultListId).map(function (t) {
     return { id: t.id, text: t.title || '(無標題)', note: t.notes || '' };
   });
 
