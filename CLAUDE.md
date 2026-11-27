@@ -236,4 +236,4 @@ Google Tasks API 一次最多回 100 筆，`getTodayTasksList`／`getDrawState` 
 
 ## all.html LINE 任務隨機排序：早發來的優先（2026-11-27）
 
-「隨機排序」開著時，LINE 任務（`isLinelogTask`）先跟大家一起洗牌，再由 `orderLineItemsByDate()` 只重排 LINE 任務佔的位置：依備註裡最早一行 `MM-dd HH:mm` 的日期由舊到新（沒有年份，比今天晚的當成去年；找不到日期排最後），同一天的維持洗牌後的隨機順序。其他來源的位置不動，所以「全部」篩選時 LINE 仍跟其他來源交錯。純前端，merge 進 main 就生效。
+「隨機排序」開著時，LINE 任務（`isLinelogTask`）先跟大家一起洗牌，再由 `orderLineItemsByDate()` 只重排 LINE 任務佔的位置：依備註裡最後（最新）一則 `MM-dd HH:mm` 的日期由舊到新（使用者指定用最新訊息，不是最早那則）（沒有年份，比今天晚的當成去年；找不到日期排最後），同一天的維持洗牌後的隨機順序。其他來源的位置不動，所以「全部」篩選時 LINE 仍跟其他來源交錯。純前端，merge 進 main 就生效。

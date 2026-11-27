@@ -1349,21 +1349,21 @@ function shuffleItems(items) {
   orderLineItemsByDate(items);
 }
 
-// LINE 任務隨機排序時：比較早發來的訊息排前面，同一天的仍隨機（2026-11-27）。
-// 日期取備註裡最早一行「MM-dd HH:mm」（linelog 寫入格式，沒有年份：比今天晚的當成去年）。
+// LINE 任務隨機排序時：最新訊息比較早的排前面，同一天的仍隨機（2026-11-27）。
+// 日期取備註裡最後（最新）一則「MM-dd HH:mm」（linelog 寫入格式，沒有年份：比今天晚的當成去年）。
 // 只重排 LINE 任務佔的位置，其他來源的項目位置不動（「全部」篩選時仍跟其他來源隨機交錯）。
 function lineFirstDayKey(item) {
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit' })
     .format(new Date()).replace('/', '-'); // MM-dd
-  let earliest = null;
+  let latest = null;
   String(item.note || '').split('\n').forEach(line => {
     const m = /^(\d\d)-(\d\d) \d\d:\d\d/.exec(line);
     if (!m) return;
     const md = m[1] + '-' + m[2];
     const key = (md > today ? '0' : '1') + md; // 去年的排在今年前面
-    if (earliest === null || key < earliest) earliest = key;
+    if (latest === null || key > latest) latest = key;
   });
-  return earliest === null ? '9' : earliest; // 找不到日期的排最後
+  return latest === null ? '9' : latest; // 找不到日期的排最後
 }
 function orderLineItemsByDate(items) {
   const slots = [];
