@@ -81,7 +81,9 @@ const cycleRule = SpreadsheetApp.newDataValidation()
     ['2M', '每兩個月'],
     ['S', '每季'],
     ['HY', '每半年'],
-    ['Y', '每年']
+    ['Y', '每年'],
+    ['3Y', '每三年'],
+    ['10Y', '每十年']
   ];
   card.getRange(1, 5, cycleTable.length, 2).setValues(cycleTable);
   card.getRange(2, 5, cycleTable.length - 1, 1).setNumberFormat('@');
