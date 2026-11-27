@@ -1701,30 +1701,33 @@ el.itemText.addEventListener('input', () => {
   saveTimer = setTimeout(() => flushSave(item, config, 'text', value), 1000);
 });
 
-// 滿福寶七重祝福（病得醫治、心靈平安、家庭和樂、凡事富足、罪得赦免、得著永生、聖靈充滿）縮成兩個字。
-// 點一下把詞接到備註最後（用「、」隔開），已經有了再點一下就拿掉；改完走一般的備註自動儲存。
-const BLESSINGS = ['醫治', '平安', '和樂', '富足', '赦免', '永生', '聖靈'];
-BLESSINGS.forEach(word => {
+// 滿福寶七重祝福：按鈕顯示兩個字，點一下把完整四個字加到備註最前面（後面接「、」），
+// 備註已有這四個字就反白，再點一下拿掉；改完走一般的備註自動儲存。
+const BLESSINGS = [['醫治', '病得醫治'], ['平安', '心靈平安'], ['和樂', '家庭和樂'], ['富足', '凡事富足'],
+  ['赦免', '罪得赦免'], ['永生', '得著永生'], ['聖靈', '聖靈充滿']];
+BLESSINGS.forEach(([short, full]) => {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'blessing-btn';
-  b.textContent = word;
-  b.dataset.word = word;
-  b.addEventListener('click', () => toggleBlessing(word));
+  b.textContent = short;
+  b.dataset.word = full;
+  b.addEventListener('click', () => toggleBlessing(full));
   el.blessingRow.appendChild(b);
 });
 function refreshBlessingButtons() {
   const note = el.noteText.value || '';
   el.blessingRow.querySelectorAll('.blessing-btn').forEach(b => b.classList.toggle('on', note.includes(b.dataset.word)));
 }
-function toggleBlessing(word) {
+function toggleBlessing(full) {
   const config = currentConfig();
   if (!config || !config.note.editable) return;
   let note = el.noteText.value || '';
-  if (note.includes(word)) {
-    note = note.replace('、' + word, '').replace(word + '、', '').replace(word, '');
+  if (note.includes(full)) {
+    if (note.includes(full + '、')) note = note.replace(full + '、', '');
+    else if (note.includes('、' + full)) note = note.replace('、' + full, '');
+    else note = note.replace(full, '');
   } else {
-    note = (!note || /[\s、，,]$/.test(note)) ? note + word : note + '、' + word;
+    note = note ? full + '、' + note : full;
   }
   el.noteText.value = note;
   el.noteText.dispatchEvent(new Event('input'));
