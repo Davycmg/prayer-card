@@ -701,7 +701,7 @@ const CYCLE_MAP = {
 };
 // 週期由密集到疏鬆的順序（跟 CYCLE_MAP 的 key 對應），「禱告更多／禱告更少」按鈕依這個順序調整週期
 const CYCLE_ORDER = ['D', '2', '3', '4', '5', 'W', 'DW', 'M', '2M', 'S', 'HY', 'Y', '3Y', '10Y'];
-const TAG_MAP = { 'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' };
+const TAG_MAP = { 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入' }; // G工作日／W週末 2026-11-28 廢棄
 // 週期文字（跟 CYCLE_MAP 的值一致）對應 Google 日曆的 RRULE 重複規則
 const CYCLE_RRULE_MAP = {
   'D每天': 'RRULE:FREQ=DAILY',
