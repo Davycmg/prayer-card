@@ -28,7 +28,8 @@ const CYCLE_MAP = {
 };
 
 const TAG_MAP = {
-  'G': 'G工作日', 'W': 'W週末', 'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入'
+  // G工作日／W週末 2026-11-28 廢棄
+  'F': 'F家庭會議', 'A': 'A安祺禱告', 'AI': 'A安祺輸入'
 };
 
 // 各週期對應的天數區間，用來把同週期的項目均勻分散到不同天
@@ -405,20 +406,22 @@ function copyToDefaultTaskListIfTagged_(sheet, row) {
 }
 
 /**
- * 2026-11-28 廢棄「task預設清單」標籤（太多了）：把 H 欄是這個值的格子全部清空。
- * 部署後第一次有人打 API（例如 workflow 的冒煙測試）時自動跑一次（指令碼屬性 TASK_TAG_CLEARED_20261128 記錄已跑過），
- * 之後要再清可以在編輯器手動執行 clearTaskDefaultListTag()。
+ * 廢棄的標籤：H 欄是這些值的格子全部清空。
+ * 2026-11-28 先廢棄「task預設清單」（太多了），同日再廢棄「G工作日」「W週末」「進網絡」。
+ * 部署後第一次有人打 API（例如 workflow 的冒煙測試）時自動跑一次（指令碼屬性 DEPRECATED_TAGS_CLEARED_KEY_ 記錄已跑過，
+ * 之後再加廢棄標籤要換一個 key 才會再跑），也可以在編輯器手動執行 clearDeprecatedTags()。
  * 注意：「表單回覆 1」若套了篩選，被藏起來的列寫入會被默默丟掉，清不到的數量會印在 log。
  */
-const DEPRECATED_TASK_TAG_ = 'task預設清單';
+const DEPRECATED_TAGS_ = ['task預設清單', 'G工作日', 'W週末', '進網絡'];
+const DEPRECATED_TAGS_CLEARED_KEY_ = 'DEPRECATED_TAGS_CLEARED_20261128B';
 
-function clearTaskDefaultListTag() {
+function clearDeprecatedTags() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
   if (lastRow < 2) return { cleared: 0, remaining: 0 };
   const colLetter = String.fromCharCode(64 + COL.TAG);
   const read = () => sheet.getRange(2, COL.TAG, lastRow - 1, 1).getValues()
-    .map((r, i) => ((r[0] || '').toString().trim() === DEPRECATED_TASK_TAG_ ? colLetter + (i + 2) : null))
+    .map((r, i) => (DEPRECATED_TAGS_.indexOf((r[0] || '').toString().trim()) !== -1 ? colLetter + (i + 2) : null))
     .filter(Boolean);
   const cells = read();
   if (cells.length > 0) {
@@ -426,22 +429,21 @@ function clearTaskDefaultListTag() {
     SpreadsheetApp.flush();
   }
   const remaining = cells.length > 0 ? read().length : 0;
-  console.log('清除「' + DEPRECATED_TASK_TAG_ + '」標籤：找到 ' + cells.length + ' 格，剩 ' + remaining + ' 格沒清掉');
+  console.log('清除廢棄標籤（' + DEPRECATED_TAGS_.join('、') + '）：找到 ' + cells.length + ' 格，剩 ' + remaining + ' 格沒清掉');
   return { cleared: cells.length - remaining, remaining: remaining };
 }
 
-function clearTaskDefaultListTagOnce_() {
+function clearDeprecatedTagsOnce_() {
   const props = PropertiesService.getScriptProperties();
-  const KEY = 'TASK_TAG_CLEARED_20261128';
-  if (props.getProperty(KEY)) return;
+  if (props.getProperty(DEPRECATED_TAGS_CLEARED_KEY_)) return;
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   try {
-    if (props.getProperty(KEY)) return;
-    props.setProperty(KEY, new Date().toISOString());
-    clearTaskDefaultListTag();
+    if (props.getProperty(DEPRECATED_TAGS_CLEARED_KEY_)) return;
+    props.setProperty(DEPRECATED_TAGS_CLEARED_KEY_, new Date().toISOString());
+    clearDeprecatedTags();
   } catch (err) {
-    console.log('清除 task預設清單 標籤失敗：' + err);
+    console.log('清除廢棄標籤失敗：' + err);
   } finally {
     lock.releaseLock();
   }
@@ -1009,7 +1011,7 @@ function doGet(e) {
   }
 
   const action = (e.parameter.action || 'getAllItems');
-  clearTaskDefaultListTagOnce_();
+  clearDeprecatedTagsOnce_();
   let result;
   try {
     // 用列號操作「表單回覆 1」的動作：前端有帶 expect（它看到的事項文字）時，先用文字確認／找回正確的列，

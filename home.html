@@ -1141,7 +1141,7 @@ function escapeRecentHtml(str) {
 // 點一條就在原地展開編輯（文字／週期／標籤／備註），存檔走 updateTextByRow／updateCycleByRow／updateTagByRow／updateNoteByRow，
 // 都帶 expect（目前的事項文字）讓後端確認／找回正確的列。
 const RECENT_CYCLES = ['D每天', '2每兩天', '3每三天', '4每四天', '5每五天', 'W每週', 'DW每兩週', 'M每月', '2M每兩個月', 'S每季', 'HY每半年', 'Y每年', '3Y每三年', '10Y每十年'];
-const RECENT_TAGS = ['G工作日', 'W週末', 'F家庭會議', 'A安祺禱告', 'A安祺輸入'];
+const RECENT_TAGS = ['F家庭會議', 'A安祺禱告', 'A安祺輸入'];
 let recentItems = [];
 let recentEditingIndex = -1;
 function recentMetaOf(it) {
