@@ -246,3 +246,5 @@ Google Tasks API 一次最多回 100 筆，`getTodayTasksList`／`getDrawState` 
 - 既有的標籤由 `clearDeprecatedTagsOnce_()` 清空：部署後第一次有人打 `doGet`（workflow 冒煙測試就會）自動跑一次，指令碼屬性 `DEPRECATED_TAGS_CLEARED_KEY_` 記錄已跑過（之後再加廢棄標籤要換 key）。清完後沒有列在用，自訂標籤清單會由 `pruneUnusedCustomTags_()` 自動拿掉。「表單回覆 1」有套篩選的話，被藏起來的列清不到（log 會印剩幾格），拿掉篩選後在編輯器手動執行 `clearDeprecatedTags()` 再清一次。
 
 同日再廢棄「G工作日」「W週末」（原本是內建標籤，從所有頁面的 `TAG_MAP`、home.html `RECENT_TAGS`、share.html 選單、`程式碼.gs` Sheet 版的資料驗證／對照表／縮寫都拿掉，打 `G`／`W` 不再轉成標籤）和自訂標籤「進網絡」，清空方式同上（`DEPRECATED_TAGS_`）。注意：「💼 工作日」「🛌 週末」按鈕（搬 Google Tasks 清單，`工作日清單.gs`）和週期「W每週」跟這兩個標籤無關，照舊。
+
+引號標籤 `"/content/drive"`（事項文字裡的程式碼片段）同日也廢棄：不是 H 欄標籤，所以不清試算表，而是在 `extractQuotedWords_()` 用 `DEPRECATED_QUOTED_WORDS_` 排除，不再出現在 query.html 標籤選單；事項文字本身不動。之後要廢棄其他引號標籤就加進這個陣列。

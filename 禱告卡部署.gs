@@ -1255,13 +1255,16 @@ function getTagList() {
  */
 const QUOTED_WORD_REGEX_ = /["“”＂〝〞‟„]([^"“”＂〝〞‟„\r\n]{1,15})["“”＂〝〞‟„]/g;
 
+// 廢棄的引號標籤：事項文字裡有引號包起來，但不要當成標籤列出（文字本身不動）
+const DEPRECATED_QUOTED_WORDS_ = ['/content/drive'];
+
 function extractQuotedWords_(text, set) {
   const str = (text || '').toString();
   QUOTED_WORD_REGEX_.lastIndex = 0;
   let m;
   while ((m = QUOTED_WORD_REGEX_.exec(str)) !== null) {
     const w = m[1].trim();
-    if (w) set.add(w);
+    if (w && DEPRECATED_QUOTED_WORDS_.indexOf(w) === -1) set.add(w);
   }
 }
 
