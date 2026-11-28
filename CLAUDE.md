@@ -237,3 +237,10 @@ Google Tasks API 一次最多回 100 筆，`getTodayTasksList`／`getDrawState` 
 ## all.html LINE 任務隨機排序：早發來的優先（2026-11-27）
 
 「隨機排序」開著時，LINE 任務（`isLinelogTask`）先跟大家一起洗牌，再由 `orderLineItemsByDate()` 只重排 LINE 任務佔的位置：依備註裡最後（最新）一則 `MM-dd HH:mm` 的日期由舊到新（使用者指定用最新訊息，不是最早那則）（沒有年份，比今天晚的當成去年；找不到日期排最後），同一天的維持洗牌後的隨機順序。其他來源的位置不動，所以「全部」篩選時 LINE 仍跟其他來源交錯。純前端，merge 進 main 就生效。
+
+## 廢棄「task預設清單」標籤（2026-11-28）
+
+使用者嫌這個標籤太多，整個廢棄：
+- 週末 05:00 的 `importGoogleTasksToday_()` 照樣把 Google Tasks 預設清單匯入「表單回覆 1」（新增列／把既有列日期改成今天），但**不再打標籤**。
+- 標籤改成 `task預設清單` 不再自動複製到 Google Tasks（`copyToDefaultTaskListIfTagged_` 一律回 false）；要複製用 index.html 的「📋 複製到 Google Tasks 預設清單」按鈕（`copyCurrentRowToTasks`，跟標籤無關）。
+- 既有的標籤由 `clearTaskDefaultListTagOnce_()` 清空：部署後第一次有人打 `doGet`（workflow 冒煙測試就會）自動跑一次，指令碼屬性 `TASK_TAG_CLEARED_20261128` 記錄已跑過。清完後沒有列在用，自訂標籤清單會由 `pruneUnusedCustomTags_()` 自動拿掉這個標籤。「表單回覆 1」有套篩選的話，被藏起來的列清不到（log 會印剩幾格），拿掉篩選後在編輯器手動執行 `clearTaskDefaultListTag()` 再清一次。

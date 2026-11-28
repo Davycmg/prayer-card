@@ -400,9 +400,51 @@ function copyTextToDefaultTaskList_(title, notes, logLabel) {
  * 如果標籤本來就已經是task預設清單，要用下方 copyCurrentRowToTasks 的手動按鈕才能再次複製。
  */
 function copyToDefaultTaskListIfTagged_(sheet, row) {
-  const tagVal = sheet.getRange(row, COL.TAG).getValue().toString().trim();
-  if (tagVal !== 'task預設清單') return false;
-  return copyRowToDefaultTaskList_(sheet, row);
+  // 2026-11-28 廢棄「task預設清單」標籤：改成這個標籤不再自動複製，要複製用 copyCurrentRowToTasks 的按鈕
+  return false;
+}
+
+/**
+ * 2026-11-28 廢棄「task預設清單」標籤（太多了）：把 H 欄是這個值的格子全部清空。
+ * 部署後第一次有人打 API（例如 workflow 的冒煙測試）時自動跑一次（指令碼屬性 TASK_TAG_CLEARED_20261128 記錄已跑過），
+ * 之後要再清可以在編輯器手動執行 clearTaskDefaultListTag()。
+ * 注意：「表單回覆 1」若套了篩選，被藏起來的列寫入會被默默丟掉，清不到的數量會印在 log。
+ */
+const DEPRECATED_TASK_TAG_ = 'task預設清單';
+
+function clearTaskDefaultListTag() {
+  const sheet = getSheet_();
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { cleared: 0, remaining: 0 };
+  const colLetter = String.fromCharCode(64 + COL.TAG);
+  const read = () => sheet.getRange(2, COL.TAG, lastRow - 1, 1).getValues()
+    .map((r, i) => ((r[0] || '').toString().trim() === DEPRECATED_TASK_TAG_ ? colLetter + (i + 2) : null))
+    .filter(Boolean);
+  const cells = read();
+  if (cells.length > 0) {
+    sheet.getRangeList(cells).clearContent();
+    SpreadsheetApp.flush();
+  }
+  const remaining = cells.length > 0 ? read().length : 0;
+  console.log('清除「' + DEPRECATED_TASK_TAG_ + '」標籤：找到 ' + cells.length + ' 格，剩 ' + remaining + ' 格沒清掉');
+  return { cleared: cells.length - remaining, remaining: remaining };
+}
+
+function clearTaskDefaultListTagOnce_() {
+  const props = PropertiesService.getScriptProperties();
+  const KEY = 'TASK_TAG_CLEARED_20261128';
+  if (props.getProperty(KEY)) return;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) return;
+  try {
+    if (props.getProperty(KEY)) return;
+    props.setProperty(KEY, new Date().toISOString());
+    clearTaskDefaultListTag();
+  } catch (err) {
+    console.log('清除 task預設清單 標籤失敗：' + err);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -967,6 +1009,7 @@ function doGet(e) {
   }
 
   const action = (e.parameter.action || 'getAllItems');
+  clearTaskDefaultListTagOnce_();
   let result;
   try {
     // 用列號操作「表單回覆 1」的動作：前端有帶 expect（它看到的事項文字）時，先用文字確認／找回正確的列，
@@ -2500,7 +2543,7 @@ function updateFieldByRow(row, col, value) {
       return { success: true, row: row, exported: true, oldValue: oldValue };
     }
 
-    // task預設清單標籤 → 複製到Tasks預設清單（只在「切換成」這個值那一刻觸發一次）
+    // task預設清單標籤 → 2026-11-28 已廢棄，copyToDefaultTaskListIfTagged_ 一律回 false
     const copied = copyToDefaultTaskListIfTagged_(sheet, row);
     if (copied) {
       return { success: true, row: row, copied: true, oldValue: oldValue };
@@ -2595,7 +2638,7 @@ function isSkippedTaskImportTitle_(title) {
 function importGoogleTasksToday_() {
   const sheet = getSheet_();
   const lastRow = sheet.getLastRow();
-  const IMPORT_TAG = 'task預設清單';
+  // 2026-11-28 起不再打「task預設清單」標籤（已廢棄）
 
   // 建立「事項名稱→列號」對照表，用來判斷是否已存在
   const existingMap = {};
@@ -2637,13 +2680,6 @@ function importGoogleTasksToday_() {
       dateCell.setValue(today);
       dateCell.setNumberFormat('yyyy/MM/dd');
 
-      // 只有H欄原本是空白時才補標籤，已經有其他標籤的話維持原樣不覆蓋
-      const tagCell = sheet.getRange(row, COL.TAG);
-      const existingTag = (tagCell.getValue() || '').toString().trim();
-      if (!existingTag) {
-        tagCell.setValue(IMPORT_TAG);
-      }
-
       if (prefixInfo) {
         sheet.getRange(row, COL.CYCLE).setValue(prefixInfo.cycle);
       }
@@ -2656,7 +2692,6 @@ function importGoogleTasksToday_() {
       const dateCell = sheet.getRange(newRow, COL.DATE);
       dateCell.setValue(today);
       dateCell.setNumberFormat('yyyy/MM/dd');
-      sheet.getRange(newRow, COL.TAG).setValue(IMPORT_TAG);   // 新增列一定是空白，直接打標籤
       if (prefixInfo) {
         sheet.getRange(newRow, COL.CYCLE).setValue(prefixInfo.cycle);
       }
